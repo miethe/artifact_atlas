@@ -23,3 +23,7 @@ assets/previews/*
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Python build / agent runtime noise
+*.egg-info/
+.claude/agent-memory/
