@@ -35,3 +35,8 @@ web/playwright-report/
 
 # Regenerable performance fixtures (use scripts/generate_perf_fixtures.py)
 fixtures/perf/
+
+# Generated runtime export outputs (regenerable; real data lives at deploy time)
+exports/events/
+exports/meatywiki/
+exports/control-plane/
