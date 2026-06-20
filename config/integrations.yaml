@@ -1,0 +1,16 @@
+integrations:
+  meatywiki:
+    status: planned
+    role: rationale_and_memory
+  intenttree:
+    status: planned
+    role: task_hierarchy
+  skillmeat:
+    status: scaffolded_reference
+    role: reusable_skills_templates_context_packs
+  ccdash:
+    status: planned
+    role: telemetry_and_evidence
+  local_folders:
+    status: planned
+    role: watched_asset_sources

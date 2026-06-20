@@ -1,0 +1,14 @@
+project:
+  name: Artifact Atlas
+  slug: artifact-atlas
+  tier: T4
+  source_spec: Artifact_Atlas_PRD_UIUX_Implementation_Spec_Package/Artifact_Atlas_PRD_UIUX_Implementation_Spec.md
+agent_contract:
+  primary_instruction: CLAUDE.md
+  skills:
+    - op
+    - skillmeat-cli
+  context:
+    - docs/charter.md
+    - docs/implementation-plan.md
+    - docs/agent-handoff.md

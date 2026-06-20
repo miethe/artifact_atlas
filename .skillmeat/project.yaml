@@ -1,0 +1,37 @@
+apiVersion: skillmeat/v1
+kind: ProjectScaffold
+metadata:
+  name: artifact-atlas
+  tier: T4
+  created_at: 2026-06-19
+  source_spec: Artifact_Atlas_PRD_UIUX_Implementation_Spec_Package/Artifact_Atlas_PRD_UIUX_Implementation_Spec.md
+  operator_run: .operator/runs/op_run_20260619_184310_artifact-atlas-project-a/run.json
+spec:
+  project_type: fullstack-agentic-os-application
+  stack:
+    frontend: Next.js + React + TypeScript
+    backend: FastAPI + Pydantic
+    local_registry: JSONL + YAML
+    future_database: PostgreSQL + pgvector or SQLite + sqlite-vec
+    agent_gateway: CLI + MCP + REST
+  required_skills:
+    - op
+    - skillmeat-cli
+    - frontend-design
+    - openapi-expert
+    - postgresql-psql
+    - chrome-devtools
+  deployed_project_skills:
+    claude:
+      - .claude/skills/op
+      - .claude/skills/skillmeat-cli
+    codex_agents:
+      - .agents/skills/op
+      - .agents/skills/skillmeat-cli
+  starter_bundle:
+    name: skillmeat-instance-starter
+    deploy_command: skillmeat bundle deploy skillmeat-instance-starter --project .
+    status: pending_cli_unavailable
+  scaffold_sources:
+    - .agents/skills/skillmeat-cli/templates/fullstack.toml
+    - .claude/agentic-baseline.bundle.yaml

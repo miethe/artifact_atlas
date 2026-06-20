@@ -1,0 +1,26 @@
+context_pack_manifest:
+  id: pack_artifact_atlas_builder_v1
+  title: Artifact Atlas Builder Context Pack
+  project_id: proj_artifact_atlas
+  target_type: project
+  target_id: proj_artifact_atlas
+  sensitivity: personal
+  status: draft
+  policy:
+    allow_external_data: false
+    allow_code_execution: true
+    network_access: restricted
+    agent_access: trusted_local_agents_only
+  instructions: >
+    Build against the PRD/UIUX implementation spec. Preserve MeatyWiki, IntentTree,
+    SkillMeat, CCDash, and Control Plane boundaries. Keep agent retrieval policy-aware.
+  items:
+    - type: asset
+      id: asset_prd_uiux_spec_v0_1
+      include_mode: full
+    - type: note
+      id: docs_charter
+      include_mode: full
+    - type: note
+      id: docs_implementation_plan
+      include_mode: full

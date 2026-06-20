@@ -1,0 +1,29 @@
+template:
+  id: tmpl_architecture_initiative_v1
+  name: Architecture Initiative
+  status: recommended
+  domains:
+    - name: Architecture
+      slots:
+        - artifact_type: Current State Architecture
+          required: true
+        - artifact_type: Target State Architecture
+          required: true
+        - artifact_type: Technology Stack
+          required: true
+        - artifact_type: Integration Diagram
+          required: true
+        - artifact_type: Security Architecture
+          required: true
+        - artifact_type: Deployment Topology
+          required: false
+        - artifact_type: ADR Log
+          required: true
+    - name: Governance
+      slots:
+        - artifact_type: Decision Log
+          required: true
+        - artifact_type: Risk Register
+          required: true
+        - artifact_type: Review Checklist
+          required: false

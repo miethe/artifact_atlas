@@ -1,0 +1,8 @@
+{
+  "name": "claude-code",
+  "description": "Use when users ask about Claude Code features, setup, configuration, troubleshooting, slash commands, MCP servers, Agent Skills, hooks, plugins, subagents/agent teams, CI/CD integration, or enterprise deployment. Activate for questions like 'How do I use Claude Code?', 'What slash commands are available?', 'How to set up MCP?', 'Create a skill', 'Fix Claude Code issues', or 'Deploy Claude Code in enterprise'.",
+  "version": "3.0.0",
+  "author": "Skill Seekers",
+  "source": "https://code.claude.com/docs/en/ (llms-full.txt)",
+  "pages": 114
+}

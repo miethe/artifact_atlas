@@ -1,0 +1,12 @@
+[[deployed]]
+bundle = "skillmeat-instance-starter"
+version = "1.0.0"
+source_version = "0.55.1"
+tier = "all"
+build_date = "2026-06-20"
+deployed_date = "2026-06-20"
+artifact_count = 237
+file_count = 650
+method = "build-starter-bundle.py (local API/collection unavailable)"
+preserved = ["CLAUDE.md", "skills/op", "skills/skillmeat-cli"]
+provenance = ".claude/bundles/skillmeat-instance-starter/"

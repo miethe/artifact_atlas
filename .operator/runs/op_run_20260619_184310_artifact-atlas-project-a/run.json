@@ -1,0 +1,20 @@
+{
+  "run_id": "op_run_20260619_184310_artifact-atlas-project-a",
+  "request": "Artifact Atlas project asset graph and Artifact BOM context pack application",
+  "route": "tasks",
+  "tier": 4,
+  "created_at": "2026-06-19T18:43:10.012983+00:00",
+  "updated_at": "2026-06-19T18:43:10.013204+00:00",
+  "budget": {
+    "max_tokens": 500000,
+    "max_hops": 10,
+    "fan_out": 8
+  },
+  "plan": [],
+  "status": "awaiting_plan_approval",
+  "hops": [],
+  "pending": null,
+  "completion_flag": false,
+  "intenttree_node": null,
+  "writeback_targets": []
+}

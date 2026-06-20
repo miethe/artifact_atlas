@@ -1,0 +1,49 @@
+template:
+  id: tmpl_new_product_app_v1
+  name: New Product / App
+  status: core
+  domains:
+    - name: Strategy
+      slots:
+        - artifact_type: Product Vision
+          required: true
+        - artifact_type: Positioning Statement
+          required: true
+        - artifact_type: Success Metrics
+          required: true
+    - name: Product
+      slots:
+        - artifact_type: PRD
+          required: true
+        - artifact_type: User Stories
+          required: true
+        - artifact_type: Acceptance Criteria
+          required: true
+    - name: Architecture
+      slots:
+        - artifact_type: System Architecture Diagram
+          required: true
+        - artifact_type: API Specification
+          required: true
+        - artifact_type: Data Model
+          required: true
+        - artifact_type: ADR Log
+          required: false
+    - name: Frontend Design
+      slots:
+        - artifact_type: User Flows
+          required: true
+        - artifact_type: Wireframes
+          required: true
+        - artifact_type: UI Mockups
+          required: true
+        - artifact_type: Design System
+          required: false
+    - name: GTM
+      slots:
+        - artifact_type: GTM Messaging Deck
+          required: true
+        - artifact_type: Launch Brief
+          required: true
+        - artifact_type: Sales One-Pager
+          required: false

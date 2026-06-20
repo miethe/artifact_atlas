@@ -1,0 +1,66 @@
+# agentic-baseline — the curated launchpad manifest the T3/T4 scaffolder records.
+# A SkillMeat-style manifest: the reusable skill stack every new agentic project starts with.
+#
+# DEPLOY: the actual, published bundle that `op new --tier 4 --deploy-bundle` materializes is
+# `skillmeat-instance-starter` (419 skills + 63 commands + 60 agents + hooks/rules/context/
+# specs). This file documents the curated *intent*; the starter bundle is the concrete payload.
+#   skillmeat bundle deploy skillmeat-instance-starter --project .
+apiVersion: skillmeat/v1
+kind: SkillBundle
+metadata:
+  name: agentic-baseline
+  description: >
+    Baseline skill/agent stack for a new agentic project — the control plane plus the five
+    subsystem entry points, wired to the canonical model. Recorded by `op new` at T3 (curated)
+    and T4 (full); materialized from the published `skillmeat-instance-starter` bundle.
+  tier_deployed_at: [3, 4]
+  deployable_bundle: skillmeat-instance-starter
+  deploy_command: "skillmeat bundle deploy skillmeat-instance-starter --project ."
+  owner: Nick Miethe
+spec:
+  skills:
+    - name: op
+      role: control-plane
+      layer: L8
+      description: The Operator — routes idea → subsystem by route × tier; writes run records.
+      required: true
+    - name: rf
+      role: research
+      layer: L1/L9
+      description: research-foundry — bounded research passes → source cards + claim ledger.
+      required: true
+    - name: intenttree
+      role: tasks
+      layer: L2
+      description: Typed work tree (Pillar→WorkArea→WorkPackage→AtomicTask→Step) + workspace.
+      required: true
+    - name: council-review
+      role: governance
+      layer: L9
+      description: Agent Review Council (ARC) — scorecard gate before anything ships.
+      required: true
+    - name: meatywiki
+      role: knowledge
+      layer: L6
+      description: Living KB — durable "why", decisions, project namespace.
+      required: true
+    - name: skillmeat-cli
+      role: artifact
+      layer: L4
+      description: Manage/deploy versioned reusable artifacts across Source→Collection→Project.
+      required: true
+    - name: planning
+      role: strategist
+      layer: L1
+      description: PRD / feature / spike / decomposition planning agents (pm wave).
+      required: false
+  agent_waves:
+    - ai            # Implementer / Researcher
+    - architects    # Architect
+    - pm            # Strategist / Operator
+    - research      # Researcher
+    - tech-writers  # Editor / Synthesizer
+  writeback_targets: [meatywiki, skillmeat, ccdash]
+  governance:
+    approval_policy: human_review_before_merge
+    require_human_approval_for: [production_deploy, destructive_changes, external_send]
