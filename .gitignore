@@ -17,3 +17,6 @@ assets/thumbnails/*
 assets/previews/*
 !assets/thumbnails/.gitkeep
 !assets/previews/.gitkeep
+
+# Local Claude Code session overrides (never commit)
+.claude/settings.local.json
