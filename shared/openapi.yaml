@@ -1157,6 +1157,42 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/context-packs/{packId}/export:
+    parameters:
+      - $ref: "#/components/parameters/packId"
+    post:
+      operationId: exportContextPack
+      tags: [context-packs]
+      summary: Export a context pack YAML to exports/context-packs/
+      description: >
+        Writes the context pack manifest YAML to the configured exports/context-packs/
+        directory without changing pack status. Does not silently overwrite an existing
+        file — a timestamp-suffixed filename is used if the target already exists.
+        Use /publish to change status to published.
+      parameters:
+        - name: output_path
+          in: query
+          required: false
+          description: Optional custom output path for the YAML file.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export result with written file path
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pack_id, export_path]
+                properties:
+                  pack_id:
+                    type: string
+                  export_path:
+                    type: string
+                    description: Absolute path of the written YAML file
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/context-packs/{packId}/publish:
     parameters:
       - $ref: "#/components/parameters/packId"
@@ -1559,6 +1595,40 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/integrations/control-plane/snapshot:
+    post:
+      operationId: createControlPlaneSnapshot
+      tags: [integrations]
+      summary: Generate a Control Plane routing signal snapshot for a project
+      description: >
+        Reads live Atlas state (BOM coverage, gaps, context packs, canonical assets,
+        policy flags) and writes a snapshot YAML to exports/control-plane/.
+        No live Control Plane API calls in MVP.
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: nodeId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Snapshot generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  project_id:
+                    type: string
+                  snapshot:
+                    type: object
   /api/integrations/{integrationId}/status:
     parameters:
       - name: integrationId

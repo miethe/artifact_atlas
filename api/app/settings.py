@@ -99,6 +99,28 @@ class Settings:
         previews_dir_raw = storage.get("previews_dir", "assets/previews")
         self.previews_dir: Path = _make_absolute(previews_dir_raw, _REPO_ROOT)
 
+        # -- Integration export directories (Phase 4 adapters)
+        meatywiki_dir_raw = exports_cfg.get("meatywiki_dir", "exports/meatywiki")
+        self.meatywiki_dir: Path = _make_absolute(meatywiki_dir_raw, _REPO_ROOT)
+
+        ccdash_events_path_raw = exports_cfg.get(
+            "ccdash_events_path", "exports/events/ccdash-events.jsonl"
+        )
+        self.ccdash_events_path: Path = _make_absolute(ccdash_events_path_raw, _REPO_ROOT)
+
+        control_plane_dir_raw = exports_cfg.get("control_plane_dir", "exports/control-plane")
+        self.control_plane_dir: Path = _make_absolute(control_plane_dir_raw, _REPO_ROOT)
+
+        skillmeat_candidates_dir_raw = exports_cfg.get(
+            "skillmeat_candidates_dir", "exports/skillmeat/candidates"
+        )
+        self.skillmeat_candidates_dir: Path = _make_absolute(
+            skillmeat_candidates_dir_raw, _REPO_ROOT
+        )
+
+        intenttree_link_dir_raw = exports_cfg.get("intenttree_link_dir", "exports/intenttree")
+        self.intenttree_link_dir: Path = _make_absolute(intenttree_link_dir_raw, _REPO_ROOT)
+
         # -- Policy defaults (D-009)
         self.default_sensitivity: str = (
             os.environ.get("ATLAS_DEFAULT_SENSITIVITY")

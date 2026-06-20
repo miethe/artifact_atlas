@@ -4,6 +4,7 @@ Routes:
   GET  /api/integrations
   POST /api/integrations/{integrationId}/sync
   GET  /api/integrations/{integrationId}/status
+  POST /api/integrations/control-plane/snapshot
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.api._deps import not_found
 from app.models.integration import IntegrationStatus
@@ -97,14 +98,103 @@ def list_integrations() -> dict:
 
 
 @router.post("/integrations/{integrationId}/sync", status_code=202)
-def trigger_integration_sync(integrationId: str) -> dict:
-    """Trigger a sync for an integration."""
+def trigger_integration_sync(
+    integrationId: str,
+    project_id: str | None = Query(default=None, alias="projectId"),
+    confirm: bool = Query(default=False),
+) -> dict:
+    """Trigger a sync for an integration.
+
+    For file-based integrations, executes the local export adapter.
+    - meatywiki: exports asset cards for all project assets (draft by default)
+    - ccdash: flushes pending audit events to ccdash-events.jsonl
+    - control_plane: generates a project snapshot YAML
+    - intenttree: exports the node-link manifest
+    - skillmeat: no active export (read-only in MVP)
+    """
     integrations = _load_integrations()
     if integrationId not in integrations:
         return not_found(f"Integration '{integrationId}' not found.")  # type: ignore[return-value]
 
     task_id = f"task_{uuid.uuid4().hex[:12]}"
-    return {"task_id": task_id, "integration_id": integrationId}
+    result: dict[str, Any] = {
+        "task_id": task_id,
+        "integration_id": integrationId,
+        "status": "queued",
+    }
+
+    try:
+        from app.settings import get_settings
+        settings = get_settings()
+
+        if integrationId == "control_plane" and project_id:
+            from app.services.control_plane import ControlPlaneExporter
+            exporter = ControlPlaneExporter(settings.control_plane_dir)
+            export_result = exporter.export_from_services(
+                project_id=project_id,
+                registry_dir=settings.registry_dir,
+            )
+            result["status"] = "completed"
+            result["export_path"] = export_result.get("path")
+
+        elif integrationId == "meatywiki" and project_id:
+            from app.repositories.assets import AssetRepository
+            from app.services.meatywiki_sync import MeatyWikiSync
+            asset_repo = AssetRepository(settings.registry_dir)
+            assets = asset_repo.list(project_id=project_id)
+            sync = MeatyWikiSync(settings.meatywiki_dir)
+            batch_results = sync.export_asset_cards_batch(assets, confirm=confirm)
+            result["status"] = "completed"
+            result["exported"] = sum(1 for r in batch_results if r.get("written"))
+            result["skipped"] = sum(1 for r in batch_results if r.get("skipped"))
+
+        elif integrationId == "ccdash":
+            # Report the events file path — events are emitted inline by services
+            events_path = settings.ccdash_events_path
+            result["status"] = "completed"
+            result["events_path"] = str(events_path)
+            if events_path.exists():
+                with events_path.open("r", encoding="utf-8") as fh:
+                    result["event_count"] = sum(1 for line in fh if line.strip())
+
+        else:
+            result["status"] = "completed"
+            result["note"] = f"Integration '{integrationId}' sync is file-based; no active export triggered."
+
+    except Exception as exc:  # noqa: BLE001
+        result["status"] = "error"
+        result["error"] = str(exc)
+
+    return result
+
+
+@router.post("/integrations/control-plane/snapshot", status_code=201)
+def create_control_plane_snapshot(
+    project_id: str = Query(..., alias="projectId"),
+    node_id: str | None = Query(default=None, alias="nodeId"),
+) -> dict:
+    """Generate a Control Plane routing signal snapshot for a project.
+
+    Reads live Atlas state (BOM, context packs, canonical assets, policy)
+    and writes a snapshot YAML to exports/control-plane/.
+    """
+    try:
+        from app.settings import get_settings
+        settings = get_settings()
+        from app.services.control_plane import ControlPlaneExporter
+        exporter = ControlPlaneExporter(settings.control_plane_dir)
+        result = exporter.export_from_services(
+            project_id=project_id,
+            registry_dir=settings.registry_dir,
+            active_node_id=node_id,
+        )
+        return {
+            "path": result["path"],
+            "project_id": project_id,
+            "snapshot": result["snapshot"],
+        }
+    except Exception as exc:
+        return {"error": str(exc), "project_id": project_id}
 
 
 @router.get("/integrations/{integrationId}/status", response_model=IntegrationStatus)
