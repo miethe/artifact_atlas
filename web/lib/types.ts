@@ -373,6 +373,8 @@ export interface BomSlot {
   required: boolean;
   status: BomSlotStatus;
   assignment_count: number;
+  /** Assignments with status === "accepted" (aligns with backend BomSlot schema). */
+  accepted_assignment_count?: number | null;
   domain?: string | null;
 }
 

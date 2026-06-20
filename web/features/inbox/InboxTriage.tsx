@@ -9,7 +9,12 @@
 import * as React from "react";
 import { clsx } from "clsx";
 import { Inbox, RefreshCw } from "lucide-react";
-import { useInboxItems, useImportToInbox } from "@/lib/hooks/useInbox";
+import {
+  useInboxItems,
+  useImportToInbox,
+  useBulkStatusChange,
+  useBulkDelete,
+} from "@/lib/hooks/useInbox";
 import { useImportAsset } from "@/lib/hooks/useAssets";
 import { InboxQueueItem } from "./InboxQueueItem";
 import { InboxPreviewPane } from "./InboxPreviewPane";
@@ -33,6 +38,8 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
   const { data, isLoading, isError, refetch } = useInboxItems(projectId);
   const importToInbox = useImportToInbox(projectId);
   const importAsset = useImportAsset(projectId);
+  const bulkStatusMutation = useBulkStatusChange();
+  const bulkDeleteMutation = useBulkDelete();
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [multiSelectedIds, setMultiSelectedIds] = React.useState<Set<string>>(new Set());
@@ -103,13 +110,22 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
   };
 
   // ---- Bulk actions ----
-  const handleBulkStatus = async (_status: AssetStatus) => {
-    // In a real impl: batch mutation. For now log and clear.
-    clearMultiSelect();
+  const handleBulkStatus = async (status: AssetStatus) => {
+    const assetIds = Array.from(multiSelectedIds);
+    try {
+      await bulkStatusMutation.mutateAsync({ assetIds, status });
+    } finally {
+      clearMultiSelect();
+    }
   };
 
   const handleBulkDelete = async () => {
-    clearMultiSelect();
+    const assetIds = Array.from(multiSelectedIds);
+    try {
+      await bulkDeleteMutation.mutateAsync({ assetIds });
+    } finally {
+      clearMultiSelect();
+    }
   };
 
   // ---- Import ----
@@ -144,7 +160,7 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
           onClearSelection={clearMultiSelect}
           onBulkStatus={handleBulkStatus}
           onBulkDelete={handleBulkDelete}
-          isLoading={false}
+          isLoading={bulkStatusMutation.isPending || bulkDeleteMutation.isPending}
         />
       )}
 

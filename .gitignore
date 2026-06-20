@@ -27,3 +27,11 @@ assets/previews/*
 # Python build / agent runtime noise
 *.egg-info/
 .claude/agent-memory/
+
+# Playwright / test output
+web/test-results/
+web/playwright-report/
+.vitest/
+
+# Regenerable performance fixtures (use scripts/generate_perf_fixtures.py)
+fixtures/perf/

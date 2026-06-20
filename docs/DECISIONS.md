@@ -341,3 +341,52 @@ All MVP integrations are **file/export/ref-based only**. No OAuth tokens, no rem
 - Integration seams are stable contracts; live API connectors can be added later without changing the export format.
 - `config/integrations.yaml` encodes the file paths and status for each integration seam.
 - CI can validate export format compliance without running any external services.
+
+---
+
+## D-011 — MVP Documentation & Release Hardening Strategy
+
+**Status**: Accepted  
+**Date**: 2026-06-20  
+**Phase**: Phase 5 (Release Hardening)  
+**Deciders**: documentation-writer, lead-architect
+
+### Context
+
+MVP is feature-complete (Phases 0–4). Phase 5 hardens the system for pilot deployment with 25 real ChatGPT image outputs. Clear user-facing documentation and a structured pilot checklist are prerequisites for successful local-first validation.
+
+### Decision
+
+**User-facing documentation** is published in `docs/`:
+
+| File | Purpose |
+|---|---|
+| `README.md` | Setup, installation, quick-start, local-first caveats |
+| `docs/architecture.md` | Implemented system architecture, data model, layers (API, repositories, JSONL) |
+| `docs/user-workflows.md` | 8 core workflows: import, classify, apply template, assign slot, view coverage, build pack, promote canonical, export |
+| `docs/agent-handoff.md` | CLI commands, MCP tools, policy gates, integration patterns, troubleshooting |
+| `docs/DECISIONS.md` | Architecture decisions D-001 through D-011 with rationale and consequences |
+| `docs/mvp-backlog.md` | Epic list and phase schedule; Phases 0–5 marked complete; Phase 6 (deferred) listed |
+| `docs/pilot-checklist.md` | 11-part checklist for pilot with ~25 ChatGPT images: import, classify, apply template, assign, coverage, pack, policy, UI, export, docs, feedback |
+
+**Release acceptance criteria**:
+- README and quick-start guide are clear and tested (first-run experience)
+- Architecture docs accurately reflect implemented code (repositories, services, API routes)
+- User workflows cover all MVP features with screenshots/examples
+- Agent handoff documents CLI/MCP with policy enforcement rules
+- Pilot checklist is executable and comprehensive
+- All documentation is up-to-date with Phases 0–5 work
+
+**Approach**:
+- Documentation is written from the implemented code, not idealized or aspirational
+- Code examples are tested (run tests before documenting)
+- Vocabulary is consistent with canonical enums in `app/models/vocabulary.py`
+- Links between docs are maintained (README → architecture → decisions → agent-handoff)
+
+### Consequences
+
+- New users can install and run Artifact Atlas with README alone
+- Agents understand policy gates and query patterns from `docs/agent-handoff.md`
+- Developers can contribute to Phases 6+ without re-learning architecture
+- Pilot operator has a structured checklist to validate MVP functionality
+- Phase 6 planning can reference completed Phase 5 decisions as foundation

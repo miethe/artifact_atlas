@@ -273,17 +273,23 @@ Aligned with spec §22.1. Epic E6 (Template Builder) is elevated to its own epic
 
 ### Phase 5 — MVP Hardening and Delivery (v1.0)
 
-> Final integration, testing, documentation, and local-first deployment.
+> Final integration, testing, documentation, and local-first deployment. **COMPLETE** as of 2026-06-20.
 
-| ID | Title | One-Line AC | Depends On |
+| ID | Title | Status | Notes |
 |---|---|---|---|
-| H5-001 | End-to-end ingest-to-BOM-to-pack test | Automated test covers: file ingest → inbox triage → slot assignment → context pack export. | All Phase 1–3 |
-| H5-002 | API test coverage | All MVP endpoints have at least one happy-path and one error test. | All Phase 1–3 |
-| H5-003 | UI smoke test | Playwright or similar: project home, asset gallery, BOM overview, context pack builder load without error. | All Phase 1–3 |
-| H5-004 | `config/workspace.yaml` policy defaults | Workspace config sets default sensitivity, agent access, and local storage paths; validated on startup. | P0-004 |
-| H5-005 | Docker Compose local deployment | `docker-compose up` starts FastAPI backend and Next.js frontend; no external dependencies required. | H5-001 |
-| H5-006 | User documentation — quick start | README and docs cover: install, ingest 25 assets, classify, apply template, create context pack. | H5-005 |
-| H5-007 | `docs/DECISIONS.md` final pass | All architecture decisions from P0-002–P0-006 are recorded with rationale and non-goals. | P0-002–P0-006 |
+| H5-001 | End-to-end ingest-to-BOM-to-pack test | ✓ Complete | Implemented; 469 tests pass including E2E smoke tests |
+| H5-002 | API test coverage | ✓ Complete | 469 tests across models, routes, services, policy, integrations |
+| H5-003 | UI smoke test | ✓ Complete | Playwright E2E tests cover core workflows; visual QA via mockups |
+| H5-004 | `config/workspace.yaml` policy defaults | ✓ Complete | Workspace config implemented; defaults enforced on startup |
+| H5-005 | Docker Compose local deployment | ⏭ Deferred (V1) | `docker-compose.yml` not published in MVP; local-first runs via `uvicorn` + `npm run dev`. Packaging tracked under V1-007 (hosted/Docker mode). |
+| H5-006 | User documentation — quick start | ✓ Complete | README.md updated with install/run/test; docs/user-workflows.md covers 8 workflows |
+| H5-007 | `docs/DECISIONS.md` final pass | ✓ Complete | D-001 through D-011 documented with rationale, consequences, and integration boundaries |
+| DOC-001 | README Setup Update | ✓ Complete | Install, run, test commands for API/web; local-first caveats; project structure |
+| DOC-002 | Developer Architecture Guide | ✓ Complete | Architecture.md covers system tiers, data model, repositories, policy, integrations |
+| DOC-003 | User Workflow Guide | ✓ Complete | user-workflows.md documents 8 core workflows with CLI/UI examples |
+| DOC-004 | ADR And Backlog Closeout | ✓ Complete | DECISIONS.md and mvp-backlog.md updated; Phases 0–5 marked done; Phase 6 deferred |
+| REL-001 | Demo Fixture Pack | ✓ Complete | Sample registry fixtures seeded; templates and demo data available |
+| REL-002 | Pilot Checklist | ✓ Complete | docs/pilot-checklist.md created; 11-part comprehensive checklist for 25 ChatGPT images |
 
 ---
 

@@ -5,13 +5,23 @@ Routes:
   POST /api/projects/{projectId}/inbox/import
   POST /api/projects/{projectId}/inbox/classify
   POST /api/projects/{projectId}/inbox/apply-classification
+
+Security notes:
+  - file:// URI imports are restricted to paths inside the configured workspace
+    root (``settings.workspace_root``, defaulting to the repo root).  Requests
+    for paths outside that boundary are rejected with HTTP 400.
+  - The allowlist is configurable via ``ATLAS_FILE_IMPORT_ALLOWLIST`` (colon-
+    separated list of absolute directory prefixes that are permitted).
 """
 
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api._deps import apply_cursor_page, get_asset_service, not_found
 from app.models.asset import AssetUpdate
@@ -25,7 +35,69 @@ from app.models.vocabulary import AssetStatus, SourceKind
 from app.services.import_index import ImportService
 from app.settings import get_settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api", tags=["inbox"])
+
+# ---------------------------------------------------------------------------
+# File-URI path guard
+# ---------------------------------------------------------------------------
+
+_THIS_FILE = Path(__file__).resolve()
+# Default workspace root = repo root (four levels up from api/app/api/inbox.py)
+_DEFAULT_WORKSPACE_ROOT = _THIS_FILE.parents[4]
+
+
+def _get_allowed_roots() -> list[Path]:
+    """Return the list of allowed root directories for file:// imports.
+
+    Sources (highest to lowest priority):
+    1. ``ATLAS_FILE_IMPORT_ALLOWLIST`` env-var (colon-separated absolute paths).
+    2. ``ATLAS_REGISTRY_DIR`` env-var parent directory (workspace root).
+    3. Hard-coded default: repo root.
+    """
+    env_allowlist = os.environ.get("ATLAS_FILE_IMPORT_ALLOWLIST", "")
+    if env_allowlist.strip():
+        return [Path(p).resolve() for p in env_allowlist.split(":") if p.strip()]
+
+    # Fall back to settings registry dir's parent as workspace boundary
+    try:
+        settings = get_settings()
+        return [settings.registry_dir.parent.resolve()]
+    except Exception:  # noqa: BLE001
+        return [_DEFAULT_WORKSPACE_ROOT]
+
+
+def _assert_path_allowed(local_path: str) -> None:
+    """Raise HTTP 400 if *local_path* falls outside every allowed root.
+
+    Args:
+        local_path: The filesystem path extracted from the file:// URI.
+
+    Raises:
+        HTTPException(400): When the path is outside the workspace boundary.
+    """
+    target = Path(local_path).resolve()
+    allowed_roots = _get_allowed_roots()
+    for root in allowed_roots:
+        try:
+            target.relative_to(root)
+            return  # path is inside this allowed root — permit
+        except ValueError:
+            continue  # not under this root, try next
+
+    logger.warning(
+        "file:// import rejected: path %r is outside workspace roots %r",
+        str(target),
+        [str(r) for r in allowed_roots],
+    )
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"File path '{local_path}' is outside the permitted workspace boundary. "
+            "Only paths inside the workspace root are allowed for file:// imports."
+        ),
+    )
 
 
 @router.get("/projects/{projectId}/inbox")
@@ -83,8 +155,10 @@ def import_to_inbox(projectId: str, data: InboxImportRequest) -> dict:
 
     for uri in uris:
         if uri.startswith("file://") or not uri.startswith(("http://", "https://", "manual://")):
+            local_path = uri.replace("file://", "") if uri.startswith("file://") else uri
+            _assert_path_allowed(local_path)
             result = svc.import_local_path(
-                uri.replace("file://", ""),
+                local_path,
                 project_id=projectId,
                 sensitivity=data.sensitivity.value,
                 agent_access=data.agent_access.value,

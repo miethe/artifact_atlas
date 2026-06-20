@@ -77,6 +77,12 @@ def dispatch_tool(
     This function is the single call path for both the MCP SDK server and
     the test suite.  All tool functions are called here.
 
+    Each tool in TOOL_REGISTRY has an ``arg_map`` entry that describes how to
+    extract its positional argument from the ``arguments`` dict, and which keys
+    to forward as keyword arguments.  This replaces the previous if/elif chain
+    with a data-driven dispatch map, making it trivial to add new tools without
+    touching dispatch logic.
+
     Args:
         tool_name: MCP tool name (e.g., "asset.search").
         arguments: Input arguments dict.
@@ -96,59 +102,59 @@ def dispatch_tool(
 
     fn = entry["fn"]
 
-    # Inspect which keyword-only params the tool function accepts
     import inspect
     sig = inspect.signature(fn)
     param_names = set(sig.parameters.keys())
+    has_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
+    )
 
-    # Build common injected kwargs — only include params the function accepts
+    # Build injected kwargs — only include params the function actually accepts
     kwargs: dict[str, Any] = {"svcs": svcs}
     if "actor_id" in param_names:
         kwargs["actor_id"] = actor_id
     if "actor_type" in param_names:
         kwargs["actor_type"] = actor_type
 
-    # Tool dispatch: first positional arg + remaining keyword args
-    positional_arg = None
-    extra_kwargs: dict[str, Any] = {}
+    # ---------------------------------------------------------------------------
+    # Data-driven dispatch map
+    # Each entry maps tool_name → (positional_key, extra_keys_to_exclude_from_kwargs)
+    # positional_key=None means all arguments are passed as keyword args.
+    # ---------------------------------------------------------------------------
+    _DISPATCH_MAP: dict[str, tuple[str | None, set[str]]] = {
+        "asset.search":         ("query",       {"query"}),
+        "asset.get":            ("asset_id",    {"asset_id"}),
+        "bom.get":              ("project_id",  {"project_id"}),
+        "bom.coverage":         ("project_id",  {"project_id"}),
+        "context_pack.create":  ("title",       {"title"}),
+        "intent_node.context":  ("node_id",     {"node_id"}),
+        "project.snapshot":     ("project_id",  {"project_id"}),
+        "atlas.record_event":   ("event_type",  {"event_type"}),
+    }
 
-    if tool_name == "asset.search":
-        positional_arg = arguments.get("query", "")
-        extra_kwargs = {k: v for k, v in arguments.items() if k != "query"}
-    elif tool_name == "asset.get":
-        positional_arg = arguments.get("asset_id", "")
-        extra_kwargs = {k: v for k, v in arguments.items() if k != "asset_id"}
-    elif tool_name == "bom.get":
-        positional_arg = arguments.get("project_id", "")
-    elif tool_name == "bom.coverage":
-        positional_arg = arguments.get("project_id", "")
-        extra_kwargs = {k: v for k, v in arguments.items() if k != "project_id"}
-    elif tool_name == "context_pack.create":
-        positional_arg = arguments.get("title", "")
-        extra_kwargs = {k: v for k, v in arguments.items() if k != "title"}
-    elif tool_name == "intent_node.context":
-        positional_arg = arguments.get("node_id", "")
-        extra_kwargs = {k: v for k, v in arguments.items() if k != "node_id"}
-    elif tool_name == "project.snapshot":
-        positional_arg = arguments.get("project_id", "")
-    elif tool_name == "atlas.record_event":
-        positional_arg = arguments.get("event_type", "")
-        extra_kwargs = {k: v for k, v in arguments.items() if k != "event_type"}
-
-    # Only pass extra kwargs that the function accepts (or has **kwargs)
-    has_var_keyword = any(
-        p.kind == inspect.Parameter.VAR_KEYWORD
-        for p in sig.parameters.values()
-    )
-    if not has_var_keyword:
-        extra_kwargs = {k: v for k, v in extra_kwargs.items() if k in param_names}
-
-    kwargs.update(extra_kwargs)
+    dispatch_entry = _DISPATCH_MAP.get(tool_name)
 
     try:
-        if positional_arg is not None:
-            return fn(positional_arg, **kwargs)
-        return fn(**{**arguments, **kwargs})
+        if dispatch_entry is not None:
+            positional_key, exclude_keys = dispatch_entry
+            positional_arg = arguments.get(positional_key, "") if positional_key else None
+            extra_kwargs = {k: v for k, v in arguments.items() if k not in exclude_keys}
+
+            if not has_var_keyword:
+                extra_kwargs = {k: v for k, v in extra_kwargs.items() if k in param_names}
+
+            kwargs.update(extra_kwargs)
+
+            if positional_arg is not None:
+                return fn(positional_arg, **kwargs)
+            return fn(**{**arguments, **kwargs})
+        else:
+            # Fallback: pass all arguments as keyword args (handles unknown/future tools)
+            all_kwargs = dict(arguments)
+            if not has_var_keyword:
+                all_kwargs = {k: v for k, v in all_kwargs.items() if k in param_names}
+            return fn(**{**all_kwargs, **kwargs})
     except Exception as exc:
         return {"error": "tool_error", "tool_name": tool_name, "detail": str(exc)}
 

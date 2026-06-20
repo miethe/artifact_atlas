@@ -9,11 +9,14 @@ Routes:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Query
+
+logger = logging.getLogger(__name__)
 
 from app.api._deps import not_found
 from app.models.integration import IntegrationStatus
@@ -60,8 +63,12 @@ def _load_integrations() -> dict[str, IntegrationStatus]:
                     last_sync_status=None,
                     export_path=export_path,
                 )
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Could not load integrations.yaml (path=%s): %s — using built-in defaults.",
+            config_path if "config_path" in dir() else "unknown",
+            exc,
+        )
 
     # Fallback — always include known integrations even if config missing
     defaults = {

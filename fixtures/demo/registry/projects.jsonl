@@ -1,0 +1,3 @@
+{"id": "proj_demo_nova", "workspace_id": "ws_demo_local", "name": "Project Nova", "slug": "project-nova", "status": "active", "meatywiki_page_ref": "meatywiki/projects/project-nova.md", "intent_id": null, "root_intenttree_node_id": null}
+{"id": "proj_demo_horizon", "workspace_id": "ws_demo_local", "name": "Horizon Design System", "slug": "horizon-design-system", "status": "active", "meatywiki_page_ref": "meatywiki/projects/horizon.md", "intent_id": null, "root_intenttree_node_id": null}
+{"id": "proj_demo_sentinel", "workspace_id": "ws_demo_local", "name": "Sentinel Security Audit", "slug": "sentinel-security-audit", "status": "paused", "meatywiki_page_ref": null, "intent_id": null, "root_intenttree_node_id": null}

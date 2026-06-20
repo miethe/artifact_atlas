@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-import { LayoutGrid, List, Plus, ChevronRight } from "lucide-react";
+import { LayoutGrid, List, Plus } from "lucide-react";
 import { RightDrawer } from "@/components/shell/RightDrawer";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -186,17 +186,6 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
 
         {/* Spacer + add button */}
         <div className="ml-auto flex items-center gap-2">
-          {inspectAssetId && (
-            <Button
-              size="sm"
-              variant="ghost"
-              iconRight={<ChevronRight aria-hidden className="w-3.5 h-3.5" />}
-              onClick={() => setInspectAssetId(null)}
-              aria-label="Close inspector"
-            >
-              Inspector
-            </Button>
-          )}
           <Button
             size="sm"
             variant="primary"
@@ -284,30 +273,23 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
           )}
         </div>
 
-        {/* Right Inspector Drawer (layout-shift mode) */}
-        {drawerOpen && (
-          <div className="w-80 shrink-0 border-l border-[var(--border)] overflow-y-auto bg-[var(--surface)]">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)]">
-              <span className="text-xs font-medium text-[var(--ink)]">Inspector</span>
-              <button
-                type="button"
-                onClick={() => setInspectAssetId(null)}
-                aria-label="Close inspector"
-                className="rounded p-1 text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <ChevronRight aria-hidden className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <AssetDrawerContent
-              asset={inspectAsset}
-              loading={isLoading}
-              projectId={projectId}
-              onEdit={(id) => setEditAssetId(id)}
-              onCopyLink={handleCopyLink}
-              onAddToPack={(id) => setInspectAssetId(id)}
-            />
-          </div>
-        )}
+        {/* Right Inspector Drawer — uses shell RightDrawer for focus-trap + Escape */}
+        <RightDrawer
+          open={drawerOpen}
+          onClose={() => setInspectAssetId(null)}
+          title="Inspector"
+          width="md"
+          overlay={false}
+        >
+          <AssetDrawerContent
+            asset={inspectAsset}
+            loading={isLoading}
+            projectId={projectId}
+            onEdit={(id) => setEditAssetId(id)}
+            onCopyLink={handleCopyLink}
+            onAddToPack={(id) => setInspectAssetId(id)}
+          />
+        </RightDrawer>
       </div>
 
       {/* Metadata edit dialog */}
