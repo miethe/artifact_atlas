@@ -710,6 +710,55 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/templates/{templateId}/impact:
+    parameters:
+      - $ref: "#/components/parameters/templateId"
+    get:
+      operationId: getTemplateImpact
+      tags: [templates]
+      summary: Preview impact of applying a template to a project
+      description: >
+        Returns slot counts for what would be added (new_slots) vs. conflicting with
+        existing BOM slots (conflict_slots) before the user confirms application.
+        Used by the Apply Template Wizard to show a merge preview.
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Project to compute impact against
+      responses:
+        "200":
+          description: Template impact preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateImpact"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/templates/{templateId}/publish:
+    parameters:
+      - $ref: "#/components/parameters/templateId"
+    post:
+      operationId: publishTemplate
+      tags: [templates]
+      summary: Explicitly publish a draft template
+      description: >
+        Transitions a template from experimental (draft) status to recommended (published).
+        This is the required explicit gate before a custom template can be used in
+        production BOMs. Idempotent if template is already published.
+      responses:
+        "200":
+          description: Published template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   # ---------------------------------------------------------------------------
   # BOM
   # ---------------------------------------------------------------------------
@@ -928,6 +977,70 @@ paths:
                     type: string
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/bom/assignments/{assignmentId}:
+    parameters:
+      - name: assignmentId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: unassignSlot
+      tags: [bom]
+      summary: Remove an asset assignment from a BOM slot
+      description: >
+        Tombstones the assignment. If no accepted assignments remain on the slot,
+        the slot status reverts to partial or missing. Emits a bom_slot_filled
+        audit event.
+      parameters:
+        - name: reason
+          in: query
+          schema:
+            type: string
+          description: Optional justification for removal
+      responses:
+        "204":
+          description: Assignment removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/bom/assignments/{assignmentId}/status:
+    parameters:
+      - name: assignmentId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      operationId: updateAssignmentStatus
+      tags: [bom]
+      summary: Update the assignment_status of an existing slot assignment
+      description: >
+        Promotes a suggested assignment to accepted or canonical, or rejects it.
+        Advancing from suggested to accepted/canonical also advances the slot
+        status from partial to in_progress. Emits a bom_slot_filled audit event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignment_status]
+              properties:
+                assignment_status:
+                  $ref: "#/components/schemas/AssignmentStatus"
+      responses:
+        "200":
+          description: Updated assignment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomAssignment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   # ---------------------------------------------------------------------------
   # Context Packs
@@ -2372,6 +2485,46 @@ components:
           type: integer
         required_slots:
           type: integer
+
+    TemplateImpact:
+      type: object
+      required: [template_id, template_name, total_slots, required_slots, optional_slots, new_slots, conflict_slots]
+      description: >
+        Impact preview returned by GET /api/templates/{templateId}/impact.
+        Shows which slots would be net-new vs. conflicting with existing BOM slots.
+      properties:
+        template_id:
+          type: string
+        template_name:
+          type: string
+        total_slots:
+          type: integer
+          description: Total slot count in the template
+        required_slots:
+          type: integer
+          description: Required slot count
+        optional_slots:
+          type: integer
+          description: Optional slot count
+        new_slots:
+          type: integer
+          description: Slots that would be created (no existing slot with same domain+type)
+        conflict_slots:
+          type: integer
+          description: Slots that already exist in the project BOM (would be skipped on apply)
+        conflict_details:
+          type: array
+          description: Per-slot conflict detail for UI merge preview
+          items:
+            type: object
+            required: [domain, artifact_type_id, required]
+            properties:
+              domain:
+                type: string
+              artifact_type_id:
+                type: string
+              required:
+                type: boolean
 
     # ---- BOM ----
 

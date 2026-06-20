@@ -22,6 +22,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Boxes,
+  BarChart2,
+  ArrowRightLeft,
 } from "lucide-react";
 
 // Default seed project id used when no project is in context
@@ -70,6 +72,16 @@ const NAV_ITEMS: NavItem[] = [
     label: "Templates",
     href: (id) => `/projects/${id}/templates`,
     icon: FileText,
+  },
+  {
+    label: "Coverage & Gaps",
+    href: (id) => `/projects/${id}/coverage`,
+    icon: BarChart2,
+  },
+  {
+    label: "Inbox → BOM",
+    href: (id) => `/projects/${id}/bom-mapping`,
+    icon: ArrowRightLeft,
   },
   {
     label: "Context Packs",

@@ -353,6 +353,45 @@ export const integrationsApi = {
 };
 
 // ============================================================
+// Templates API
+// ============================================================
+
+export const templatesApi = {
+  list() {
+    return apiFetch<unknown[]>("/api/templates");
+  },
+
+  get(templateId: string) {
+    return apiFetch<unknown>(`/api/templates/${templateId}`);
+  },
+
+  preview(templateId: string) {
+    return apiFetch<unknown>(`/api/templates/${templateId}/preview`);
+  },
+
+  apply(
+    projectId: string,
+    templateId: string,
+    mergeMode: "skip_existing" | "overwrite_existing" | "rename_conflict",
+  ) {
+    return apiFetch<unknown>(
+      `/api/projects/${projectId}/bom/apply-template`,
+      {
+        method: "POST",
+        body: { template_id: templateId, merge_mode: mergeMode },
+      },
+    );
+  },
+
+  save(data: unknown) {
+    return apiFetch<unknown>("/api/templates", {
+      method: "POST",
+      body: data,
+    });
+  },
+};
+
+// ============================================================
 // Dashboard helper (aggregated from multiple API calls)
 // ============================================================
 

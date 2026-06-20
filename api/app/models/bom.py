@@ -1,8 +1,9 @@
-"""BOM, BomSlot, BomAssignment, and CoverageSummary models."""
+"""BOM, BomSlot, BomAssignment, CoverageSummary, and GapRecommendation models."""
 
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -141,9 +142,70 @@ class CoverageSummary(BaseModel):
     coverage_score: float
     total_slots: int
     required_slots: int | None = None
+    optional_slots: int | None = None
+    optional_complete: int | None = None
+    optional_score: float | None = None
     filled_slots: int
     missing_slots: int
+    partial_slots: int | None = None
+    in_progress_slots: int | None = None
     stale_slots: int
     blocked_slots: int | None = None
     not_applicable_slots: int | None = None
     groups: list[CoverageGroup] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Gap recommendations (BOM-BE-006)
+# ---------------------------------------------------------------------------
+
+
+class DraftTaskSuggestion(BaseModel):
+    """A draft IntentTree task suggestion for a gap slot.
+
+    NEVER auto-created. Always returned as a suggestion payload for the
+    user/UI to accept explicitly.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    suggestion_only: bool = True  # Always True — this is never auto-created
+    title: str
+    description: str
+    slot_id: str
+    slot_domain: str
+    artifact_type_id: str
+    priority: str  # "high" | "medium" | "low"
+
+
+class GapRecommendation(BaseModel):
+    """Deterministic recommendation for a missing, stale, or partial BOM slot.
+
+    gap_reason: why this slot is a gap (missing/stale/partial/blocked).
+    action: suggested remediation action.
+    draft_task_suggestion: optional draft task payload (never auto-created).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    slot_id: str
+    slot_domain: str
+    artifact_type_id: str
+    gap_reason: str  # "missing" | "stale" | "partial" | "blocked"
+    required: bool
+    priority: str  # "high" | "medium" | "low"
+    action: str
+    guidance: str | None = None
+    draft_task_suggestion: DraftTaskSuggestion | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class GapRecommendationsResponse(BaseModel):
+    """Response for GET /api/bom/{bomId}/gaps?include_recommendations=true."""
+
+    model_config = ConfigDict(extra="allow")
+
+    bom_id: str
+    total_gaps: int
+    critical_gaps: int
+    recommendations: list[GapRecommendation]

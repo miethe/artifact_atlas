@@ -1,12 +1,14 @@
 /**
- * Artifact BOM — /projects/[projectId]/bom
+ * Artifact BOM page — /projects/[projectId]/bom
  *
- * Stage 1b: shell-wrapped placeholder.
- * Future stage will fill with BOM coverage matrix, slot assignments, gap analysis.
+ * Stage 3B: BOM Overview + Slot Interactions (BOM-UI-003, BOM-UI-004)
+ * Renders KPI row, domain tabs, slot grid, template sources, legend, quick actions.
+ * All slot interactions route through API hooks; audit-sensitive actions confirm via Dialog.
  */
 
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/shell/PageHeader";
+import { BomOverview } from "@/features/bom";
 
 interface Props {
   params: Promise<{ projectId: string }>;
@@ -25,6 +27,7 @@ export default async function BomPage({ params }: Props) {
       <PageHeader
         title="Artifact BOM"
         eyebrow="Bill of materials"
+        description="Coverage matrix, slot assignments, and gap analysis."
         crumbs={[
           { label: "Projects", href: "/" },
           { label: projectId, href: `/projects/${projectId}` },
@@ -34,14 +37,10 @@ export default async function BomPage({ params }: Props) {
 
       <section
         aria-label="BOM content"
-        className="flex-1 p-5 overflow-y-auto"
+        className="flex-1 overflow-y-auto relative"
         data-fill-target="artifact-bom"
       >
-        <div className="rounded border border-dashed border-[var(--border)] bg-[var(--surface-sunken)] p-8 text-center text-sm text-[var(--ink-muted)]">
-          <p className="font-medium text-[var(--ink)]">Artifact BOM</p>
-          <p className="mt-1">Coverage matrix, slot assignments, and gap analysis will be rendered here in a future stage.</p>
-          <p className="mt-1 text-xs font-mono">projectId: {projectId}</p>
-        </div>
+        <BomOverview projectId={projectId} />
       </section>
     </div>
   );
