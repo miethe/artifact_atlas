@@ -9,6 +9,7 @@ Environment variables (all optional, override workspace.yaml values):
   ATLAS_REGISTRY_DIR          – override storage.registry_dir
   ATLAS_EXPORTS_DIR           – override exports.context_packs_dir
   ATLAS_REPORTS_DIR           – override exports.reports_dir
+  ATLAS_CCDASH_EVENTS_PATH    – override exports.ccdash_events_path (absolute path to file)
   ATLAS_WORKSPACE_YAML        – override path to workspace.yaml itself
   ATLAS_DEFAULT_SENSITIVITY   – override policy.default_sensitivity
   ATLAS_DEFAULT_AGENT_ACCESS  – override policy.default_agent_access
@@ -103,7 +104,7 @@ class Settings:
         meatywiki_dir_raw = exports_cfg.get("meatywiki_dir", "exports/meatywiki")
         self.meatywiki_dir: Path = _make_absolute(meatywiki_dir_raw, _REPO_ROOT)
 
-        ccdash_events_path_raw = exports_cfg.get(
+        ccdash_events_path_raw = os.environ.get("ATLAS_CCDASH_EVENTS_PATH") or exports_cfg.get(
             "ccdash_events_path", "exports/events/ccdash-events.jsonl"
         )
         self.ccdash_events_path: Path = _make_absolute(ccdash_events_path_raw, _REPO_ROOT)

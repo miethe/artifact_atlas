@@ -139,7 +139,7 @@ class CoverageSummary(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     bom_id: str
-    coverage_score: float
+    coverage_score: float | None  # None when BOM has no active required slots
     total_slots: int
     required_slots: int | None = None
     optional_slots: int | None = None

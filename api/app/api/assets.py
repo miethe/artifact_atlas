@@ -190,14 +190,23 @@ def promote_asset(assetId: str, data: AssetPromoteRequest) -> Asset:
 
 @router.post("/assets/{assetId}/summarize", status_code=202)
 def summarize_asset(assetId: str) -> dict:
-    """Request local preview/summary generation for an asset."""
+    """Request local preview/summary generation for an asset.
+
+    NOTE: Async summarization workers are not yet implemented in MVP.
+    This endpoint validates the asset exists and returns a queued status
+    but does NOT dispatch a real background task.  Callers should poll
+    the asset's description/preview fields directly.
+    """
     svc = get_asset_service()
     asset = svc.get_asset(assetId)
     if asset is None:
         return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
 
-    task_id = f"task_{uuid.uuid4().hex[:12]}"
-    return {"task_id": task_id, "asset_id": assetId}
+    return {
+        "asset_id": assetId,
+        "status": "queued",
+        "note": "Summarization workers are not yet implemented. No background task was dispatched.",
+    }
 
 
 # ---------------------------------------------------------------------------

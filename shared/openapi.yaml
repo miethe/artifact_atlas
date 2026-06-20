@@ -395,11 +395,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [task_id, asset_id]
+                required: [asset_id, status]
                 properties:
-                  task_id:
-                    type: string
                   asset_id:
+                    type: string
+                  status:
+                    type: string
+                  note:
                     type: string
         "404":
           $ref: "#/components/responses/NotFound"
@@ -1163,19 +1165,30 @@ paths:
     post:
       operationId: exportContextPack
       tags: [context-packs]
-      summary: Export a context pack YAML to exports/context-packs/
+      summary: Export a context pack to exports/context-packs/
       description: >
-        Writes the context pack manifest YAML to the configured exports/context-packs/
-        directory without changing pack status. Does not silently overwrite an existing
-        file — a timestamp-suffixed filename is used if the target already exists.
+        Writes the context pack manifest to the configured exports/context-packs/
+        directory without changing pack status. Supports two formats via the
+        ``format`` query parameter: ``yaml`` (default, spec §14.3 manifest shape)
+        and ``markdown`` (human/agent-facing document, spec §30).
+        Does not silently overwrite an existing file — a timestamp-suffixed
+        filename is used if the target already exists.
         Use /publish to change status to published.
       parameters:
         - name: output_path
           in: query
           required: false
-          description: Optional custom output path for the YAML file.
+          description: Optional custom output path for the export file.
           schema:
             type: string
+        - name: format
+          in: query
+          required: false
+          description: Export format. "yaml" (default) writes a .yaml manifest; "markdown" writes a .md document.
+          schema:
+            type: string
+            enum: [yaml, markdown]
+            default: yaml
       responses:
         "200":
           description: Export result with written file path
@@ -1183,13 +1196,17 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [pack_id, export_path]
+                required: [pack_id, export_path, format]
                 properties:
                   pack_id:
                     type: string
                   export_path:
                     type: string
-                    description: Absolute path of the written YAML file
+                    description: Absolute path of the written file (.yaml or .md)
+                  format:
+                    type: string
+                    enum: [yaml, markdown]
+                    description: Format of the exported file
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1888,7 +1905,7 @@ components:
 
     AuditEventType:
       type: string
-      enum: [asset_added, asset_classified, asset_linked, asset_promoted, bom_template_applied, bom_slot_filled, context_pack_created, context_pack_published, agent_query, policy_denied, sync_completed]
+      enum: [asset_added, asset_classified, asset_linked, asset_promoted, asset_archived, deleted, bom_template_applied, bom_slot_filled, context_pack_created, context_pack_published, agent_query, policy_denied, sync_completed]
 
     ActorType:
       type: string
@@ -2756,7 +2773,7 @@ components:
 
     CoverageSummary:
       type: object
-      required: [bom_id, coverage_score, total_slots, filled_slots, missing_slots, stale_slots]
+      required: [bom_id, total_slots, filled_slots, missing_slots, stale_slots]
       properties:
         bom_id:
           type: string
@@ -2765,6 +2782,7 @@ components:
           format: float
           minimum: 0.0
           maximum: 1.0
+          nullable: true
         total_slots:
           type: integer
         required_slots:

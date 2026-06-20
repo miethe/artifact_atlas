@@ -315,12 +315,27 @@ def cmd_bom_assign(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     return 0
 
 
+def _pack_export_dispatch(
+    cp_svc: Any,
+    pack_id: str,
+    *,
+    out_path: Path | None,
+    fmt: str,
+    actor_id: str = "cli",
+) -> Path:
+    """Call the appropriate export method based on format."""
+    if fmt == "markdown":
+        return cp_svc.export_markdown(pack_id, output_path=out_path, actor_id=actor_id)
+    return cp_svc.export_yaml(pack_id, output_path=out_path, actor_id=actor_id)
+
+
 def cmd_pack_build(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     """Draft a context pack for a project or node, and optionally export it."""
     from app.models.context_pack import ContextPackCreate
     from app.models.vocabulary import ContextPackAudience, ContextPackTargetType
 
     cp_svc = svcs["context_packs"]
+    fmt = getattr(args, "format", "yaml") or "yaml"
 
     if args.node:
         # Build from IntentTree node ref
@@ -358,19 +373,20 @@ def cmd_pack_build(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
 
     if args.out:
         out_path = Path(args.out)
-        exported = cp_svc.export_yaml(pack.id, output_path=out_path, actor_id="cli")
-        print(f"  Exported to: {exported}")
+        exported = _pack_export_dispatch(cp_svc, pack.id, out_path=out_path, fmt=fmt)
+        print(f"  Exported ({fmt}) to: {exported}")
 
     return 0
 
 
 def cmd_pack_export(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
-    """Export an existing context pack YAML to disk."""
+    """Export an existing context pack to disk (YAML or Markdown)."""
     cp_svc = svcs["context_packs"]
     out_path = Path(args.out) if getattr(args, "out", None) else None
+    fmt = getattr(args, "format", "yaml") or "yaml"
     try:
-        exported = cp_svc.export_yaml(args.pack_id, output_path=out_path, actor_id="cli")
-        print(f"Exported context pack {args.pack_id} to: {exported}")
+        exported = _pack_export_dispatch(cp_svc, args.pack_id, out_path=out_path, fmt=fmt)
+        print(f"Exported context pack {args.pack_id} ({fmt}) to: {exported}")
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -452,11 +468,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_pack_build.add_argument("--audience", help="Pack audience (agent, human, …).")
     p_pack_build.add_argument("--sensitivity", help="Pack sensitivity.")
     p_pack_build.add_argument("--instructions", help="Agent instructions.")
-    p_pack_build.add_argument("--out", help="Export YAML to this path immediately.")
+    p_pack_build.add_argument("--out", help="Export to this path immediately.")
+    p_pack_build.add_argument(
+        "--format",
+        choices=["yaml", "markdown"],
+        default="yaml",
+        help="Export format: yaml (default) or markdown.",
+    )
 
-    p_pack_export = pack_sub.add_parser("export", help="Export a context pack to YAML.")
+    p_pack_export = pack_sub.add_parser("export", help="Export a context pack to YAML or Markdown.")
     p_pack_export.add_argument("pack_id", help="Context pack ID.")
     p_pack_export.add_argument("--out", help="Output path (default: exports/context-packs/).")
+    p_pack_export.add_argument(
+        "--format",
+        choices=["yaml", "markdown"],
+        default="yaml",
+        help="Export format: yaml (default) or markdown.",
+    )
 
     return parser
 

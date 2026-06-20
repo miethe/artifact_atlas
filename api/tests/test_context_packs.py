@@ -836,6 +836,146 @@ class TestPreviewAndExport:
 
 
 # ---------------------------------------------------------------------------
+# CP-BE-004 (STAGE 2): Markdown export
+# ---------------------------------------------------------------------------
+
+
+class TestMarkdownExport:
+    """Markdown export writes a .md file with required manifest fields and no restricted content."""
+
+    def test_export_markdown_writes_md_file(self, tmp_registry: Path) -> None:
+        """export_markdown writes a .md file to exports/context-packs/."""
+        pid = _create_project("MD Export File")
+        pack = _create_pack_via_api(pid, title="Markdown Export Pack")
+        svc = _make_service(tmp_registry)
+        written = svc.export_markdown(pack["id"])
+        assert written.exists()
+        assert written.suffix == ".md"
+
+    def test_export_markdown_contains_manifest_fields(self, tmp_registry: Path) -> None:
+        """Markdown export contains all required manifest fields."""
+        pid = _create_project("MD Fields")
+        payload = _make_pack_create(
+            pid,
+            title="Markdown Fields Pack",
+            sensitivity="personal",
+            audience="agent",
+        )
+        payload["policy"] = {
+            "allow_external_data": False,
+            "allow_code_execution": True,
+            "network_access": "restricted",
+        }
+        payload["instructions"] = "Use this pack for validation."
+        payload["items"] = [
+            {"item_type": "note", "item_id": "note_md_001", "include_mode": "full"},
+            {"item_type": "asset", "item_id": "asset_md_001", "include_mode": "metadata"},
+        ]
+        resp = client.post(f"/api/projects/{pid}/context-packs", json=payload)
+        assert resp.status_code == 201, resp.text
+        pack_id = resp.json()["id"]
+
+        svc = _make_service(tmp_registry)
+        written = svc.export_markdown(pack_id)
+        content = written.read_text(encoding="utf-8")
+
+        # Title
+        assert "Markdown Fields Pack" in content
+        # Pack ID
+        assert pack_id in content
+        # Project ID
+        assert pid in content
+        # Sensitivity
+        assert "personal" in content
+        # Audience
+        assert "agent" in content
+        # Policy fields (rendered as human-readable labels in the markdown table)
+        assert "Allow external data" in content
+        assert "Allow code execution" in content
+        assert "Network access" in content
+        # Instructions
+        assert "Use this pack for validation." in content
+        # Items section
+        assert "Items" in content
+        assert "note" in content
+        assert "note_md_001" in content
+        assert "asset_md_001" in content
+        assert "metadata" in content
+
+    def test_export_markdown_does_not_inline_restricted_content(self, tmp_registry: Path) -> None:
+        """Markdown export references asset IDs only — does not inline restricted content."""
+        pid = _create_project("MD No Inline")
+        asset_id = _create_asset(
+            pid, sensitivity="restricted", agent_access="preview_allowed", title="Confidential Asset"
+        )
+        payload = _make_pack_create(pid, sensitivity="personal")
+        payload["items"] = [
+            {"item_type": "asset", "item_id": asset_id, "include_mode": "full"}
+        ]
+        resp = client.post(f"/api/projects/{pid}/context-packs", json=payload)
+        pack_id = resp.json()["id"]
+
+        svc = _make_service(tmp_registry)
+        written = svc.export_markdown(pack_id)
+        content = written.read_text(encoding="utf-8")
+
+        # Must reference the asset ID
+        assert asset_id in content
+        # Must NOT inline the asset title as raw content
+        assert "Confidential Asset" not in content
+
+    def test_export_markdown_no_silent_overwrite(self, tmp_registry: Path) -> None:
+        """A second markdown export of the same pack produces a differently-named file."""
+        pid = _create_project("MD No Overwrite")
+        pack = _create_pack_via_api(pid, title="MD Overwrite Test Pack")
+        svc = _make_service(tmp_registry)
+        path1 = svc.export_markdown(pack["id"])
+        path2 = svc.export_markdown(pack["id"])
+        assert path1.exists()
+        assert path2.exists()
+        assert path1 != path2
+
+    def test_export_markdown_via_api_endpoint(self, tmp_registry: Path) -> None:
+        """POST /context-packs/{packId}/export?format=markdown returns export_path and format."""
+        pid = _create_project("MD API Export")
+        pack = _create_pack_via_api(pid, title="MD API Export Pack")
+        resp = client.post(f"/api/context-packs/{pack['id']}/export?format=markdown")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert "export_path" in body
+        assert body["pack_id"] == pack["id"]
+        assert body["format"] == "markdown"
+        assert body["export_path"].endswith(".md")
+
+    def test_export_yaml_via_api_default_format(self, tmp_registry: Path) -> None:
+        """POST /context-packs/{packId}/export (no format) defaults to yaml format."""
+        pid = _create_project("YAML API Default")
+        pack = _create_pack_via_api(pid, title="YAML Default Pack")
+        resp = client.post(f"/api/context-packs/{pack['id']}/export")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["format"] == "yaml"
+        assert body["export_path"].endswith(".yaml")
+
+    def test_to_markdown_service_method(self, tmp_registry: Path) -> None:
+        """to_markdown returns a non-empty string without writing to disk."""
+        pid = _create_project("to_markdown Method")
+        pack = _create_pack_via_api(pid, title="to_markdown Pack")
+        svc = _make_service(tmp_registry)
+        md = svc.to_markdown(pack["id"])
+        assert isinstance(md, str)
+        assert len(md) > 0
+        assert "to_markdown Pack" in md
+        assert pack["id"] in md
+
+    def test_to_markdown_raises_for_missing_pack(self, tmp_registry: Path) -> None:
+        """to_markdown raises ValueError for a nonexistent pack."""
+        svc = _make_service(tmp_registry)
+        with pytest.raises(ValueError, match="not found"):
+            svc.to_markdown("nonexistent_pack_xyz_abc")
+
+
+# ---------------------------------------------------------------------------
 # Integration: full lifecycle
 # ---------------------------------------------------------------------------
 

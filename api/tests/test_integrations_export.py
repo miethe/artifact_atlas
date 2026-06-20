@@ -956,7 +956,8 @@ class TestIntegrationRoutes:
         assert resp.status_code == 202
         data = resp.json()
         assert data["integration_id"] == "ccdash"
-        assert data["status"] in ("completed", "error")
+        # "partial" when no events yet; "completed" when events exist; "error" on failure
+        assert data["status"] in ("completed", "partial", "error")
 
     def test_sync_integration_control_plane_requires_project_id(self, tmp_registry: Path) -> None:
         from fastapi.testclient import TestClient
@@ -967,7 +968,8 @@ class TestIntegrationRoutes:
         resp = c.post("/api/integrations/control_plane/sync")
         assert resp.status_code == 202
 
-    def test_sync_integration_unknown_returns_completed(self, tmp_registry: Path) -> None:
+    def test_sync_integration_unknown_returns_partial(self, tmp_registry: Path) -> None:
+        """Integrations without active export return 'partial', not 'completed'."""
         from fastapi.testclient import TestClient
         from app.main import app
 
@@ -975,7 +977,8 @@ class TestIntegrationRoutes:
         resp = c.post("/api/integrations/skillmeat/sync")
         assert resp.status_code == 202
         data = resp.json()
-        assert data["status"] in ("completed", "error")
+        # "partial" = no real work done; "error" = unexpected failure
+        assert data["status"] in ("partial", "error")
 
     def test_control_plane_snapshot_endpoint(self, tmp_registry: Path) -> None:
         from fastapi.testclient import TestClient

@@ -14,12 +14,15 @@ Design:
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import yaml as _yaml  # type: ignore[import-untyped]
@@ -166,7 +169,8 @@ def _read_yaml_frontmatter(path: Path) -> dict[str, Any]:
             data = _yaml.safe_load(fm_block)
             return data if isinstance(data, dict) else {}
         return {}
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Could not read YAML frontmatter from %s: %s", path, exc)
         return {}
 
 

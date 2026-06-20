@@ -15,9 +15,12 @@ Design:
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import yaml as _yaml  # type: ignore[import-untyped]
@@ -178,7 +181,8 @@ def _load_nodes_from_file(export_path: Path) -> list[NodeRef]:
         if not isinstance(data, list):
             return []
         return [NodeRef.from_dict(item) for item in data if isinstance(item, dict)]
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to load IntentTree nodes from %s: %s", export_path, exc)
         return []
 
 

@@ -231,6 +231,7 @@ def test_promote_asset_valid_transition(tmp_registry) -> None:
 
 
 def test_summarize_asset(tmp_registry) -> None:
+    """Summarize endpoint returns queued status with honest stub note (no fake task_id)."""
     pid = _create_project("SummarizeTest")
     asset = _create_asset(pid)
     aid = asset["id"]
@@ -239,7 +240,10 @@ def test_summarize_asset(tmp_registry) -> None:
     assert resp.status_code == 202
     body = resp.json()
     assert body["asset_id"] == aid
-    assert "task_id" in body
+    assert body["status"] == "queued"
+    # Honest stub: no fake task_id implying a running worker
+    assert "task_id" not in body
+    assert "note" in body
 
 
 # ---------------------------------------------------------------------------

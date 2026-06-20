@@ -17,11 +17,14 @@ Hard rules:
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # YAML is a project dependency but guard for test environments
 try:
@@ -269,8 +272,8 @@ class MeatyWikiSync:
                         "path": str(written_path),
                     },
                 )
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Audit emit failed for meatywiki sync of %s: %s", asset_id, exc)
 
         return {
             "path": str(written_path),

@@ -527,6 +527,63 @@ class ContextPackService:
 
         return dest
 
+    def export_markdown(
+        self,
+        pack_id: str,
+        *,
+        output_path: Path | None = None,
+        actor_type: str = "user",
+        actor_id: str = "user",
+    ) -> Path:
+        """Export context pack as Markdown into exports/context-packs/.
+
+        Renders a human/agent-facing document with title, project, target,
+        sensitivity, policy envelope, instructions, and the item list.
+        References asset IDs/URIs only — never inlines restricted content.
+
+        Returns the path of the written .md file.
+        The file is always written atomically; existing files are not silently
+        overwritten — a new timestamp-suffixed path is used if it exists.
+        """
+        pack = self._repo.get(pack_id)
+        if pack is None:
+            raise ValueError(f"Context pack '{pack_id}' not found.")
+
+        result = self.apply_policy_and_estimate(pack_id, actor_type=actor_type)
+        items = self._repo.list_items(pack_id)
+        evaluated = result.get("items", [])
+
+        md_content = self._build_markdown(pack, items, evaluated)
+
+        # Determine output path
+        if output_path is None:
+            slug = pack.title.lower().replace(" ", "-").replace("/", "-")[:40]
+            filename = f"{pack.id}-{slug}.md"
+            dest = self._context_packs_dir / filename
+            if dest.exists():
+                ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                dest = self._context_packs_dir / f"{pack.id}-{slug}-{ts}.md"
+        else:
+            dest = output_path
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        import os
+        import tempfile
+        fd, tmp = tempfile.mkstemp(prefix=dest.stem + "_", suffix=".tmp", dir=dest.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(md_content)
+            os.replace(tmp, str(dest))
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+        return dest
+
     def publish(
         self,
         pack_id: str,
@@ -755,3 +812,97 @@ class ContextPackService:
         # Fallback: produce a minimal YAML-like text
         import json
         return "# YAML library unavailable; falling back to JSON\n" + json.dumps(data, indent=2, default=str)
+
+    def _build_markdown(
+        self,
+        pack: ContextPack,
+        items: list[ContextPackItem],
+        evaluated: list[dict[str, Any]],
+    ) -> str:
+        """Render a Markdown document for a context pack (human/agent-facing).
+
+        Spec §30 requirement: must include title, project, target, sensitivity,
+        policy envelope, instructions, and item list (type + ref/uri + include_mode).
+        Must never inline restricted content — only references IDs/URIs.
+        """
+        manifest = self._build_manifest_dict(pack, items, evaluated)
+        m = manifest["context_pack_manifest"]
+
+        lines: list[str] = []
+
+        # Title
+        lines.append(f"# {m['title']}")
+        lines.append("")
+
+        # Metadata table
+        lines.append("## Metadata")
+        lines.append("")
+        lines.append(f"| Field | Value |")
+        lines.append(f"|-------|-------|")
+        lines.append(f"| ID | `{m['id']}` |")
+        lines.append(f"| Project | `{m['project_id']}` |")
+        lines.append(f"| Target | `{m['target_type']}` / `{m['target_id']}` |")
+        lines.append(f"| Sensitivity | `{m['sensitivity']}` |")
+        lines.append(f"| Audience | `{m['audience']}` |")
+        lines.append(f"| Status | `{m['status']}` |")
+        if m.get("created_at"):
+            lines.append(f"| Created | {m['created_at']} |")
+        if m.get("expires_at"):
+            lines.append(f"| Expires | {m['expires_at']} |")
+        lines.append("")
+
+        # Policy envelope
+        lines.append("## Policy Envelope")
+        lines.append("")
+        policy = m.get("policy") or {}
+        lines.append(f"| Policy | Value |")
+        lines.append(f"|--------|-------|")
+        lines.append(f"| Allow external data | `{policy.get('allow_external_data', False)}` |")
+        lines.append(f"| Allow code execution | `{policy.get('allow_code_execution', False)}` |")
+        lines.append(f"| Network access | `{policy.get('network_access', 'none')}` |")
+        if policy.get("agent_access") is not None:
+            lines.append(f"| Agent access | `{policy['agent_access']}` |")
+        if policy.get("expiry") is not None:
+            lines.append(f"| Expiry | `{policy['expiry']}` |")
+        lines.append("")
+
+        # Instructions
+        instructions = m.get("instructions")
+        if instructions:
+            lines.append("## Instructions")
+            lines.append("")
+            lines.append(instructions)
+            lines.append("")
+
+        # Items
+        lines.append("## Items")
+        lines.append("")
+        manifest_items = m.get("items") or []
+        if manifest_items:
+            lines.append("| # | Type | Reference/URI | Include Mode |")
+            lines.append("|---|------|---------------|-------------|")
+            for idx, item in enumerate(manifest_items, start=1):
+                item_type = item.get("type", "")
+                item_id = item.get("id", "")
+                include_mode = item.get("include_mode", "")
+                # Reference only — never inline content
+                lines.append(f"| {idx} | `{item_type}` | `{item_id}` | `{include_mode}` |")
+        else:
+            lines.append("_(no items)_")
+        lines.append("")
+
+        return "\n".join(lines)
+
+    def to_markdown(self, pack_id: str, *, actor_type: str = "user") -> str:
+        """Return Markdown string for a context pack without writing to disk.
+
+        Applies policy to each item. Returns the rendered Markdown text.
+        Raises ValueError if pack not found.
+        """
+        pack = self._repo.get(pack_id)
+        if pack is None:
+            raise ValueError(f"Context pack '{pack_id}' not found.")
+        result = self.apply_policy_and_estimate(pack_id, actor_type=actor_type)
+        items = self._repo.list_items(pack_id)
+        evaluated = result.get("items", [])
+        return self._build_markdown(pack, items, evaluated)

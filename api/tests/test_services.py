@@ -896,14 +896,15 @@ class TestCoverageService:
         assert abs(result.coverage_score - 1 / 3) < 0.001
         assert result.missing_slots == 2
 
-    def test_no_required_slots_vacuous_complete(self) -> None:
+    def test_no_required_slots_returns_null_score(self) -> None:
+        """Zero required slots → coverage_score is None (not vacuous 100%)."""
         from app.services.coverage import calculate_coverage
 
         slots = [
             self._make_slot("s1", "bom_1", required=False, status="missing"),
         ]
         result = calculate_coverage(slots)
-        assert result.coverage_score == 1.0
+        assert result.coverage_score is None
         assert result.required_slots == 0
 
     def test_not_applicable_excluded_from_required(self) -> None:
@@ -939,10 +940,11 @@ class TestCoverageService:
         assert result.blocked_slots == 1
 
     def test_empty_slots(self) -> None:
+        """An empty slot list has no required slots → coverage_score is None."""
         from app.services.coverage import calculate_coverage
 
         result = calculate_coverage([])
-        assert result.coverage_score == 1.0
+        assert result.coverage_score is None
         assert result.total_slots == 0
 
     def test_bom_id_carried_through(self) -> None:

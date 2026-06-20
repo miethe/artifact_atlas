@@ -14,6 +14,7 @@ from app.models.project import Project, ProjectCreate, ProjectUpdate
 from app.repositories.assets import AssetRepository
 from app.repositories.bom import BomRepository
 from app.repositories.projects import ProjectRepository
+from app.services.audit import AuditService
 
 
 class DashboardCounts:
@@ -59,10 +60,16 @@ class DashboardCounts:
 class ProjectService:
     """CRUD + dashboard aggregates for projects."""
 
-    def __init__(self, registry_dir: Path) -> None:
+    def __init__(
+        self,
+        registry_dir: Path,
+        *,
+        audit_service: AuditService | None = None,
+    ) -> None:
         self._projects = ProjectRepository(registry_dir)
         self._assets = AssetRepository(registry_dir)
         self._boms = BomRepository(registry_dir)
+        self._audit = audit_service or AuditService(registry_dir)
 
     # ------------------------------------------------------------------
     # CRUD
@@ -97,9 +104,17 @@ class ProjectService:
         """Partially update a project. Returns None if not found."""
         return self._projects.update(project_id, data)
 
-    def delete_project(self, project_id: str) -> bool:
+    def delete_project(self, project_id: str, *, actor_id: str = "system") -> bool:
         """Tombstone a project. Returns True if found and deleted."""
-        return self._projects.delete(project_id)
+        result = self._projects.delete(project_id)
+        if result:
+            self._audit.emit_deleted(
+                project_id,
+                "project",
+                actor_id=actor_id,
+                payload={"action": "tombstone"},
+            )
+        return result
 
     # ------------------------------------------------------------------
     # Dashboard aggregate counts

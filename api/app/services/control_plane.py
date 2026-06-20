@@ -15,9 +15,12 @@ Hard rules:
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
 
@@ -213,8 +216,8 @@ class ControlPlaneExporter:
                     total = len(statuses)
                     complete = domain_complete.get(domain, 0)
                     bom_coverage[domain] = round(complete / total, 3) if total > 0 else 0.0
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("BOM coverage read failed for project %s: %s", project_id, exc)
 
         # -- Available context packs (published)
         try:
@@ -225,8 +228,8 @@ class ControlPlaneExporter:
                 sv = pack.status.value if hasattr(pack.status, "value") else str(pack.status)
                 if sv == "published":
                     available_context_packs.append(pack.id)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Context pack read failed for project %s: %s", project_id, exc)
 
         # -- Canonical assets
         try:
@@ -237,8 +240,8 @@ class ControlPlaneExporter:
                 sv = asset.status.value if hasattr(asset.status, "value") else str(asset.status)
                 if sv == "canonical":
                     canonical_assets.append(asset.id)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Canonical assets read failed for project %s: %s", project_id, exc)
 
         # -- Policy flags from settings
         try:
@@ -249,8 +252,8 @@ class ControlPlaneExporter:
                 "default_sensitivity": settings.default_sensitivity,
                 "default_agent_access": settings.default_agent_access,
             }
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Policy flags read failed: %s", exc)
 
         return self.export_snapshot(
             project_id=project_id,

@@ -23,17 +23,22 @@ from app.settings import get_settings
 
 def get_asset_service() -> AssetService:
     settings = get_settings()
-    return AssetService(settings.registry_dir)
+    return AssetService(settings.registry_dir, audit_service=get_audit_service())
 
 
 def get_project_service() -> ProjectService:
     settings = get_settings()
-    return ProjectService(settings.registry_dir)
+    return ProjectService(settings.registry_dir, audit_service=get_audit_service())
 
 
 def get_audit_service() -> AuditService:
     settings = get_settings()
-    return AuditService(settings.registry_dir)
+    from app.services.ccdash_client import CCDashClient
+    ccdash = CCDashClient(
+        events_path=settings.ccdash_events_path,
+        workspace_id=settings.workspace_id,
+    )
+    return AuditService(settings.registry_dir, ccdash_client=ccdash)
 
 
 def get_policy_service() -> PolicyService:

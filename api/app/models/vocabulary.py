@@ -153,6 +153,8 @@ class AuditEventType(str, Enum):
     asset_classified = "asset_classified"
     asset_linked = "asset_linked"
     asset_promoted = "asset_promoted"
+    asset_archived = "asset_archived"
+    deleted = "deleted"
     bom_template_applied = "bom_template_applied"
     bom_slot_filled = "bom_slot_filled"
     context_pack_created = "context_pack_created"

@@ -18,7 +18,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.api._deps import apply_cursor_page, conflict, not_found
+from app.api._deps import apply_cursor_page, conflict, get_audit_service, not_found
 from app.models.template import (
     Template,
     TemplateCreate,
@@ -41,6 +41,7 @@ def _get_service() -> TemplateService:
     return TemplateService(
         settings.registry_dir,
         templates_dir=templates_dir if templates_dir.exists() else None,
+        audit_service=get_audit_service(),
     )
 
 

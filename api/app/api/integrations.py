@@ -114,7 +114,7 @@ def trigger_integration_sync(
 
     For file-based integrations, executes the local export adapter.
     - meatywiki: exports asset cards for all project assets (draft by default)
-    - ccdash: flushes pending audit events to ccdash-events.jsonl
+    - ccdash: reports current state of ccdash-events.jsonl (events are written inline by AuditService on each audited action; this endpoint does not flush or queue anything)
     - control_plane: generates a project snapshot YAML
     - intenttree: exports the node-link manifest
     - skillmeat: no active export (read-only in MVP)
@@ -156,17 +156,30 @@ def trigger_integration_sync(
             result["skipped"] = sum(1 for r in batch_results if r.get("skipped"))
 
         elif integrationId == "ccdash":
-            # Report the events file path — events are emitted inline by services
+            # CCDash events are written inline by AuditService.emit via CCDashClient.
+            # This sync endpoint reports the current state of the export file.
             events_path = settings.ccdash_events_path
-            result["status"] = "completed"
             result["events_path"] = str(events_path)
             if events_path.exists():
                 with events_path.open("r", encoding="utf-8") as fh:
-                    result["event_count"] = sum(1 for line in fh if line.strip())
+                    event_count = sum(1 for line in fh if line.strip())
+                result["event_count"] = event_count
+                result["status"] = "completed" if event_count > 0 else "partial"
+                result["note"] = (
+                    f"{event_count} event(s) exported to ccdash-events.jsonl. "
+                    "Events are written inline by AuditService on each audited action."
+                )
+            else:
+                result["status"] = "partial"
+                result["event_count"] = 0
+                result["note"] = (
+                    "No ccdash-events.jsonl found. "
+                    "Events are written inline by AuditService when audited actions occur."
+                )
 
         else:
-            result["status"] = "completed"
-            result["note"] = f"Integration '{integrationId}' sync is file-based; no active export triggered."
+            result["status"] = "partial"
+            result["note"] = f"Integration '{integrationId}' sync is read-only or not yet implemented; no active export was triggered."
 
     except Exception as exc:  # noqa: BLE001
         result["status"] = "error"

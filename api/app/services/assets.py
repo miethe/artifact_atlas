@@ -196,13 +196,11 @@ class AssetService:
             return False
         result = self._assets.delete(asset_id)
         if result:
-            self._audit.emit(
-                AuditEventType.asset_promoted,  # No dedicated archived event; use classified
-                "asset",
+            self._audit.emit_asset_archived(
                 asset_id,
                 actor_id=actor_id,
                 project_id=asset.project_id,
-                payload={"action": "archived_tombstone"},
+                payload={"action": "tombstone"},
             )
         return result
 
@@ -421,9 +419,17 @@ class AssetService:
         """Return all links for an asset."""
         return self._assets.list_links(asset_id)
 
-    def delete_link(self, link_id: str) -> bool:
+    def delete_link(self, link_id: str, *, actor_id: str = "system") -> bool:
         """Tombstone a link. Returns True if found."""
-        return self._assets.delete_link(link_id)
+        result = self._assets.delete_link(link_id)
+        if result:
+            self._audit.emit_deleted(
+                link_id,
+                "asset_link",
+                actor_id=actor_id,
+                payload={"action": "tombstone"},
+            )
+        return result
 
     # ------------------------------------------------------------------
     # Relationships

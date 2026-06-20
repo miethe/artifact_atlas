@@ -124,8 +124,16 @@ def preview_context_pack(packId: str) -> ContextPackPreview:
 
 
 @router.post("/context-packs/{packId}/export")
-def export_context_pack(packId: str, output_path: Annotated[str | None, Query()] = None) -> dict:
-    """Export the context pack YAML to exports/context-packs/.
+def export_context_pack(
+    packId: str,
+    output_path: Annotated[str | None, Query()] = None,
+    format: Annotated[str, Query(pattern="^(yaml|markdown)$")] = "yaml",
+) -> dict:
+    """Export the context pack to exports/context-packs/.
+
+    Supports two formats via the ``format`` query parameter:
+    - ``yaml`` (default): writes a ``.yaml`` file matching spec §14.3 manifest shape.
+    - ``markdown``: writes a ``.md`` human/agent-facing document (spec §30).
 
     Returns the written file path.
     Does not change pack status (use /publish for that).
@@ -139,11 +147,14 @@ def export_context_pack(packId: str, output_path: Annotated[str | None, Query()]
     from pathlib import Path
     dest = Path(output_path) if output_path else None
     try:
-        written = svc.export_yaml(packId, output_path=dest)
+        if format == "markdown":
+            written = svc.export_markdown(packId, output_path=dest)
+        else:
+            written = svc.export_yaml(packId, output_path=dest)
     except ValueError as exc:
         return not_found(str(exc))  # type: ignore[return-value]
 
-    return {"pack_id": packId, "export_path": str(written)}
+    return {"pack_id": packId, "export_path": str(written), "format": format}
 
 
 @router.post("/context-packs/{packId}/publish", response_model=ContextPack)

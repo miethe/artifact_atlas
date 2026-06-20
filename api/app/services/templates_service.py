@@ -33,6 +33,7 @@ from app.models.template import (
 from app.models.vocabulary import TemplateStatus
 from app.repositories.bom import BomRepository
 from app.repositories.templates import TemplateRepository
+from app.services.audit import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,12 @@ class TemplateService:
         self,
         registry_dir: Path,
         templates_dir: Path | None = None,
+        *,
+        audit_service: AuditService | None = None,
     ) -> None:
         self._repo = TemplateRepository(registry_dir, templates_dir=templates_dir)
         self._registry_dir = registry_dir
+        self._audit = audit_service or AuditService(registry_dir)
 
     # ------------------------------------------------------------------
     # BOM-BE-001: registry loading
@@ -295,9 +299,17 @@ class TemplateService:
         )
         return self._repo.create(new_id, create_data)
 
-    def delete_template(self, template_id: str) -> bool:
+    def delete_template(self, template_id: str, *, actor_id: str = "system") -> bool:
         """Tombstone a template (soft-delete)."""
-        return self._repo.delete(template_id)
+        result = self._repo.delete(template_id)
+        if result:
+            self._audit.emit_deleted(
+                template_id,
+                "template",
+                actor_id=actor_id,
+                payload={"action": "tombstone"},
+            )
+        return result
 
     def generate_bom_slots(
         self, template_id: str, bom_id: str

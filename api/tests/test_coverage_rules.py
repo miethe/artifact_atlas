@@ -137,8 +137,8 @@ class TestAllSevenSlotStatuses:
 
         slot_na = _make_slot(status="not_applicable", required=True)
         summary = calculate_coverage([slot_na])
-        # No required active slots -> vacuously complete
-        assert summary.coverage_score == 1.0
+        # No required active slots -> coverage_score is None (not vacuous 100%)
+        assert summary.coverage_score is None
         assert summary.not_applicable_slots == 1
         assert summary.required_slots == 0
 

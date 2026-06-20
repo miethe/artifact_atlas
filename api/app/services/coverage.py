@@ -164,10 +164,13 @@ def calculate_coverage(
         elif sv == BomSlotStatus.blocked.value:
             blocked += 1
 
-    # Primary score: required_complete / required_active
-    primary_score = (
-        len(complete_required) / len(required_active) if required_active else 1.0
-    )
+    # Primary score: required_complete / required_active.
+    # A BOM with zero slots (or all not_applicable) has no meaningful coverage
+    # score — report None rather than vacuous 100%.
+    if not required_active:
+        primary_score: float | None = None
+    else:
+        primary_score = len(complete_required) / len(required_active)
 
     # Optional score: optional_complete / optional_active
     optional_score: float | None = None
