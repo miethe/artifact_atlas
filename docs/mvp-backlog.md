@@ -1,45 +1,305 @@
-# MVP Backlog
+# MVP Backlog — Artifact Atlas
 
-## Epic E1 - Asset Registry
+> Reconciled from: source spec §20 MVP scope, §21 roadmap, §22 engineering backlog; phase-0 contracts
+> (`docs/project_plans/implementation_plans/features/artifact-atlas-app-completion-v1/phase-0-decisions-contracts.md`);
+> and scaffold inventory performed 2026-06-20.
+>
+> Vocabulary: asset status `inbox | raw | candidate | in_review | in_progress | selected | canonical | archived`;
+> BOM slot status `missing | partial | in_progress | complete | stale | blocked | not_applicable`;
+> sensitivity `public | personal | work_sensitive | client_sensitive | restricted`;
+> agent access `none | metadata_only | preview_allowed | read_allowed | context_pack_allowed`;
+> assignment status `suggested | accepted | rejected | canonical`;
+> template status `core | recommended | optional | experimental | deprecated`.
 
-- [ ] Define project, asset, asset link, and asset relationship schemas.
-- [ ] Implement local file import endpoint.
-- [ ] Generate thumbnails for images and PDFs.
-- [ ] Export MeatyWiki asset cards.
+---
 
-## Epic E2 - Project Shell
+## Baseline Inventory
 
-- [ ] Build app shell with sidebar and top search.
-- [ ] Build project command center.
-- [ ] Add KPI cards for assets, canonical assets, linked nodes, and BOM coverage.
+Current scaffold state as of 2026-06-20. Each area is assessed across **implemented**, **partial/stub**, and **missing**.
 
-## Epic E3 - Inbox and Triage
+### `api/`
 
-- [ ] Add watched-folder proof of concept.
-- [ ] Add classification form.
-- [ ] Add bulk metadata assignment.
+| Item | State | Notes |
+|---|---|---|
+| FastAPI app shell (`app/main.py`) | Implemented | `/health`, `GET /api/projects` (hardcoded stub), no persistence |
+| Pydantic schemas (`models/schemas.py`) | Partial | `Project`, `Asset`, `BomSlot`, `CoverageSummary` present; `Template`, `ContextPack`, `AuditEvent`, `Policy`, `IntentTreeLink` missing |
+| Coverage service (`services/coverage.py`) | Stub | File exists; no JSONL/repo wiring |
+| Repository layer | Missing | No JSONL readers, no SQLite models, no repository classes |
+| Routers / endpoint modules | Missing | All routes live in `main.py`; no `assets`, `inbox`, `templates`, `bom`, `context_packs`, `search`, `audit` routers |
+| Ingest / import endpoint | Missing | No file upload, no watched-folder worker |
+| Thumbnail generation | Missing | Not started |
+| MCP server | Missing | Not started |
+| Tests | Stub | `tests/test_health.py` only |
 
-## Epic E4 - IntentTree Linkage
+### `web/`
 
-- [ ] Model IntentTree node links.
-- [ ] Add node context view scaffold.
-- [ ] Create context pack from node.
+| Item | State | Notes |
+|---|---|---|
+| Next.js 15 app shell | Implemented | `layout.tsx`, `globals.css`, scaffold CSS shell |
+| Project Command Center page | Partial | Static stats, static lane board, no API wiring |
+| Asset gallery / list view | Missing | Not started |
+| Asset detail drawer | Missing | Not started |
+| Inbox triage view | Missing | Not started |
+| BOM overview page | Missing | Not started |
+| Template library page | Missing | Not started |
+| Apply template wizard | Missing | Not started |
+| Context pack builder | Missing | Not started |
+| Search / filter bar | Missing | Not started |
+| Navigation links wired | Missing | Links render as `href="#"` stubs |
+| TanStack Query / Table / Virtual | Missing | Not installed |
+| dnd-kit | Missing | Not installed |
 
-## Epic E5 - Artifact BOM
+### `shared/`
 
-- [ ] Define template, artifact type, BOM, slot, and assignment schemas.
-- [ ] Apply New Product/App template to a project.
-- [ ] Calculate coverage and gap status.
-- [ ] Assign an asset to a slot.
+| Item | State | Notes |
+|---|---|---|
+| `openapi.yaml` | Partial | 5 stub routes; schemas `Project` and `Asset` only; `BomSlot`, `Template`, `ContextPack`, `Coverage`, `Inbox`, `Search`, `Audit`, `Policy` missing |
 
-## Epic E7 - Context Packs
+### `registry/`
 
-- [ ] Build YAML manifest exporter.
-- [ ] Add policy envelope.
-- [ ] Add pack preview endpoint.
+| Item | State | Notes |
+|---|---|---|
+| `projects.jsonl` | Implemented | Seed record present |
+| `assets.jsonl` | Implemented | One seed asset (spec doc) |
+| `bom.jsonl` | Implemented | Seed file present; structure TBD |
+| `templates.jsonl` | Implemented | Seed file present |
 
-## Epic E8 - Agent Gateway
+### `templates/`
 
-- [ ] Add read-first MCP tool stubs.
-- [ ] Add `atlas bom status` CLI-equivalent service path.
-- [ ] Log policy decisions and denied access events.
+| Item | State | Notes |
+|---|---|---|
+| `new-product-app.yaml` | Implemented | Core template with Strategy / Product / Architecture / Frontend Design / GTM domains |
+| `architecture-initiative.yaml` | Implemented | Second core template |
+| Agentic OS template | Missing | Referenced in spec §21 Phase 0 |
+| GTM template | Missing | Referenced in spec §21 Phase 0 (distinct from slots inside new-product-app) |
+| Research template | Missing | Referenced in spec §21 Phase 0 |
+
+### `exports/`
+
+| Item | State | Notes |
+|---|---|---|
+| `context-packs/artifact-atlas-builder-context-pack.yaml` | Implemented | Manual example pack; schema TBD |
+| `reports/` | Empty placeholder | `.gitkeep` only |
+
+### `assets/` (thumbnails and previews)
+
+| Item | State | Notes |
+|---|---|---|
+| `assets/thumbnails/` | Empty | Directory exists |
+| `assets/previews/` | Empty | Directory exists |
+
+### Mockups (PRD package PNGs)
+
+Ten UI mockup images are present in `Artifact_Atlas_PRD_UIUX_Implementation_Spec_Package/`. None are wired into the web app. They serve as implementation reference only.
+
+---
+
+## Epics (Canonical List)
+
+Aligned with spec §22.1. Epic E6 (Template Builder) is elevated to its own epic vs. the original backlog which folded it into E5.
+
+| Epic | Description | MVP Phase |
+|---|---|---|
+| E1 | Asset Registry — core model, ingest, metadata, links, thumbnails | 0–1 |
+| E2 | Project Shell — app shell, project home, navigation, search, filters | 0–1 |
+| E3 | Inbox & Triage — capture workflow, classification forms, bulk actions | 1 |
+| E4 | IntentTree Linkage — node search, context view, asset-node relationships | 1–2 |
+| E5 | Artifact BOM — BOM slots, coverage, drag/drop assignment, inbox-to-slot mapping | 2 |
+| E6 | Template Builder — reusable project templates and artifact type library | 2 |
+| E7 | Context Packs — pack builder, manifests, policy envelope, publish/export | 3 |
+| E8 | Agent Gateway — MCP tools, CLI, policy-aware retrieval | 3 |
+| E9 | Integrations — MeatyWiki, local vault, GitHub/Drive/Figma stubs | 1–3 |
+| E10 | Governance & Audit — sensitivity, access policy, audit events | 0–3 |
+| E11 | Telemetry — CCDash event export and usage metrics | 4 |
+| E12 | Search & Intelligence — full-text search, semantic search, classification suggestions | 4 |
+
+---
+
+## Implementation Phases
+
+### Phase 0 — Decisions, Contracts, and Schema Seed (Complete before Phase 1 build)
+
+> Spec §21 Phase 0; phase-0-decisions-contracts.md. Duration: 1–2 weeks.
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| P0-001 | Baseline Inventory | Inventory section in docs distinguishes implemented vs missing across all scaffold directories. | — |
+| P0-002 | Persistence Decision | `docs/DECISIONS.md` records chosen storage model (JSONL-repository-first) with SQLite migration path. | P0-001 |
+| P0-003 | Vocabulary Canonicalization | API/storage values frozen for asset status, BOM slot status, sensitivity, agent access, assignment status, template status. | P0-001 |
+| P0-004 | Policy Baseline | Policy rules documented covering sensitivity defaults, agent access gates, canonical promotion, and MCP denial logging. | P0-003 |
+| P0-005 | API Contract Expansion | `shared/openapi.yaml` covers Projects, Assets, Inbox, Templates, BOM, Coverage, Context Packs, Search, Audit, and Policies. | P0-002, P0-003 |
+| P0-006 | Integration Contract Notes | Each of MeatyWiki, IntentTree, SkillMeat/SAM, CCDash, and Control Plane has a documented MVP read/write boundary and export shape. | P0-004 |
+| P0-007 | Backlog Reconciliation | `docs/mvp-backlog.md` reflects phase sequencing with no duplicate or conflicting epics. | P0-005 |
+| P0-008 | Sample Template Completion | Agentic OS, GTM, and Research YAML templates added to `templates/`; existing templates validated. | P0-003 |
+
+---
+
+### Phase 1 — Web App MVP (Core Read Path)
+
+> Spec §21 Phase 1; E1, E2, E3 partial, E9 partial. Duration: 4–6 weeks.
+
+#### E1 — Asset Registry
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E1-001 | Repository layer — JSONL readers | CRUD methods for projects, assets, templates, BOM exist; all reads/writes go through repository classes. | P0-002 |
+| E1-002 | Asset Pydantic model (full) | `Asset` model covers all spec §13 fields including `artifact_type_id`, `source_kind`, `tags`, `metadata`, canonical vocabulary enums. | P0-003 |
+| E1-003 | Local file import endpoint | `POST /api/projects/{id}/assets/import` accepts file upload, saves metadata to registry, returns `Asset`. | E1-001, E1-002 |
+| E1-004 | Thumbnail generation worker | Image and PDF thumbnails generated on ingest; stored in `assets/thumbnails/`; path recorded in asset metadata. | E1-003 |
+| E1-005 | Asset link model | `AssetLink` schema and JSONL storage implemented; link types from spec §13 supported. | E1-001 |
+| E1-006 | Asset search/filter endpoint | `GET /api/projects/{id}/assets` supports `status`, `artifact_type`, `sensitivity`, and text query filters. | E1-001 |
+
+#### E2 — Project Shell
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E2-001 | Next.js API integration setup | TanStack Query installed; `api/` client module fetches from FastAPI; env var for API base URL. | P0-005 |
+| E2-002 | Project home — live KPI cards | KPI cards (asset count, canonical count, BOM coverage) fetch from real API endpoints. | E2-001, E1-001 |
+| E2-003 | Asset gallery view | Grid/list view of project assets with status badges, sensitivity indicators, and type icons. | E2-001, E1-006 |
+| E2-004 | Asset detail drawer | Drawer showing all asset fields, thumbnail preview, and metadata; opens from gallery row. | E2-003 |
+| E2-005 | Navigation — all sections wired | Sidebar nav links route to real pages (Assets, Artifact BOM, Templates, Context Packs, Coverage). | E2-001 |
+| E2-006 | Basic metadata search bar | Top search bar filters asset gallery by title/tag; no semantic search. | E2-003 |
+
+#### E3 — Inbox & Triage
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E3-001 | Watched-folder CLI proof of concept | `atlas watch <path>` detects new files and imports them as `inbox` assets. | E1-003 |
+| E3-002 | Inbox view | Dedicated inbox page lists assets with `inbox` and `raw` status; filterable. | E2-003 |
+| E3-003 | Classification form | Single-asset form sets artifact type, project, sensitivity, and initial status; saves via API. | E2-004, E1-002 |
+| E3-004 | Bulk metadata assignment | Select multiple inbox assets and apply shared artifact type or project assignment in one action. | E3-002, E3-003 |
+
+#### E9 — Integrations (MeatyWiki sync, Phase 1 scope)
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E9-001 | MeatyWiki asset card export | `GET /api/assets/{id}/export/meatywiki` returns Markdown asset card in MeatyWiki folder convention. | E1-002 |
+| E9-002 | MeatyWiki writeback note stub | Export endpoint accepts optional note string appended to card; no live API call. | E9-001 |
+
+---
+
+### Phase 2 — Artifact BOM and Templates
+
+> Spec §21 Phase 2; E4, E5, E6. Duration: 4–6 weeks.
+
+#### E4 — IntentTree Linkage
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E4-001 | IntentTree node link model | `IntentTreeLink` schema stored in JSONL; links asset to IntentTree node ID by reference. | E1-001 |
+| E4-002 | Node context view scaffold | Page or panel showing linked assets for a given node ID; fetches from API. | E4-001, E2-003 |
+| E4-003 | Create context pack from node | UI action creates draft context pack pre-seeded with assets linked to a given node. | E4-001, E7-001 |
+
+#### E5 — Artifact BOM
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E5-001 | BOM Pydantic models | `Template`, `ArtifactType`, `BOM`, `BomSlot`, `SlotAssignment` models cover spec §13 fields with canonical enum values. | P0-003 |
+| E5-002 | BOM repository | CRUD for BOMs and slot assignments stored in JSONL; slot status transitions are validated. | E5-001, E1-001 |
+| E5-003 | BOM overview page | Project BOM page displays domains, slot statuses, and coverage score. | E5-002, E2-001 |
+| E5-004 | Slot assignment API | `POST /api/projects/{id}/bom/slots/{slotId}/assign` accepts asset ID; stores `SlotAssignment`. | E5-002 |
+| E5-005 | Inbox-to-BOM mapping UI | Classification form or drag/drop surface lets user assign an inbox asset to a BOM slot. | E3-003, E5-004 |
+| E5-006 | Coverage & gaps calculation | Coverage score endpoint counts required complete vs total; gap list returns missing required slots. | E5-002 |
+| E5-007 | `atlas bom status` CLI command | CLI outputs BOM coverage score and list of missing required slots for a project. | E5-006 |
+
+#### E6 — Template Builder
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E6-001 | Template library API | `GET /api/templates` lists available templates; `GET /api/templates/{id}` returns full slot definitions. | E5-001, E1-001 |
+| E6-002 | Template library UI | Browse and preview available project templates in the web app. | E6-001, E2-001 |
+| E6-003 | Apply template wizard | Wizard applies a template to a project creating a BOM with empty slots; handles conflicts. | E6-001, E5-002 |
+| E6-004 | Template Builder v0 | Basic editor to create or copy/modify a template (domains, artifact types, required flags). | E6-001 |
+
+---
+
+### Phase 3 — Context Packs and Agent Interface
+
+> Spec §21 Phase 3; E7, E8, E9 remainder. Duration: 3–5 weeks.
+
+#### E7 — Context Packs
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E7-001 | Context pack Pydantic model | `ContextPack` schema covers manifest, included assets, policy envelope, token estimate fields. | P0-003 |
+| E7-002 | Context pack YAML manifest exporter | `GET /api/context-packs/{id}/export` returns YAML manifest; sensitive assets are excluded unless policy permits. | E7-001, P0-004 |
+| E7-003 | Policy envelope on pack | Pack manifest includes sensitivity summary, access mode, and agent access fields from policy baseline. | E7-002, P0-004 |
+| E7-004 | Pack preview endpoint | `GET /api/context-packs/{id}/preview` returns estimated token count and asset list without full content. | E7-001 |
+| E7-005 | Context Pack Builder UI | UI to compose a context pack from selected assets, set policy mode, preview, and export. | E7-002, E7-004, E2-001 |
+
+#### E8 — Agent Gateway
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E8-001 | Read-first MCP tool stubs | MCP server with tools: `atlas_list_assets`, `atlas_get_asset`, `atlas_get_bom`, `atlas_get_context_pack`; all read-only. | E1-001, E5-002, E7-001 |
+| E8-002 | `atlas bom status` CLI service path | CLI command hits the same coverage endpoint as the web app; no hardcoded logic. | E5-007 |
+| E8-003 | Policy-aware retrieval | MCP tools enforce `agent_access` field; `metadata_only` mode returns no content fields; `none` returns 403. | E8-001, P0-004 |
+| E8-004 | Audit log — access and denial events | Every MCP tool call and policy denial is appended to audit JSONL; `GET /api/audit` returns recent events. | E8-003 |
+
+#### E9 — Integrations (Remainder)
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E9-003 | SkillMeat template reference export | Template metadata can be exported as a SkillMeat-compatible reference block. | E6-001, P0-006 |
+| E9-004 | CCDash basic event export | `context_pack_published` and `asset_classified` events written to JSONL export on each action. | P0-006, E7-002 |
+| E9-005 | Control Plane routing signal stub | Project snapshot YAML exported on project state change; no live push. | P0-006 |
+| E9-006 | GitHub/Drive/Figma link import | Manual link import endpoint accepts a URL and source kind; no OAuth connector. | E1-003 |
+
+#### E10 — Governance & Audit (Phase 3 items)
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E10-001 | Sensitivity enforcement in API | All asset reads check sensitivity vs caller context; `restricted` assets return 403 outside approved paths. | P0-004 |
+| E10-002 | Canonical promotion gate | Promoting an asset to `canonical` status requires an explicit API call and records an audit event. | E8-004, P0-004 |
+| E10-003 | Agent access policy log | All MCP and CLI access attempts are logged with policy decision (allow/deny/mask). | E8-004 |
+
+---
+
+### Phase 4 — Intelligence and Telemetry
+
+> Spec §21 Phase 4; E11, E12. Duration: 4–8 weeks.
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| E11-001 | CCDash event integration (full) | All defined CCDash event types from spec §24.3 are emitted and verifiable in the export. | E9-004 |
+| E11-002 | Context pack performance feedback | Agent can submit a feedback event tied to a context pack; stored in audit/telemetry JSONL. | E8-001 |
+| E11-003 | Staleness and gap recommendations | Endpoint returns assets flagged as stale (by date heuristic) or slots with status `stale`. | E5-006 |
+| E12-001 | Full-text search | `GET /api/search?q=` searches asset title, tags, and metadata across the registry. | E1-006 |
+| E12-002 | AI-assisted classification suggestions | Ingested assets receive a suggested artifact type based on file name / content heuristics; displayed in inbox. | E3-003 |
+| E12-003 | Semantic search | Vector embedding of asset metadata; `GET /api/search?q=&mode=semantic` uses embeddings. | E12-001 |
+| E12-004 | Duplicate/variant detection | Ingest step checks for near-duplicate assets by title and content hash; prompts user to link or deduplicate. | E1-003, E12-003 |
+
+---
+
+### Phase 5 — MVP Hardening and Delivery (v1.0)
+
+> Final integration, testing, documentation, and local-first deployment.
+
+| ID | Title | One-Line AC | Depends On |
+|---|---|---|---|
+| H5-001 | End-to-end ingest-to-BOM-to-pack test | Automated test covers: file ingest → inbox triage → slot assignment → context pack export. | All Phase 1–3 |
+| H5-002 | API test coverage | All MVP endpoints have at least one happy-path and one error test. | All Phase 1–3 |
+| H5-003 | UI smoke test | Playwright or similar: project home, asset gallery, BOM overview, context pack builder load without error. | All Phase 1–3 |
+| H5-004 | `config/workspace.yaml` policy defaults | Workspace config sets default sensitivity, agent access, and local storage paths; validated on startup. | P0-004 |
+| H5-005 | Docker Compose local deployment | `docker-compose up` starts FastAPI backend and Next.js frontend; no external dependencies required. | H5-001 |
+| H5-006 | User documentation — quick start | README and docs cover: install, ingest 25 assets, classify, apply template, create context pack. | H5-005 |
+| H5-007 | `docs/DECISIONS.md` final pass | All architecture decisions from P0-002–P0-006 are recorded with rationale and non-goals. | P0-002–P0-006 |
+
+---
+
+## Phase 6 — v1 Expansion (Deferred)
+
+> Spec §21 Phase 5 (enterprise hardening) + v1 growth features. These items are out of scope for MVP.
+
+| ID | Title | Notes |
+|---|---|---|
+| V1-001 | RBAC / ABAC | Role-based access control for multi-user or team deployments. |
+| V1-002 | SSO / OIDC | External identity provider integration. |
+| V1-003 | Postgres + pgvector backend | Production-grade storage replacing JSONL/SQLite. |
+| V1-004 | External connectors (GitHub, Figma, Drive) | OAuth-based live connector workers, not manual link import. |
+| V1-005 | Browser extension | Capture assets from browser directly. |
+| V1-006 | Multi-workspace administration | Manage multiple workspaces from a single control plane. |
+| V1-007 | Hosted deployment (homelab/server mode) | Docker Compose with Postgres, MinIO, Redis worker queue. |
+| V1-008 | Audit reporting dashboard | Governance dashboard with policy denial trends and access heatmaps. |
+| V1-009 | Approval workflows | Human approval required for canonical promotion in team context. |
+| V1-010 | Advanced context pack analytics | CCDash-backed pack performance metrics and agent output quality feedback loop. |

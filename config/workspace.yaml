@@ -3,17 +3,178 @@ workspace:
   name: Artifact Atlas Local
   mode: local_first
   created_at: 2026-06-19
+
 storage:
   registry_dir: registry
   thumbnails_dir: assets/thumbnails
   previews_dir: assets/previews
+
 exports:
   context_packs_dir: exports/context-packs
   reports_dir: exports/reports
+
+# ---------------------------------------------------------------------------
+# Authentication — personal-mode trusted loopback (D-009)
+# ---------------------------------------------------------------------------
+auth:
+  mode: personal_loopback
+  # Bind address enforced at startup. Change requires deliberate operator action.
+  bind_host: 127.0.0.1
+  bind_port: 8000
+  # When bind_host is not 127.0.0.1, the server emits a WARNING-level startup
+  # message to stderr: "Artifact Atlas is running in personal mode with no
+  # authentication. Do not expose this port to untrusted networks."
+  loopback_only_warning: true
+  trusted_agents: []
+
+# ---------------------------------------------------------------------------
+# Policy defaults (D-009)
+# ---------------------------------------------------------------------------
 policy:
+  # Default sensitivity applied to newly imported assets.
+  # Must not be set lower than 'personal' for auto-classified assets in MVP.
+  # Canonical values: public | personal | work_sensitive | client_sensitive | restricted
+  # Source of truth: app/models/vocabulary.py :: Sensitivity
   default_sensitivity: personal
+
+  # Default agent access for newly imported assets.
+  # Canonical values: none | metadata_only | preview_allowed | read_allowed | context_pack_allowed
+  # Source of truth: app/models/vocabulary.py :: AgentAccess
   default_agent_access: metadata_only
+
+  # Full-content access rules for agents (all conditions must be true):
+  # 1. asset.agent_access in [read_allowed, context_pack_allowed]
+  # 2. asset.sensitivity in [public, personal]
+  # 3. requesting agent is in trusted_agents list
+  # 4. request is logged as agent_query audit event before content is returned
+  # Assets with sensitivity work_sensitive | client_sensitive | restricted are
+  # capped at preview_allowed for agents in MVP regardless of agent_access field.
+  agent_full_content_sensitivity_cap:
+    - work_sensitive
+    - client_sensitive
+    - restricted
+
+  # Operations that require explicit human approval before execution.
+  # These gates are enforced in the service layer; no automated bypass in MVP.
   require_human_approval_for:
     - canonical_promotion
     - sensitive_context_pack_publish
     - destructive_asset_changes
+    - agent_full_content_work_sensitive
+    - agent_full_content_client_sensitive
+    - template_apply_bulk
+
+  # Canonical promotion flow: asset/slot reaches selected/accepted ->
+  # PromotionRequest created -> audit event emitted -> human approves via UI/CLI ->
+  # status transitions to canonical -> asset_promoted event emitted.
+  # automated_promotion_allowed must remain false in MVP.
+  automated_promotion_allowed: false
+
+# ---------------------------------------------------------------------------
+# Audit rules (D-009)
+# ---------------------------------------------------------------------------
+audit:
+  # Audit events are appended to registry/events.jsonl using atomic writes.
+  # Events are never deleted in MVP.
+  events_file: registry/events.jsonl
+
+  # Operations that emit pre-write audit events (event is written before the
+  # operation executes; a confirmation or failure event follows).
+  audited_operations:
+    - event: asset_added
+      retention_days: 365
+    - event: asset_archived
+      retention_days: 365
+      notes: includes reason field
+    - event: sensitivity_changed
+      retention_days: 365
+    - event: agent_query
+      retention_days: 90
+    - event: policy_denied
+      retention_days: 365
+    - event: context_pack_published
+      retention_days: 365
+    - event: bom_template_applied
+      retention_days: 180
+    - event: asset_promoted
+      retention_days: 365
+      notes: includes both request and outcome events
+    - event: sync_completed
+      retention_days: 90
+    - event: destructive_change
+      retention_days: 365
+
+  # Policy denial response: HTTP 403 with structured body before event is written.
+  # Body shape: {error: policy_denied, reason: str, asset_id: str, requested_access: str}
+  # No partial content is returned on denial.
+  denial_response_code: 403
+  denial_response_shape: policy_denied
+
+# ---------------------------------------------------------------------------
+# Canonical vocabulary reference (D-008)
+# ---------------------------------------------------------------------------
+# This section documents the stable enum values used throughout the system.
+# The authoritative Python source is app/models/vocabulary.py.
+# UI display labels may differ; API/storage values are the keys listed here.
+# shared/openapi.yaml schemas must stay in sync with these values.
+vocabulary:
+  asset_status:
+    values:
+      - inbox        # Newly captured, not yet triaged
+      - raw          # Imported, metadata extracted, not classified
+      - candidate    # Classified and suggested for a slot
+      - in_review    # Under human or agent review
+      - in_progress  # Work in progress, assigned to a slot
+      - selected     # Approved for use, not yet canonical
+      - canonical    # Human-promoted authoritative version
+      - archived     # Soft-deleted or superseded
+    terminal_states:
+      - canonical
+      - archived
+    requires_human_approval:
+      - canonical    # canonical_promotion gate (see policy.require_human_approval_for)
+
+  bom_slot_status:
+    values:
+      - missing        # Required slot has no assigned assets
+      - partial        # Has assets but below minimum or only suggestions
+      - in_progress    # At least one assigned asset in active work state
+      - complete       # Meets min asset count, status, and staleness requirements
+      - stale          # Previously complete but staleness threshold exceeded
+      - blocked        # Dependency blocker prevents completion
+      - not_applicable # Slot explicitly marked N/A for this project
+    note: computed by coverage_service.py; not stored directly in JSONL
+
+  sensitivity:
+    values:
+      - public           # Safe to share externally; agent default preview_allowed
+      - personal         # Personal, low-risk; agent default preview_allowed
+      - work_sensitive   # Work-related sensitive; agent default metadata_only
+      - client_sensitive # Client material; agent default metadata_only
+      - restricted       # Highly sensitive; agent default none
+    default: personal
+
+  agent_access:
+    values:
+      - none                 # No agent access; metadata queries return 403
+      - metadata_only        # Title, type, status, sensitivity, links only
+      - preview_allowed      # Thumbnail and preview text additionally allowed
+      - read_allowed         # Full content allowed for trusted local agents
+      - context_pack_allowed # May be included in context packs (subject to pack policy)
+    default: metadata_only
+    note: levels are ordered; higher level implies all lower capabilities
+
+  assignment_status:
+    values:
+      - suggested  # Proposed by agent or heuristic; not yet accepted
+      - accepted   # Human or trusted agent accepted the assignment
+      - rejected   # Explicitly rejected; asset not suitable for this slot
+      - canonical  # Promoted as the canonical fill for this slot
+
+  template_status:
+    values:
+      - core          # Bundled standard template; always available
+      - recommended   # Promoted community or project template
+      - optional      # Available but not default
+      - experimental  # Under active development; schema may change
+      - deprecated    # Still loadable but being phased out

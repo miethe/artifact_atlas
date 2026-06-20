@@ -1,93 +1,3045 @@
 openapi: 3.1.0
 info:
   title: Artifact Atlas API
-  version: 0.1.0
+  version: 0.2.0
+  description: >
+    Local-first asset graph, Artifact BOM, and context-pack builder API.
+    All API/storage enum values are canonical and stable; UI labels may differ.
+    Sensitive assets default to metadata-only agent access.
+    Canonical promotion is human-gated unless policy explicitly permits automation.
+  contact:
+    name: Artifact Atlas Project
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: health
+    description: Service health
+  - name: projects
+    description: Project management
+  - name: assets
+    description: Asset registry and lifecycle
+  - name: inbox
+    description: Capture and triage flow
+  - name: templates
+    description: Artifact template library
+  - name: bom
+    description: Artifact BOM, slots, and assignments
+  - name: coverage
+    description: BOM coverage and gap analysis
+  - name: context-packs
+    description: Context pack builder and publisher
+  - name: search
+    description: Asset and metadata search
+  - name: audit
+    description: Audit event log
+  - name: policies
+    description: Policy evaluation
+  - name: integrations
+    description: External integration status and sync
+
 paths:
+
+  # ---------------------------------------------------------------------------
+  # Health
+  # ---------------------------------------------------------------------------
   /health:
     get:
-      summary: Health check
+      operationId: getHealth
+      tags: [health]
+      summary: Service health check
+      description: Returns service liveness and basic version information.
       responses:
         "200":
           description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  version:
+                    type: string
+                    example: "0.2.0"
+                  storage_backend:
+                    type: string
+                    example: "jsonl"
+
+  # ---------------------------------------------------------------------------
+  # Projects
+  # ---------------------------------------------------------------------------
   /api/projects:
     get:
-      summary: List projects
+      operationId: listProjects
+      tags: [projects]
+      summary: List all projects
+      description: Returns a cursor-paginated list of projects in the workspace.
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          description: Filter by project status
+          schema:
+            $ref: "#/components/schemas/ProjectStatus"
       responses:
         "200":
-          description: Project list
+          description: Paginated project list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Project"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
     post:
-      summary: Create project
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreate"
       responses:
         "201":
           description: Project created
-  /api/projects/{projectId}/assets:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
     get:
-      summary: List project assets
+      operationId: getProject
+      tags: [projects]
+      summary: Get a single project
+      responses:
+        "200":
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Partially update a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ---------------------------------------------------------------------------
+  # Assets
+  # ---------------------------------------------------------------------------
+  /api/projects/{projectId}/assets:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    get:
+      operationId: listProjectAssets
+      tags: [assets]
+      summary: List assets for a project
       parameters:
-        - name: projectId
-          in: path
-          required: true
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          description: Filter by asset status (repeatable)
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/AssetStatus"
+          style: form
+          explode: true
+        - name: sensitivity
+          in: query
+          schema:
+            $ref: "#/components/schemas/Sensitivity"
+        - name: source_kind
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/SourceKind"
+          style: form
+          explode: true
+        - name: agent_access
+          in: query
+          schema:
+            $ref: "#/components/schemas/AgentAccess"
+        - name: artifact_type_id
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Keyword search over title and description
           schema:
             type: string
       responses:
         "200":
-          description: Asset list
-  /api/projects/{projectId}/bom:
+          description: Paginated asset list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Asset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createAsset
+      tags: [assets]
+      summary: Register a new asset in a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetCreate"
+      responses:
+        "201":
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/assets/{assetId}:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
     get:
-      summary: Get project BOM
+      operationId: getAsset
+      tags: [assets]
+      summary: Get a single asset
+      description: >
+        Returns asset detail. Content fields are gated by agent_access policy.
+        Restricted or client_sensitive assets may return metadata_only regardless of caller request.
+      responses:
+        "200":
+          description: Asset detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateAsset
+      tags: [assets]
+      summary: Partially update asset metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetUpdate"
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      operationId: deleteAsset
+      tags: [assets]
+      summary: Delete (archive) an asset
+      description: >
+        Marks the asset as archived. Does not hard-delete; canonical assets require
+        human confirmation via the confirm_canonical query parameter.
       parameters:
-        - name: projectId
-          in: path
-          required: true
+        - name: confirm_canonical
+          in: query
+          description: Required when asset status is canonical
           schema:
-            type: string
+            type: boolean
+            default: false
+      responses:
+        "204":
+          description: Asset deleted/archived
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /api/assets/{assetId}/link:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    post:
+      operationId: linkAsset
+      tags: [assets]
+      summary: Link an asset to a target entity
+      description: >
+        Creates an asset_link record. Target types include intenttree_node,
+        meatywiki_page, bom_slot, context_pack, project, topic, and more.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetLinkCreate"
+      responses:
+        "201":
+          description: Link created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLink"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/assets/{assetId}/promote:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    post:
+      operationId: promoteAsset
+      tags: [assets]
+      summary: Promote an asset toward canonical status
+      description: >
+        Initiates a status transition. Full promotion to canonical requires
+        project, artifact_type, sensitivity, source/provenance, and at least one
+        topic/node/slot link. Human review is recorded unless policy permits automation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetPromoteRequest"
+      responses:
+        "200":
+          description: Asset with updated status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/assets/{assetId}/summarize:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    post:
+      operationId: summarizeAsset
+      tags: [assets]
+      summary: Request a local summary/preview generation for an asset
+      description: >
+        Triggers a local (no external model calls) summary or preview extraction
+        for the asset. Result is stored in preview_text_uri.
+      responses:
+        "202":
+          description: Summarization accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [task_id, asset_id]
+                properties:
+                  task_id:
+                    type: string
+                  asset_id:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/assets/{assetId}/assign-slot:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    post:
+      operationId: assignAssetToSlot
+      tags: [assets]
+      summary: Assign an asset to a BOM slot
+      description: >
+        Shorthand for creating a bom_slot_assignment from the asset side.
+        Equivalent to POST /api/bom/slots/{slotId}/assign.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SlotAssignRequest"
+      responses:
+        "201":
+          description: Assignment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomAssignment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ---------------------------------------------------------------------------
+  # Inbox
+  # ---------------------------------------------------------------------------
+  /api/projects/{projectId}/inbox:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    get:
+      operationId: listInbox
+      tags: [inbox]
+      summary: List unclassified inbox items for a project
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: source_kind
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/SourceKind"
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Paginated inbox list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InboxItem"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/projects/{projectId}/inbox/import:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    post:
+      operationId: importToInbox
+      tags: [inbox]
+      summary: Import a file or URL into the project inbox
+      description: >
+        Accepts a local file path, a URI, or a batch of URIs. Creates Asset records
+        with status=inbox. Does not immediately classify.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxImportRequest"
+      responses:
+        "202":
+          description: Import accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [imported_count, asset_ids]
+                properties:
+                  imported_count:
+                    type: integer
+                  asset_ids:
+                    type: array
+                    items:
+                      type: string
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/projects/{projectId}/inbox/classify:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    post:
+      operationId: classifyInboxItems
+      tags: [inbox]
+      summary: Request local classification suggestions for inbox items
+      description: >
+        Generates classification suggestions (artifact_type, topic, intenttree_node,
+        bom_slot) using local heuristics and naming conventions. No external model calls.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_ids]
+              properties:
+                asset_ids:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+      responses:
+        "200":
+          description: Classification suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggestions]
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ClassificationSuggestion"
+
+  /api/projects/{projectId}/inbox/apply-classification:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    post:
+      operationId: applyClassification
+      tags: [inbox]
+      summary: Apply accepted classification to one or more inbox items
+      description: >
+        Accepts or overrides classification suggestions and transitions
+        assets from inbox/raw to candidate or in_review status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyClassificationRequest"
+      responses:
+        "200":
+          description: Classification applied
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated_count, asset_ids]
+                properties:
+                  updated_count:
+                    type: integer
+                  asset_ids:
+                    type: array
+                    items:
+                      type: string
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ---------------------------------------------------------------------------
+  # Templates
+  # ---------------------------------------------------------------------------
+  /api/templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List artifact templates
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TemplateStatus"
+        - name: template_type
+          in: query
+          schema:
+            $ref: "#/components/schemas/TemplateType"
+      responses:
+        "200":
+          description: Paginated template list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Template"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create a new artifact template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateCreate"
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/templates/{templateId}:
+    parameters:
+      - $ref: "#/components/parameters/templateId"
+    get:
+      operationId: getTemplate
+      tags: [templates]
+      summary: Get a single template with domains and slots
+      responses:
+        "200":
+          description: Template detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Partially update a template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateUpdate"
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/templates/{templateId}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/templateId"
+    post:
+      operationId: duplicateTemplate
+      tags: [templates]
+      summary: Duplicate a template
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Name for the duplicate; defaults to "Copy of <original name>"
+      responses:
+        "201":
+          description: Duplicate template created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/templates/{templateId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/templateId"
+    get:
+      operationId: previewTemplate
+      tags: [templates]
+      summary: Preview the slot structure of a template
+      description: Returns domains and slots without applying to any project.
+      responses:
+        "200":
+          description: Template slot preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplatePreview"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # BOM
+  # ---------------------------------------------------------------------------
+  /api/projects/{projectId}/bom:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    get:
+      operationId: getProjectBom
+      tags: [bom]
+      summary: Get the Artifact BOM for a project
+      description: Returns the BOM with embedded slots and their assignment counts.
       responses:
         "200":
           description: Project BOM
-  /api/projects/{projectId}/context-packs:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bom"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/projects/{projectId}/bom/apply-template:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    post:
+      operationId: applyBomTemplate
+      tags: [bom]
+      summary: Apply an artifact template to create or extend the project BOM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BomApplyTemplateRequest"
+      responses:
+        "200":
+          description: Updated BOM after template application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bom"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/bom/{bomId}:
+    parameters:
+      - $ref: "#/components/parameters/bomId"
+    patch:
+      operationId: updateBom
+      tags: [bom]
+      summary: Update BOM metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BomUpdate"
+      responses:
+        "200":
+          description: Updated BOM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bom"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/bom/{bomId}/coverage:
+    parameters:
+      - $ref: "#/components/parameters/bomId"
     get:
-      summary: List context packs
+      operationId: getBomCoverage
+      tags: [coverage]
+      summary: Get coverage summary for a BOM
       parameters:
-        - name: projectId
-          in: path
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [domain, phase, template]
+            default: domain
+      responses:
+        "200":
+          description: Coverage summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoverageSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/bom/{bomId}/gaps:
+    parameters:
+      - $ref: "#/components/parameters/bomId"
+    get:
+      operationId: getBomGaps
+      tags: [coverage]
+      summary: List unfilled or blocked BOM slots
+      parameters:
+        - name: critical_only
+          in: query
+          description: Only return required slots that are missing or stale
+          schema:
+            type: boolean
+            default: false
+        - name: status
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/BomSlotStatus"
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Gap list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [gaps]
+                properties:
+                  gaps:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BomSlot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/bom/slots/{slotId}/assign:
+    parameters:
+      - $ref: "#/components/parameters/slotId"
+    post:
+      operationId: assignSlot
+      tags: [bom]
+      summary: Assign an asset to a BOM slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SlotAssignRequest"
+      responses:
+        "201":
+          description: Assignment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomAssignment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/bom/slots/{slotId}/mark-not-applicable:
+    parameters:
+      - $ref: "#/components/parameters/slotId"
+    post:
+      operationId: markSlotNotApplicable
+      tags: [bom]
+      summary: Mark a BOM slot as not applicable for this project
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Human-readable justification
+      responses:
+        "200":
+          description: Slot updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BomSlot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/bom/slots/{slotId}/request-asset:
+    parameters:
+      - $ref: "#/components/parameters/slotId"
+    post:
+      operationId: requestAssetForSlot
+      tags: [bom]
+      summary: Create an asset request/task for an unfilled BOM slot
+      description: >
+        Emits an atlas_event of type bom_slot_asset_requested and optionally
+        creates a linked IntentTree task reference.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                intenttree_node_id:
+                  type: string
+                  description: Optional node to link the request to
+      responses:
+        "202":
+          description: Asset request recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event_id, slot_id]
+                properties:
+                  event_id:
+                    type: string
+                  slot_id:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Context Packs
+  # ---------------------------------------------------------------------------
+  /api/projects/{projectId}/context-packs:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    get:
+      operationId: listContextPacks
+      tags: [context-packs]
+      summary: List context packs for a project
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ContextPackStatus"
+        - name: audience
+          in: query
+          schema:
+            $ref: "#/components/schemas/ContextPackAudience"
+      responses:
+        "200":
+          description: Paginated context pack list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ContextPack"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createContextPack
+      tags: [context-packs]
+      summary: Create a new context pack for a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextPackCreate"
+      responses:
+        "201":
+          description: Context pack created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPack"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/context-packs/{packId}:
+    parameters:
+      - $ref: "#/components/parameters/packId"
+    get:
+      operationId: getContextPack
+      tags: [context-packs]
+      summary: Get a single context pack with its items
+      responses:
+        "200":
+          description: Context pack detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPackDetail"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateContextPack
+      tags: [context-packs]
+      summary: Update context pack metadata and items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextPackUpdate"
+      responses:
+        "200":
+          description: Updated context pack
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPack"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/context-packs/{packId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/packId"
+    post:
+      operationId: previewContextPack
+      tags: [context-packs]
+      summary: Render a preview of the context pack payload
+      description: >
+        Returns the assembled YAML/Markdown manifest and token estimate
+        without publishing. Sensitive assets honour include_mode policy.
+      responses:
+        "200":
+          description: Context pack preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPackPreview"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/context-packs/{packId}/publish:
+    parameters:
+      - $ref: "#/components/parameters/packId"
+    post:
+      operationId: publishContextPack
+      tags: [context-packs]
+      summary: Publish a context pack
+      description: >
+        Transitions status to published and exports to the requested destination.
+        Emits context_pack_published audit event and CCDash event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextPackPublishRequest"
+      responses:
+        "200":
+          description: Published context pack
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPack"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /api/context-packs/from-node/{nodeId}:
+    parameters:
+      - name: nodeId
+        in: path
+        required: true
+        description: IntentTree node ID
+        schema:
+          type: string
+    post:
+      operationId: createContextPackFromNode
+      tags: [context-packs]
+      summary: Create a context pack scoped to an IntentTree node
+      description: >
+        Collects assets, MeatyWiki pages, and BOM slots linked to the node
+        and builds a draft context pack. Assets respect sensitivity/agent_access defaults.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextPackFromNodeRequest"
+      responses:
+        "201":
+          description: Context pack created from node
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextPack"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Search
+  # ---------------------------------------------------------------------------
+  /api/search:
+    get:
+      operationId: searchAssets
+      tags: [search]
+      summary: Keyword/metadata search across assets
+      parameters:
+        - name: q
+          in: query
           required: true
           schema:
             type: string
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/AssetStatus"
+          style: form
+          explode: true
+        - name: source_kind
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/SourceKind"
+          style: form
+          explode: true
+        - name: sensitivity
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/Sensitivity"
+          style: form
+          explode: true
+        - name: artifact_type
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: intenttree_node_id
+          in: query
+          schema:
+            type: string
+        - name: bom_slot_id
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/limit"
+        - name: include
+          in: query
+          description: Extra fields to embed in results
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [thumbnail, links, bom_status]
+          style: form
+          explode: true
       responses:
         "200":
-          description: Context pack list
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results, total]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchResult"
+                  total:
+                    type: integer
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/search/semantic:
+    post:
+      operationId: semanticSearch
+      tags: [search]
+      summary: Semantic similarity search across assets
+      description: >
+        Uses local embeddings (no external model calls). Falls back to
+        keyword search when vector index is unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Semantic search results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results, total]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchResult"
+                  total:
+                    type: integer
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/search/similar-assets:
+    post:
+      operationId: findSimilarAssets
+      tags: [search]
+      summary: Find assets similar to a given asset
+      description: >
+        Returns candidates for deduplication or variant detection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [asset_id]
+              properties:
+                asset_id:
+                  type: string
+                limit:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 100
+      responses:
+        "200":
+          description: Similar asset results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SearchResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------------
+  # Audit
+  # ---------------------------------------------------------------------------
+  /api/audit/events:
+    get:
+      operationId: listAuditEvents
+      tags: [audit]
+      summary: List atlas audit events
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: event_type
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/AuditEventType"
+          style: form
+          explode: true
+        - name: actor_type
+          in: query
+          schema:
+            type: string
+            enum: [user, agent, system]
+        - name: target_type
+          in: query
+          schema:
+            type: string
+            enum: [asset, bom, slot, template, context_pack, node, project]
+        - name: from
+          in: query
+          description: ISO 8601 datetime lower bound (inclusive)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: ISO 8601 datetime upper bound (inclusive)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Paginated audit event list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AuditEvent"
+
+  /api/agents/access-log:
+    get:
+      operationId: listAgentAccessLog
+      tags: [audit]
+      summary: List agent asset access events
+      description: >
+        Subset of audit events filtered to agent queries, policy denials, and
+        asset retrievals. Used for access review and policy tuning.
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: project_id
+          in: query
+          schema:
+            type: string
+        - name: agent_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Agent access log
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AuditEvent"
+
+  # ---------------------------------------------------------------------------
+  # Policies
+  # ---------------------------------------------------------------------------
+  /api/policies/evaluate:
+    post:
+      operationId: evaluatePolicy
+      tags: [policies]
+      summary: Evaluate an access policy check
+      description: >
+        Returns allow/deny decision and the policy rule that triggered it.
+        All tool calls and access requests should call this before serving content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyEvaluateRequest"
+      responses:
+        "200":
+          description: Policy decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ---------------------------------------------------------------------------
+  # Integrations
+  # ---------------------------------------------------------------------------
+  /api/integrations:
+    get:
+      operationId: listIntegrations
+      tags: [integrations]
+      summary: List configured integrations and their status
+      responses:
+        "200":
+          description: Integration list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [integrations]
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IntegrationStatus"
+
+  /api/integrations/{integrationId}/sync:
+    parameters:
+      - name: integrationId
+        in: path
+        required: true
+        schema:
+          type: string
+          example: meatywiki
+    post:
+      operationId: triggerIntegrationSync
+      tags: [integrations]
+      summary: Trigger a sync for an integration
+      description: >
+        MVP integrations are file/export/ref based (MeatyWiki markdown/YAML,
+        CCDash event export, SkillMeat template refs). No live remote OAuth.
+      responses:
+        "202":
+          description: Sync accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [task_id, integration_id]
+                properties:
+                  task_id:
+                    type: string
+                  integration_id:
+                    type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/integrations/{integrationId}/status:
+    parameters:
+      - name: integrationId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getIntegrationStatus
+      tags: [integrations]
+      summary: Get the current status of an integration
+      responses:
+        "200":
+          description: Integration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# =============================================================================
+# Components
+# =============================================================================
 components:
+
+  # ---------------------------------------------------------------------------
+  # Parameters
+  # ---------------------------------------------------------------------------
+  parameters:
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      description: Unique project identifier
+      schema:
+        type: string
+        example: proj_agentic_os
+
+    assetId:
+      name: assetId
+      in: path
+      required: true
+      description: Unique asset identifier
+      schema:
+        type: string
+        example: asset_aos_architecture_v3
+
+    templateId:
+      name: templateId
+      in: path
+      required: true
+      description: Unique template identifier
+      schema:
+        type: string
+        example: tmpl_new_product_app_v1
+
+    bomId:
+      name: bomId
+      in: path
+      required: true
+      description: Unique BOM identifier
+      schema:
+        type: string
+        example: bom_proj_agentic_os
+
+    slotId:
+      name: slotId
+      in: path
+      required: true
+      description: Unique BOM slot identifier
+      schema:
+        type: string
+        example: slot_architecture_diagram
+
+    packId:
+      name: packId
+      in: path
+      required: true
+      description: Unique context pack identifier
+      schema:
+        type: string
+        example: pack_aos_agent_shell_review_v1
+
+    cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor for next page (from previous response next_cursor)
+      schema:
+        type: string
+
+    limit:
+      name: limit
+      in: query
+      description: Maximum items per page
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+
+  # ---------------------------------------------------------------------------
+  # Responses
+  # ---------------------------------------------------------------------------
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: not_found
+              message: "The requested resource was not found."
+              request_id: "req_abc123"
+
+    Forbidden:
+      description: Access denied by policy
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: policy_denied
+              message: "Asset access denied: sensitivity=restricted exceeds agent_access=metadata_only."
+              request_id: "req_abc123"
+
+    ConflictError:
+      description: Conflict with current resource state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorEnvelope"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  # ---------------------------------------------------------------------------
+  # Schemas
+  # ---------------------------------------------------------------------------
   schemas:
+
+    # ---- Canonical enumerations ----
+
+    ProjectStatus:
+      type: string
+      enum: [active, paused, archived]
+      description: Canonical project lifecycle status
+
+    AssetStatus:
+      type: string
+      enum: [inbox, raw, candidate, in_review, in_progress, selected, canonical, archived]
+      description: >
+        Canonical asset lifecycle status.
+        Transitions: inbox -> raw -> candidate -> in_review -> selected -> canonical.
+        archived is a terminal state reachable from any status.
+
+    BomSlotStatus:
+      type: string
+      enum: [missing, partial, in_progress, complete, stale, blocked, not_applicable]
+      description: Canonical BOM slot fill status
+
+    Sensitivity:
+      type: string
+      enum: [public, personal, work_sensitive, client_sensitive, restricted]
+      description: >
+        Canonical sensitivity label. Assets with client_sensitive or restricted
+        sensitivity default to metadata_only agent access.
+
+    AgentAccess:
+      type: string
+      enum: [none, metadata_only, preview_allowed, read_allowed, context_pack_allowed]
+      description: >
+        Canonical agent access level for an asset.
+        none: agents cannot see the asset at all.
+        metadata_only: title, status, type, and IDs only.
+        preview_allowed: agents may receive a text preview (thumbnail, first N chars).
+        read_allowed: full content may be served.
+        context_pack_allowed: asset may be embedded in context packs.
+
+    AssignmentStatus:
+      type: string
+      enum: [suggested, accepted, rejected, canonical]
+      description: Canonical BOM slot assignment status
+
+    TemplateStatus:
+      type: string
+      enum: [core, recommended, optional, experimental, deprecated]
+      description: Canonical artifact template lifecycle status
+
+    TemplateType:
+      type: string
+      enum: [product, architecture, gtm, research, design_system, client_proposal, platform_capability, custom]
+
+    SourceKind:
+      type: string
+      enum: [vault, local, chatgpt, claude, figma, canva, drive, sharepoint, github, notion, url, eagle, tagspaces, immich, nextcloud, manual]
+
+    GeneratedBy:
+      type: string
+      enum: [human, chatgpt, claude, agent, figma, other]
+      nullable: true
+
+    BomMergeStrategy:
+      type: string
+      enum: [new_section, merge_existing, phase_only, node_subtree]
+
+    SlotPhase:
+      type: string
+      enum: [discovery, design, build, launch, operate, review, custom]
+      nullable: true
+
+    AssetRelationshipType:
+      type: string
+      enum: [variant_of, derived_from, references, duplicates, supersedes, superseded_by, evidence_for, input_to, output_of]
+
+    AssetLinkTargetType:
+      type: string
+      enum: [project, topic, feature, intenttree_node, meatywiki_page, bom_slot, context_pack, skillbom, execution_event]
+
+    AssetLinkRelationship:
+      type: string
+      enum: [reference, input, output, evidence, candidate, canonical, required_context, satisfies_slot]
+
+    ContextPackStatus:
+      type: string
+      enum: [draft, ready, published, archived]
+
+    ContextPackAudience:
+      type: string
+      enum: [human, agent, engineering_agent, research_agent, writing_agent, custom]
+
+    ContextPackTargetType:
+      type: string
+      enum: [project, intenttree_node, bom_slot, custom]
+
+    ContextPackItemType:
+      type: string
+      enum: [asset, meatywiki_page, intenttree_node, bom_slot, skillbom, external_url, note]
+
+    IncludeMode:
+      type: string
+      enum: [full, summary, metadata, preview, link_only]
+
+    AuditEventType:
+      type: string
+      enum: [asset_added, asset_classified, asset_linked, asset_promoted, bom_template_applied, bom_slot_filled, context_pack_created, context_pack_published, agent_query, policy_denied, sync_completed]
+
+    ActorType:
+      type: string
+      enum: [user, agent, system]
+
+    AssignedBy:
+      type: string
+      enum: [user, agent, system]
+
+    ContextPackPublishDestination:
+      type: string
+      enum: [cli, file, agent, control_plane]
+
+    # ---- Pagination ----
+
+    CursorPage:
+      type: object
+      required: [items, has_more]
+      description: Cursor-paginated response wrapper
+      properties:
+        items:
+          type: array
+          items: {}
+          description: Page of results (typed by the enclosing allOf)
+        has_more:
+          type: boolean
+          description: Whether more pages exist after this one
+        next_cursor:
+          type: string
+          nullable: true
+          description: Opaque cursor to pass as ?cursor= for the next page
+        total:
+          type: integer
+          nullable: true
+          description: Total count when available (may be null for large collections)
+
+    # ---- Error envelope ----
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              examples:
+                - not_found
+                - policy_denied
+                - conflict
+                - internal_error
+            message:
+              type: string
+              description: Human-readable error description
+            detail:
+              type: object
+              description: Additional structured context (varies by error type)
+              nullable: true
+            request_id:
+              type: string
+              nullable: true
+
+    ValidationErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, validation_errors]
+          properties:
+            code:
+              type: string
+              enum: [validation_error]
+            message:
+              type: string
+            request_id:
+              type: string
+              nullable: true
+            validation_errors:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field:
+                    type: string
+                    description: Dot-separated field path
+                  message:
+                    type: string
+                  value:
+                    description: The invalid value (if safe to include)
+
+    # ---- Projects ----
+
     Project:
       type: object
-      required: [id, name, slug, status]
+      required: [id, name, slug, status, created_at, updated_at]
       properties:
         id:
           type: string
+          example: proj_agentic_os
+        workspace_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+          example: Agentic OS
+        slug:
+          type: string
+          example: agentic-os
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        meatywiki_page_ref:
+          type: string
+          nullable: true
+          description: MeatyWiki page slug or path for this project
+        intent_id:
+          type: string
+          nullable: true
+          description: High-level intent identifier
+        root_intenttree_node_id:
+          type: string
+          nullable: true
+          description: Root IntentTree node for this project
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectCreate:
+      type: object
+      required: [name, slug]
+      properties:
         name:
           type: string
         slug:
           type: string
-        status:
+          pattern: "^[a-z0-9-]+$"
+        description:
           type: string
-          enum: [active, paused, archived]
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+          default: active
+        meatywiki_page_ref:
+          type: string
+          nullable: true
+        intent_id:
+          type: string
+          nullable: true
+        root_intenttree_node_id:
+          type: string
+          nullable: true
+
+    ProjectUpdate:
+      type: object
+      description: All fields optional for PATCH
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        meatywiki_page_ref:
+          type: string
+          nullable: true
+        intent_id:
+          type: string
+          nullable: true
+        root_intenttree_node_id:
+          type: string
+          nullable: true
+
+    # ---- Assets ----
+
     Asset:
       type: object
-      required: [id, title, source_kind, uri, status, sensitivity, agent_access]
+      required: [id, title, source_kind, uri, status, sensitivity, agent_access, captured_at]
       properties:
         id:
           type: string
+          example: asset_aos_architecture_v3
+        workspace_id:
+          type: string
+          nullable: true
         project_id:
+          type: string
+          nullable: true
+        title:
+          type: string
+          example: AOS Architecture v3
+        description:
+          type: string
+          nullable: true
+        artifact_type_id:
+          type: string
+          nullable: true
+        source_id:
+          type: string
+          nullable: true
+        source_kind:
+          $ref: "#/components/schemas/SourceKind"
+        uri:
+          type: string
+          description: Canonical URI for this asset (file:// or https://)
+          example: "file:///Users/nick/AI-Outputs/ChatGPT/aos_architecture_v3.png"
+        original_uri:
+          type: string
+          nullable: true
+        storage_uri:
+          type: string
+          nullable: true
+        mime_type:
+          type: string
+          nullable: true
+          example: image/png
+        size_bytes:
+          type: integer
+          nullable: true
+        hash_sha256:
+          type: string
+          nullable: true
+        thumbnail_uri:
+          type: string
+          nullable: true
+        preview_text_uri:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/AssetStatus"
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        agent_access:
+          $ref: "#/components/schemas/AgentAccess"
+        created_by:
+          type: string
+          nullable: true
+        generated_by:
+          $ref: "#/components/schemas/GeneratedBy"
+        captured_at:
+          type: string
+          format: date-time
+        source_created_at:
+          type: string
+          format: date-time
+          nullable: true
+        source_updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_indexed_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+          description: Extensible key/value bag for source-specific fields
+
+    AssetCreate:
+      type: object
+      required: [title, source_kind, uri, sensitivity, agent_access]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        artifact_type_id:
+          type: string
+          nullable: true
+        source_kind:
+          $ref: "#/components/schemas/SourceKind"
+        uri:
+          type: string
+        original_uri:
+          type: string
+          nullable: true
+        mime_type:
+          type: string
+          nullable: true
+        size_bytes:
+          type: integer
+          nullable: true
+        status:
+          $ref: "#/components/schemas/AssetStatus"
+          default: inbox
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        agent_access:
+          $ref: "#/components/schemas/AgentAccess"
+          default: metadata_only
+        generated_by:
+          $ref: "#/components/schemas/GeneratedBy"
+        metadata:
+          type: object
+          nullable: true
+
+    AssetUpdate:
+      type: object
+      description: All fields optional for PATCH
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        artifact_type_id:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/AssetStatus"
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        agent_access:
+          $ref: "#/components/schemas/AgentAccess"
+        metadata:
+          type: object
+          nullable: true
+
+    AssetPromoteRequest:
+      type: object
+      required: [target_status]
+      properties:
+        target_status:
+          $ref: "#/components/schemas/AssetStatus"
+          description: >
+            Target status. Canonical promotion requires all promotion rules to be met.
+            Transitions must follow the canonical lifecycle order.
+        review_notes:
+          type: string
+          nullable: true
+          description: Human review notes recorded as an audit event
+        supersedes_asset_id:
+          type: string
+          nullable: true
+          description: Previous canonical asset to supersede (not delete)
+
+    AssetLink:
+      type: object
+      required: [id, asset_id, target_type, target_id, relationship, created_at]
+      properties:
+        id:
+          type: string
+        asset_id:
+          type: string
+        target_type:
+          $ref: "#/components/schemas/AssetLinkTargetType"
+        target_id:
+          type: string
+        relationship:
+          $ref: "#/components/schemas/AssetLinkRelationship"
+        created_at:
+          type: string
+          format: date-time
+
+    AssetLinkCreate:
+      type: object
+      required: [target_type, target_id, relationship]
+      properties:
+        target_type:
+          $ref: "#/components/schemas/AssetLinkTargetType"
+        target_id:
+          type: string
+        relationship:
+          $ref: "#/components/schemas/AssetLinkRelationship"
+
+    # ---- Inbox ----
+
+    InboxItem:
+      type: object
+      description: >
+        An Asset in inbox or raw status awaiting classification.
+        Shares the same backing record as Asset; this view emphasises
+        triage-relevant fields.
+      required: [id, title, source_kind, uri, status, sensitivity, agent_access, captured_at]
+      properties:
+        id:
           type: string
         title:
           type: string
         source_kind:
-          type: string
+          $ref: "#/components/schemas/SourceKind"
         uri:
           type: string
         status:
-          type: string
+          $ref: "#/components/schemas/AssetStatus"
         sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        agent_access:
+          $ref: "#/components/schemas/AgentAccess"
+        mime_type:
           type: string
+          nullable: true
+        thumbnail_uri:
+          type: string
+          nullable: true
+        captured_at:
+          type: string
+          format: date-time
+        suggested_artifact_type_id:
+          type: string
+          nullable: true
+        suggested_intenttree_node_id:
+          type: string
+          nullable: true
+
+    InboxImportRequest:
+      type: object
+      required: [source_kind]
+      description: Import one or more items into the inbox
+      properties:
+        source_kind:
+          $ref: "#/components/schemas/SourceKind"
+        uris:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: File paths (file://) or remote URIs to import
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+          default: personal
+        agent_access:
+          $ref: "#/components/schemas/AgentAccess"
+          default: metadata_only
+        metadata:
+          type: object
+          nullable: true
+
+    ClassificationSuggestion:
+      type: object
+      required: [asset_id, confidence]
+      properties:
+        asset_id:
+          type: string
+        artifact_type_id:
+          type: string
+          nullable: true
+        artifact_type_name:
+          type: string
+          nullable: true
+        intenttree_node_id:
+          type: string
+          nullable: true
+        bom_slot_id:
+          type: string
+          nullable: true
+        suggested_status:
+          $ref: "#/components/schemas/AssetStatus"
+          nullable: true
+        suggested_sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+          nullable: true
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        rationale:
+          type: string
+          nullable: true
+
+    ApplyClassificationRequest:
+      type: object
+      required: [classifications]
+      properties:
+        classifications:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [asset_id]
+            properties:
+              asset_id:
+                type: string
+              artifact_type_id:
+                type: string
+                nullable: true
+              status:
+                $ref: "#/components/schemas/AssetStatus"
+                nullable: true
+              sensitivity:
+                $ref: "#/components/schemas/Sensitivity"
+                nullable: true
+              intenttree_node_id:
+                type: string
+                nullable: true
+              bom_slot_id:
+                type: string
+                nullable: true
+
+    # ---- Templates ----
+
+    Template:
+      type: object
+      required: [id, name, slug, template_type, status, version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          example: tmpl_new_product_app_v1
+        workspace_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+          example: New Product / App
+        slug:
+          type: string
+          example: new-product-app
+        description:
+          type: string
+          nullable: true
+        template_type:
+          $ref: "#/components/schemas/TemplateType"
+        status:
+          $ref: "#/components/schemas/TemplateStatus"
+        version:
+          type: string
+          example: "1.0.0"
+        created_by:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          nullable: true
+
+    TemplateDetail:
+      allOf:
+        - $ref: "#/components/schemas/Template"
+        - type: object
+          properties:
+            domains:
+              type: array
+              items:
+                $ref: "#/components/schemas/TemplateDomain"
+
+    TemplateDomain:
+      type: object
+      required: [id, template_id, name, slug, display_order]
+      properties:
+        id:
+          type: string
+        template_id:
+          type: string
+        name:
+          type: string
+          example: Architecture
+        slug:
+          type: string
+          example: architecture
+        description:
+          type: string
+          nullable: true
+        display_order:
+          type: integer
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateSlot"
+
+    TemplateSlot:
+      type: object
+      required: [id, template_id, domain_id, artifact_type_id, required, min_assets, display_order]
+      properties:
+        id:
+          type: string
+        template_id:
+          type: string
+        domain_id:
+          type: string
+        artifact_type_id:
+          type: string
+        phase:
+          $ref: "#/components/schemas/SlotPhase"
+        required:
+          type: boolean
+        min_assets:
+          type: integer
+          minimum: 0
+          default: 1
+        max_assets:
+          type: integer
+          nullable: true
+        staleness_days:
+          type: integer
+          nullable: true
+        linked_intenttree_node_pattern:
+          type: string
+          nullable: true
+        display_order:
+          type: integer
+        rule_config:
+          type: object
+          nullable: true
+
+    TemplateCreate:
+      type: object
+      required: [name, slug, template_type]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+        description:
+          type: string
+          nullable: true
+        template_type:
+          $ref: "#/components/schemas/TemplateType"
+        status:
+          $ref: "#/components/schemas/TemplateStatus"
+          default: experimental
+        version:
+          type: string
+          default: "1.0.0"
+        metadata:
+          type: object
+          nullable: true
+
+    TemplateUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/TemplateStatus"
+        version:
+          type: string
+        metadata:
+          type: object
+          nullable: true
+
+    TemplatePreview:
+      type: object
+      required: [template_id, domains]
+      properties:
+        template_id:
+          type: string
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateDomain"
+        total_slots:
+          type: integer
+        required_slots:
+          type: integer
+
+    # ---- BOM ----
+
+    Bom:
+      type: object
+      required: [id, project_id, name, status, merge_strategy, coverage_score, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          example: bom_proj_agentic_os
+        project_id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+        source_templates:
+          type: array
+          items:
+            type: string
+          description: Template IDs that were applied to compose this BOM
+        merge_strategy:
+          $ref: "#/components/schemas/BomMergeStrategy"
+        coverage_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Fraction of required slots with at least one accepted/canonical assignment
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/BomSlot"
+          description: Embedded slots (may be empty when called without expand parameter)
+
+    BomUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, archived]
+
+    BomApplyTemplateRequest:
+      type: object
+      required: [template_id]
+      properties:
+        template_id:
+          type: string
+        merge_strategy:
+          $ref: "#/components/schemas/BomMergeStrategy"
+          default: merge_existing
+        intenttree_node_id:
+          type: string
+          nullable: true
+          description: Scope template application to a subtree
+
+    BomSlot:
+      type: object
+      required: [id, bom_id, artifact_type_id, domain, required, status, min_assets]
+      properties:
+        id:
+          type: string
+          example: slot_architecture_diagram
+        bom_id:
+          type: string
+        artifact_type_id:
+          type: string
+        domain:
+          type: string
+          example: Architecture
+        phase:
+          $ref: "#/components/schemas/SlotPhase"
+        required:
+          type: boolean
+        status:
+          $ref: "#/components/schemas/BomSlotStatus"
+        linked_intenttree_node_id:
+          type: string
+          nullable: true
+        min_assets:
+          type: integer
+          minimum: 0
+          default: 1
+        max_assets:
+          type: integer
+          nullable: true
+        staleness_days:
+          type: integer
+          nullable: true
+        guidance:
+          type: string
+          nullable: true
+        assignment_count:
+          type: integer
+          nullable: true
+          description: Total assignments (all statuses)
+        accepted_assignment_count:
+          type: integer
+          nullable: true
+          description: Assignments with status accepted or canonical
+
+    BomAssignment:
+      type: object
+      required: [id, slot_id, asset_id, assignment_status, assigned_by, assigned_at]
+      properties:
+        id:
+          type: string
+        slot_id:
+          type: string
+        asset_id:
+          type: string
+        assignment_status:
+          $ref: "#/components/schemas/AssignmentStatus"
+        confidence:
+          type: number
+          format: float
+          nullable: true
+          minimum: 0.0
+          maximum: 1.0
+        assigned_by:
+          $ref: "#/components/schemas/AssignedBy"
+        assigned_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+          nullable: true
+
+    SlotAssignRequest:
+      type: object
+      required: [asset_id]
+      properties:
+        asset_id:
+          type: string
+        slot_id:
+          type: string
+          description: Required when calling from /api/assets/{assetId}/assign-slot
+        assignment_status:
+          $ref: "#/components/schemas/AssignmentStatus"
+          default: suggested
+        confidence:
+          type: number
+          format: float
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    # ---- Coverage ----
+
+    CoverageSummary:
+      type: object
+      required: [bom_id, coverage_score, total_slots, filled_slots, missing_slots, stale_slots]
+      properties:
+        bom_id:
+          type: string
+        coverage_score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+        total_slots:
+          type: integer
+        required_slots:
+          type: integer
+        filled_slots:
+          type: integer
+        missing_slots:
+          type: integer
+        stale_slots:
+          type: integer
+        blocked_slots:
+          type: integer
+        not_applicable_slots:
+          type: integer
+        groups:
+          type: array
+          description: Coverage broken down by group_by parameter (domain, phase, or template)
+          items:
+            type: object
+            required: [group_key, coverage_score, total_slots, filled_slots, missing_slots]
+            properties:
+              group_key:
+                type: string
+                description: Domain name, phase, or template ID depending on group_by
+              coverage_score:
+                type: number
+                format: float
+              total_slots:
+                type: integer
+              filled_slots:
+                type: integer
+              missing_slots:
+                type: integer
+
+    # ---- Context Packs ----
+
+    ContextPack:
+      type: object
+      required: [id, project_id, title, target_type, status, audience, sensitivity, created_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          example: pack_aos_agent_shell_review_v1
+        workspace_id:
+          type: string
+          nullable: true
+        project_id:
+          type: string
+        title:
+          type: string
+          example: AOS Agent Shell Review
+        description:
+          type: string
+          nullable: true
+        target_type:
+          $ref: "#/components/schemas/ContextPackTargetType"
+        target_id:
+          type: string
+          nullable: true
+          description: IntentTree node ID, BOM slot ID, or project ID depending on target_type
+        status:
+          $ref: "#/components/schemas/ContextPackStatus"
+        audience:
+          $ref: "#/components/schemas/ContextPackAudience"
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        token_estimate:
+          type: integer
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        policy:
+          $ref: "#/components/schemas/ContextPackPolicy"
+        instructions:
+          type: string
+          nullable: true
+
+    ContextPackDetail:
+      allOf:
+        - $ref: "#/components/schemas/ContextPack"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/ContextPackItem"
+
+    ContextPackItem:
+      type: object
+      required: [id, context_pack_id, item_type, item_id, include_mode, display_order, required]
+      properties:
+        id:
+          type: string
+        context_pack_id:
+          type: string
+        item_type:
+          $ref: "#/components/schemas/ContextPackItemType"
+        item_id:
+          type: string
+        include_mode:
+          $ref: "#/components/schemas/IncludeMode"
+        display_order:
+          type: integer
+        required:
+          type: boolean
+        token_estimate:
+          type: integer
+          nullable: true
+
+    ContextPackPolicy:
+      type: object
+      description: Policy envelope for a context pack
+      properties:
+        allow_external_data:
+          type: boolean
+          default: false
+        allow_code_execution:
+          type: boolean
+          default: false
+        network_access:
+          type: string
+          enum: [none, restricted, allowed]
+          default: none
         agent_access:
           type: string
+          description: Named agent group or "trusted_agents_only"
+          example: trusted_agents_only
+          nullable: true
+
+    ContextPackCreate:
+      type: object
+      required: [title, target_type, audience, sensitivity]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        target_type:
+          $ref: "#/components/schemas/ContextPackTargetType"
+        target_id:
+          type: string
+          nullable: true
+        audience:
+          $ref: "#/components/schemas/ContextPackAudience"
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        instructions:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        policy:
+          $ref: "#/components/schemas/ContextPackPolicy"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContextPackItemCreate"
+
+    ContextPackItemCreate:
+      type: object
+      required: [item_type, item_id, include_mode]
+      properties:
+        item_type:
+          $ref: "#/components/schemas/ContextPackItemType"
+        item_id:
+          type: string
+        include_mode:
+          $ref: "#/components/schemas/IncludeMode"
+        display_order:
+          type: integer
+          nullable: true
+        required:
+          type: boolean
+          default: false
+
+    ContextPackUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        audience:
+          $ref: "#/components/schemas/ContextPackAudience"
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        instructions:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        policy:
+          $ref: "#/components/schemas/ContextPackPolicy"
+        items:
+          type: array
+          description: Full replacement of item list when provided
+          items:
+            $ref: "#/components/schemas/ContextPackItemCreate"
+
+    ContextPackPreview:
+      type: object
+      required: [pack_id, token_estimate, manifest_yaml]
+      properties:
+        pack_id:
+          type: string
+        token_estimate:
+          type: integer
+        manifest_yaml:
+          type: string
+          description: YAML rendering of the context pack manifest
+        sensitive_item_count:
+          type: integer
+          description: Items omitted or downgraded due to sensitivity policy
+        warnings:
+          type: array
+          items:
+            type: string
+
+    ContextPackPublishRequest:
+      type: object
+      required: [destination]
+      properties:
+        destination:
+          $ref: "#/components/schemas/ContextPackPublishDestination"
+        output_path:
+          type: string
+          nullable: true
+          description: Local file path when destination=file
+
+    ContextPackFromNodeRequest:
+      type: object
+      required: [project_id]
+      properties:
+        project_id:
+          type: string
+        title:
+          type: string
+          nullable: true
+          description: Defaults to node title + " Context Pack"
+        audience:
+          $ref: "#/components/schemas/ContextPackAudience"
+          default: agent
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+          default: personal
+        include_assets:
+          type: boolean
+          default: true
+        include_bom_slots:
+          type: boolean
+          default: true
+        include_meatywiki_pages:
+          type: boolean
+          default: true
+        asset_statuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssetStatus"
+          default: [candidate, selected, canonical]
+        instructions:
+          type: string
+          nullable: true
+
+    # ---- Search ----
+
+    SearchRequest:
+      type: object
+      description: Request body for POST search endpoints
+      properties:
+        query:
+          type: string
+          nullable: true
+        project_id:
+          type: string
+          nullable: true
+        filters:
+          type: object
+          properties:
+            source_kind:
+              type: array
+              items:
+                $ref: "#/components/schemas/SourceKind"
+            status:
+              type: array
+              items:
+                $ref: "#/components/schemas/AssetStatus"
+            artifact_type:
+              type: array
+              items:
+                type: string
+            intenttree_node_id:
+              type: string
+              nullable: true
+            bom_slot_id:
+              type: string
+              nullable: true
+            sensitivity:
+              type: array
+              items:
+                $ref: "#/components/schemas/Sensitivity"
+        include:
+          type: array
+          items:
+            type: string
+            enum: [thumbnail, links, bom_status]
+        limit:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 200
+
+    SearchResult:
+      type: object
+      required: [asset_id, title, status, sensitivity, score]
+      description: A single search hit; full Asset detail requires GET /api/assets/{assetId}
+      properties:
+        asset_id:
+          type: string
+        title:
+          type: string
+        status:
+          $ref: "#/components/schemas/AssetStatus"
+        sensitivity:
+          $ref: "#/components/schemas/Sensitivity"
+        agent_access:
+          $ref: "#/components/schemas/AgentAccess"
+        source_kind:
+          $ref: "#/components/schemas/SourceKind"
+        artifact_type_id:
+          type: string
+          nullable: true
+        project_id:
+          type: string
+          nullable: true
+        thumbnail_uri:
+          type: string
+          nullable: true
+          description: Included when include=thumbnail is requested
+        bom_status:
+          type: object
+          nullable: true
+          description: >
+            Brief slot coverage info when include=bom_status is requested.
+            Shape: {slot_count: int, filled_count: int}
+        score:
+          type: number
+          format: float
+          description: Relevance score (0.0 to 1.0)
+        matched_fields:
+          type: array
+          items:
+            type: string
+          description: Field names that contributed to the match
+
+    # ---- Audit ----
+
+    AuditEvent:
+      type: object
+      required: [id, timestamp, actor_type, actor_id, event_type, target_type, target_id]
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        workspace_id:
+          type: string
+          nullable: true
+        project_id:
+          type: string
+          nullable: true
+        actor_type:
+          $ref: "#/components/schemas/ActorType"
+        actor_id:
+          type: string
+        event_type:
+          $ref: "#/components/schemas/AuditEventType"
+        target_type:
+          type: string
+          enum: [asset, bom, slot, template, context_pack, node, project]
+        target_id:
+          type: string
+        payload:
+          type: object
+          nullable: true
+          description: Event-specific details (varies by event_type)
+        ccdash_event_id:
+          type: string
+          nullable: true
+          description: Linked CCDash event ID when emitted
+
+    # ---- Policies ----
+
+    PolicyEvaluateRequest:
+      type: object
+      required: [resource_type, resource_id, action]
+      properties:
+        resource_type:
+          type: string
+          enum: [asset, context_pack, bom_slot, template, project]
+        resource_id:
+          type: string
+        action:
+          type: string
+          enum: [read, read_content, read_preview, write, delete, publish, assign, promote]
+        actor_type:
+          $ref: "#/components/schemas/ActorType"
+        actor_id:
+          type: string
+          nullable: true
+        include_mode:
+          $ref: "#/components/schemas/IncludeMode"
+          nullable: true
+        context:
+          type: object
+          nullable: true
+          description: Additional context for policy evaluation (e.g., context_pack_id, intenttree_node_id)
+
+    Policy:
+      type: object
+      required: [decision, resource_type, resource_id, action]
+      description: Policy evaluation result
+      properties:
+        decision:
+          type: string
+          enum: [allow, deny]
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        action:
+          type: string
+        rule_triggered:
+          type: string
+          nullable: true
+          description: Name or identifier of the policy rule that produced this decision
+        reason:
+          type: string
+          nullable: true
+          description: Human-readable explanation
+        audit_required:
+          type: boolean
+          default: true
+        effective_include_mode:
+          $ref: "#/components/schemas/IncludeMode"
+          nullable: true
+          description: >
+            The include_mode that is actually allowed for this actor/resource combo,
+            which may be downgraded from the requested mode (e.g., requested=full, effective=metadata_only).
+
+    # ---- Integrations ----
+
+    IntegrationStatus:
+      type: object
+      required: [id, name, enabled, sync_mode]
+      properties:
+        id:
+          type: string
+          example: meatywiki
+        name:
+          type: string
+          example: MeatyWiki
+        enabled:
+          type: boolean
+        sync_mode:
+          type: string
+          enum: [file_export, api, disabled]
+          description: >
+            MVP integrations are file_export (markdown/YAML local write).
+            Live API connectors are planned but not implemented in MVP.
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_sync_status:
+          type: string
+          enum: [success, error, never]
+          nullable: true
+        last_sync_error:
+          type: string
+          nullable: true
+        export_path:
+          type: string
+          nullable: true
+          description: Local filesystem path for file_export integrations

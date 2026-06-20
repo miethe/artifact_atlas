@@ -1,16 +1,323 @@
+# Artifact Atlas — Integration Boundaries (D-010)
+#
+# All MVP integrations are file/export/ref-based only.
+# No OAuth tokens, remote API calls, or live webhook subscriptions in MVP.
+# Each entry documents: mvp_read, mvp_write, file_format, export_path(s),
+# and the deferred live-API path for future phases.
+#
+# System sovereignty principle: each upstream system remains the canonical
+# store for its own domain. Artifact Atlas owns asset metadata, BOM state,
+# context-pack workflow state, and agent access policy only.
+
 integrations:
+
+  # -------------------------------------------------------------------------
+  # MeatyWiki — rationale and project memory layer (§16.1)
+  # -------------------------------------------------------------------------
   meatywiki:
-    status: planned
+    status: mvp_file_based
     role: rationale_and_memory
+
+    mvp_read:
+      description: >
+        Read MeatyWiki markdown files from vault_path to resolve project page
+        references and context-pack item references (page_id, title, text body).
+      vault_path: null  # Set to local MeatyWiki vault directory; e.g. ~/wiki/pages
+      enabled: false    # Enable when vault_path is configured
+
+    mvp_write:
+      description: >
+        Write asset cards and context-pack exports as YAML-frontmatter markdown
+        files. Decision record writebacks appended as markdown sections on
+        template apply, asset promotion, and context-pack publish.
+      export_path: exports/meatywiki
+      asset_cards_subdir: asset-cards
+      context_packs_subdir: context-packs
+      decision_writebacks_subdir: decisions
+      enabled: true
+
+    file_format:
+      asset_card: |
+        ---
+        type: artifact_asset
+        asset_id: <id>
+        project: <project_slug>
+        title: <title>
+        artifact_type: <artifact_type_id>
+        source_kind: <source_kind>
+        uri: <uri>
+        status: <AssetStatus value>
+        sensitivity: <Sensitivity value>
+        intenttree_nodes: [<node_id>, ...]
+        bom_slots: [<slot_id>, ...]
+        agent_access: <AgentAccess value>
+        ---
+        # <title>
+        <description or generated summary>
+      context_pack_export: >
+        YAML manifest block (context_pack_manifest fields) followed by
+        rendered item list in markdown.
+      decision_writeback: >
+        Markdown H3 section appended to project page: timestamp, event type,
+        actor, and summary sentence. No structured data embedded.
+
+    deferred:
+      description: >
+        Live MeatyWiki API (http://127.0.0.1:8765) with bidirectional sync,
+        native plugin integration, and push notifications.
+      target_phase: Phase 2+
+      blocker: MeatyWiki API stability and authentication contract undefined.
+
+  # -------------------------------------------------------------------------
+  # IntentTree — task hierarchy and node references (§16.2, §16.3)
+  # -------------------------------------------------------------------------
   intenttree:
-    status: planned
-    role: task_hierarchy
+    status: mvp_file_based
+    role: task_hierarchy_and_node_references
+
+    mvp_read:
+      description: >
+        Read node references from YAML/JSON export file produced by `itt export`.
+        Extracts node_id, title, status, expected_artifacts, required_context,
+        and bom_slots fields.
+      export_path: null  # Set to path of itt export file; e.g. exports/intenttree-nodes.yaml
+      enabled: false     # Enable when export_path is configured
+
+    mvp_write:
+      description: >
+        Write node link manifests — YAML files listing asset-to-node
+        relationships. Consumed by IntentTree import tooling when available.
+      link_export_path: exports/intenttree
+      link_manifest_filename: atlas-node-links.yaml
+      enabled: true
+
+    file_format:
+      node_reference_file: |
+        # YAML list of IntentTree node objects
+        - node_id: <id>
+          title: <title>
+          parent_id: <id or null>
+          status: <node_status>
+          expected_artifacts: [<artifact_type_id>, ...]
+          required_context: [<asset_id or page_id or slot_id>, ...]
+          bom_slots: [<slot_id>, ...]
+      link_manifest: |
+        # YAML list of asset-to-node relationship records
+        - asset_id: <id>
+          node_id: <id>
+          relationship: reference|input|output|evidence|required_context
+          confidence: <float or null>
+          assigned_at: <ISO datetime>
+
+    deferred:
+      description: >
+        Live IntentTree API integration, task creation from BOM gaps,
+        subtree context-pack generation via API, and real-time node updates.
+      target_phase: Phase 3+
+      blocker: IntentTree API contract and authentication not yet defined.
+
+  # -------------------------------------------------------------------------
+  # SkillMeat / SAM — reusable skills, templates, context packs (§16.4)
+  # -------------------------------------------------------------------------
   skillmeat:
-    status: scaffolded_reference
+    status: mvp_file_based
     role: reusable_skills_templates_context_packs
+
+    mvp_read:
+      description: >
+        Read template references and SkillBOM metadata from SkillMeat bundle
+        export directory. Extracts template slugs, context-pack candidate
+        metadata, and SkillBOM reference IDs from YAML frontmatter.
+      bundle_path: .claude/bundles  # Default: local skillmeat-instance-starter bundle
+      enabled: true
+
+    mvp_write:
+      description: >
+        Write context-pack candidate manifests for Golden Context Pack
+        candidates. YAML files with candidate frontmatter referencing asset IDs
+        and pack IDs (no embedded file content).
+      candidates_export_path: exports/skillmeat/candidates
+      enabled: true
+
+    file_format:
+      candidate_manifest: |
+        ---
+        type: golden_context_pack_candidate
+        id: <candidate_id>
+        title: <title>
+        source_pack_id: <context_pack_id>
+        asset_ids: [<id>, ...]
+        coverage_score: <float>
+        created_at: <ISO datetime>
+        rationale: <human-readable rationale string>
+        ---
+      template_reference: >
+        References use SkillMeat slug/version identifiers only.
+        No skill file content is embedded in Artifact Atlas records.
+
+    concept_mapping:
+      artifact_template: "SkillMeat template / reusable output structure"
+      context_pack: "Context Pack / Golden Context Pack candidate"
+      bom_template: "Reusable project/workflow artifact structure"
+      asset_assignments: "SkillBOM inputs/examples/evidence"
+      coverage_gaps: "Missing components in SkillBOM/project stack"
+
+    deferred:
+      description: >
+        Live skillmeat-cli remote mode, automatic bundle promotion,
+        SkillBOM gap analysis via API, and real-time candidate scoring.
+      target_phase: Phase 4+
+      blocker: SkillMeat remote API and authentication contract not yet stable.
+
+  # -------------------------------------------------------------------------
+  # CCDash — execution telemetry and workflow evidence (§16.5)
+  # -------------------------------------------------------------------------
   ccdash:
-    status: planned
+    status: mvp_file_based
     role: telemetry_and_evidence
+
+    mvp_read:
+      description: >
+        No MVP read. Artifact Atlas does not consume CCDash data in MVP.
+        Telemetry is one-directional (write-only) in this phase.
+      enabled: false
+
+    mvp_write:
+      description: >
+        Append local event records to a JSONL export file. CCDash ingests
+        this file on a schedule or via `atlas sync ccdash`.
+      events_export_path: exports/ccdash/atlas-events.jsonl
+      enabled: true
+
+    file_format:
+      event_record: |
+        # One JSON object per line (JSONL), matching atlas_event schema (§13.4).
+        # Additional field: ccdash_schema_version: "v1"
+        {
+          "id": "<event_id>",
+          "timestamp": "<ISO datetime>",
+          "workspace_id": "<id>",
+          "project_id": "<id or null>",
+          "actor_type": "user|agent|system",
+          "actor_id": "<id>",
+          "event_type": "<atlas_event_type>",
+          "target_type": "asset|bom|slot|template|context_pack|node|project",
+          "target_id": "<id>",
+          "payload": {},
+          "ccdash_event_id": null,
+          "ccdash_schema_version": "v1"
+        }
+
+    required_events:
+      - asset_added
+      - asset_classified
+      - asset_promoted
+      - bom_slot_filled
+      - context_pack_created
+      - context_pack_published
+      - agent_query
+      - policy_denied
+
+    deferred:
+      description: >
+        Live CCDash event push API, context-pack success score feedback loop,
+        usage metric pull, and per-agent cost attribution.
+      target_phase: Phase 4+
+      blocker: CCDash event ingestion API and auth not yet defined.
+
+  # -------------------------------------------------------------------------
+  # Agentic Control Plane — project snapshot and routing signals (§16.6)
+  # -------------------------------------------------------------------------
+  control_plane:
+    status: mvp_file_based
+    role: project_snapshot_and_routing_signals
+
+    mvp_read:
+      description: >
+        No MVP read. Control Plane routing decisions are not consumed by
+        Artifact Atlas in MVP.
+      enabled: false
+
+    mvp_write:
+      description: >
+        Generate project snapshot YAML files on demand via `atlas sync
+        control-plane` or via MCP project.snapshot tool. Snapshots include
+        BOM coverage scores, critical gaps, available context packs, and
+        canonical asset IDs.
+      snapshot_export_path: exports/control-plane
+      snapshot_filename_pattern: "snapshot-{project_id}-{timestamp}.yaml"
+      enabled: true
+
+    file_format:
+      snapshot: |
+        # Matches routing input format from spec §16.6
+        artifact_context_signal:
+          project_id: <id>
+          active_node_id: <node_id or null>
+          bom_coverage:
+            <domain>: <float>   # e.g. frontend_design: 0.75
+          critical_gaps:
+            - <slot_id>
+          available_context_packs:
+            - <context_pack_id>
+          canonical_assets:
+            - <asset_id>
+          generated_at: <ISO datetime>
+          schema_version: "v1"
+
+    deferred:
+      description: >
+        Live Control Plane API signal push, routing feedback consumption,
+        next-best-action recommendations pull, and evidence writebacks.
+      target_phase: Phase 3+
+      blocker: Control Plane routing API and signal contract not yet finalized.
+
+  # -------------------------------------------------------------------------
+  # Local folders — watched asset sources (§16.7)
+  # -------------------------------------------------------------------------
   local_folders:
-    status: planned
+    status: mvp_active
     role: watched_asset_sources
+
+    mvp_read:
+      description: >
+        Watch local folder paths for new files and trigger asset import.
+        The file watcher is read-only against source folders: no files are
+        moved, renamed, or deleted from source paths.
+      watched_paths: []  # List of absolute paths; configured per workspace
+      enabled: false     # Enable when watched_paths is non-empty
+
+    mvp_write:
+      description: >
+        Imported assets reference original path as original_uri. Thumbnails
+        and preview text are written to assets/thumbnails/ and assets/previews/.
+        Full file content is never copied; URI references are stored only.
+      thumbnails_dir: assets/thumbnails
+      previews_dir: assets/previews
+      enabled: true
+
+    file_format:
+      asset_record_fields:
+        original_uri: "file:///absolute/path/to/source/file"
+        storage_uri: null   # null in MVP; full content stays at original_uri
+        thumbnail_uri: "assets/thumbnails/<asset_id>.<ext>"
+        preview_text_uri: "assets/previews/<asset_id>.txt"
+
+    source_kind_mapping:
+      # Maps common parent folder names to source_kind values
+      ChatGPT: chatgpt
+      Claude: claude
+      Figma: figma
+      Canva: canva
+      GitHub: github
+      Vault: vault
+      Local: local
+      default: manual
+
+    deferred:
+      description: >
+        Move detection, bidirectional sync, cloud folder adapters
+        (Google Drive, OneDrive, Dropbox), and content hashing for
+        duplicate detection across sources.
+      target_phase: Phase 2+
+      blocker: None — can be implemented incrementally.
