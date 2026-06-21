@@ -2,7 +2,7 @@
 schema_version: 2
 doc_type: implementation_plan
 title: "Implementation Plan: UI Polish Pass \u2014 Artifact Atlas"
-status: in_progress
+status: completed
 created: '2026-06-20'
 updated: '2026-06-21'
 feature_slug: ui-polish-pass
@@ -17,7 +17,11 @@ effort_estimate: 55 pts
 priority: high
 risk_level: medium
 tier: 3
-deferred_items_spec_refs: []
+deferred_items_spec_refs:
+- docs/project_plans/design-specs/dark-mode-aa.md
+- docs/project_plans/design-specs/facelift-p2-items.md
+- docs/project_plans/design-specs/facelift-p3-items.md
+- docs/project_plans/design-specs/asset-viewer-extensions.md
 findings_doc_ref: .claude/findings/ui-polish-pass-findings.md
 changelog_required: true
 related_documents:
@@ -40,6 +44,9 @@ commit_refs:
 - 8cfd646
 - dd539dd
 - cd6e7c6
+- fa78ee6
+- 4848bfd
+- 8b1b11c
 ---
 
 # Implementation Plan: UI Polish Pass — Artifact Atlas

@@ -490,6 +490,34 @@ Broadly reusable component gaps are contributed **upstream to `@miethe/ui`** (tr
 #### Consequences
 `@miethe/ui` grows as the shared canonical library; AA avoids accumulating a diverging fork. Upstream additions are gated on `@miethe/ui` release cadence (DEFER-5). Local-only components can be promoted upstream in future sprints without changing any AA API.
 
+### ADR-7 — Production Rollout Posture: Flag-Gated, Off-by-Default in Prod
+
+#### Context
+The canonical detail surfaces (P2b), the design-system adoption (`miethe-ui-ds`), and the
+PPTX server-side conversion (`pptx-server-conversion`) are all behind feature flags
+(`web/lib/flags.ts`). The dev-defaults enable `miethe-ui-ds` and `ui-tabbed-modal` only when
+`NODE_ENV === "development"`; a plain `next build`/`next start` with no `NEXT_PUBLIC_FLAGS`
+serves the **legacy** (flags-off) surfaces. This is by design — per R7 (migration regression
+risk) the plan mandated per-surface flags for staged rollout — but it means the new UX is
+**not visible in production until flags are explicitly enabled**.
+
+#### Decision
+Ship the UI Polish Pass **flag-gated and off-by-default in production**. Enablement is an
+explicit, reversible operational step: set `NEXT_PUBLIC_FLAGS` at build time, e.g.
+`NEXT_PUBLIC_FLAGS=miethe-ui-ds,ui-tabbed-modal` (add `ui-tabbed-modal-<surface>` for
+per-surface staging, and `pptx-server-conversion` only once a LibreOffice/Gotenberg backend
+is provisioned — R4). Unguarded `@miethe/ui` usages (ContentRenderer, BaseArtifactModal,
+FullPageDetail) ship live regardless and are covered by the build/type/unit gates.
+
+#### Consequences
+- The feature is **engineering-complete** but intentionally dark in prod until enabled — the
+  rollout/enable decision is the operator's, supporting incremental per-surface validation.
+- **Recommended gate before global cutover:** one flags-ON Playwright + axe pass over the 5
+  EntityModal surfaces and the DOCX/PPTX renderers (tracked as follow-up F-002), since this
+  session's e2e (7/7) exercised only the flags-OFF legacy paths.
+- To make the new UX the default, flip the `FLAG_DEV_DEFAULTS` gate from `NODE_ENV`-keyed to
+  unconditional (`web/lib/flags.ts`) in a follow-up once validated.
+
 ---
 
 ### References

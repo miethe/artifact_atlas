@@ -57,3 +57,33 @@ commit (this is the first time the feature is tracked).
   was likewise ignored and never committed — a fresh clone would 404 the coverage route
   and fail `next build`. Tracked in the P3 commit. Swept for further `coverage` dirs:
   none remain ignored.
+
+## F-002 — Flags-ON live verification not yet run (residual risk; tracked follow-up)
+
+**Severity:** Medium (verification gap, not a code defect)
+**Raised by:** P6-019 (task-completion-validator) + P6-020 (karen) final gates.
+
+### Detail
+The session's gates are strong but flags-OFF for the runtime path: `tsc` 0, `next build`
+exit 0 (15 routes), vitest 75/75, **Playwright e2e 7/7 (fixture-fallback = legacy flags-OFF
+paths)**, api pytest 571, static a11y-sheriff APPROVED, per-phase validators APPROVED, and a
+senior-code-reviewer security pass on the P4c backend. NOT yet run:
+- **P6-003** live axe-core sweep with `ui-tabbed-modal=true` over the 5 EntityModal surfaces
+  + AssetViewer for all 6 formats.
+- **P6-009** Playwright specs for the flags-ON paths: modal open/close/tab/Escape+focus-return,
+  `?item=&tab=` deep-link, AssetViewer per-format, agent_access gate.
+
+### Disposition
+Accepted as documented residual risk (both final reviewers concurred it is not a blocker given
+flag-gating + static a11y + the security review). **Recommended before global prod cutover**
+(see ADR-7): one flags-ON Playwright project (set `NEXT_PUBLIC_FLAGS`) + axe pass. Tracked as a
+P6 follow-up.
+
+## F-003 — Disclosed in-panel deferrals (backlog, not stubs)
+
+**Severity:** Low (honest scope limit).
+Two EntityModal sub-panels render real content with disclosed placeholders, confirmed as
+intentional backlog items (not silent stubs):
+- `BomSlotAssignmentsTabPanel` — assignment-table editing deferred to a future BOM epic.
+- `AssetLinksTabPanel` — graph sub-section deferred to the P5 Graph Explorer.
+Both should remain tracked in `docs/mvp-backlog.md`.
