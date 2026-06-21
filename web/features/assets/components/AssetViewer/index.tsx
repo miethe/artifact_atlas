@@ -51,6 +51,16 @@ const DocxRenderer = dynamic(
   },
 );
 
+// PPTX: server-side conversion seam — no client-side PPTX lib for React 19 (ADR-4)
+// Gated by flag "pptx-server-conversion"; shows download fallback when off.
+const PptxRenderer = dynamic(
+  () => import("./PptxRenderer").then((m) => ({ default: m.PptxRenderer })),
+  {
+    ssr: false,
+    loading: () => <RendererSkeleton />,
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -93,6 +103,10 @@ function isDocxMime(mime: string | null | undefined): boolean {
   return mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 }
 
+function isPptxMime(mime: string | null | undefined): boolean {
+  return mime === "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+}
+
 function isImageMime(mime: string | null | undefined): boolean {
   return !!mime && mime.startsWith("image/");
 }
@@ -122,7 +136,7 @@ function getFilePath(asset: Asset): string {
  * Determine the renderer type from MIME + extension.
  * Falls back to "content" for text-like types, "unknown" for unhandled.
  */
-type RendererKind = "image" | "svg" | "pdf" | "docx" | "content" | "unknown";
+type RendererKind = "image" | "svg" | "pdf" | "docx" | "pptx" | "content" | "unknown";
 
 function resolveRenderer(asset: Asset): RendererKind {
   const mime = asset.mime_type;
@@ -133,6 +147,9 @@ function resolveRenderer(asset: Asset): RendererKind {
 
   // DOCX (OpenXML Word document)
   if (isDocxMime(mime) || ext === ".docx") return "docx";
+
+  // PPTX (OpenXML Presentation — no in-browser renderer; server-side conversion seam)
+  if (isPptxMime(mime) || ext === ".pptx") return "pptx";
 
   // SVG (handled separately to enforce <img>-only rendering)
   if (isSvgMime(mime) || ext === ".svg") return "svg";
@@ -241,6 +258,19 @@ export function AssetViewer({ asset, mode, editable = false, className }: AssetV
       return (
         <DocxRenderer
           src={contentUrl}
+          originalUrl={originalUrl}
+          mode={mode}
+          className={className}
+        />
+      );
+
+    case "pptx":
+      // PptxRenderer uses asset.id (not src) to call the server-side convert endpoint.
+      // It internally gates on flag "pptx-server-conversion" and falls back to ErrorTile
+      // when the flag is off or on any conversion error.
+      return (
+        <PptxRenderer
+          assetId={asset.id}
           originalUrl={originalUrl}
           mode={mode}
           className={className}
