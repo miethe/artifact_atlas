@@ -23,7 +23,7 @@
   /* --- Ink / Text --- */
   --ink: #111827;
   --ink-muted: #5c6370;
-  --ink-faint: #9ca3af;
+  --ink-faint: #6b7280;
   --ink-inverse: #ffffff;
 
   /* --- Borders --- */
@@ -157,7 +157,7 @@ body {
   background-color: var(--bg);
   color: var(--ink);
   font-family:
-    "Inter",
+    var(--font-sans),
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -222,5 +222,21 @@ a {
   /* Focus ring composable */
   .focus-ring {
     @apply focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1 focus-visible:outline-none;
+  }
+}
+
+/* ============================================================
+   REDUCED-MOTION ACCESSIBILITY
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin,
+  .animate-slide-in-right,
+  .animate-slide-in-up,
+  .animate-fade-in,
+  .animate-pulse-subtle {
+    animation: none !important;
+    transition: none !important;
   }
 }

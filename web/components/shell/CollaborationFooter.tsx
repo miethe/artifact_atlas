@@ -7,12 +7,45 @@
  */
 
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { clsx } from "clsx";
 import { Wifi, WifiOff, Zap, Keyboard } from "lucide-react";
 
 type ConnectionStatus = "connected" | "disconnected" | "checking";
 
+// ============================================================
+// Health probe
+// ============================================================
+
+const HEALTH_URL =
+  (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000") + "/health";
+
+/**
+ * Polls the backend /health endpoint every 30 s.
+ * Returns "connected" on 2xx, "disconnected" on non-2xx or fetch error,
+ * "checking" while the initial request is in-flight.
+ */
+function useHealthProbe(): ConnectionStatus {
+  const { data, isLoading, isError } = useQuery<boolean>({
+    queryKey: ["health"],
+    queryFn: async () => {
+      const res = await fetch(HEALTH_URL, { method: "GET" });
+      return res.ok;
+    },
+    refetchInterval: 30_000,
+    // Surface fetch errors as data=false rather than error state so mapping is uniform
+    retry: false,
+  });
+
+  if (isLoading) return "checking";
+  if (isError || data === false) return "disconnected";
+  return "connected";
+}
+
+// ============================================================
+
 interface CollaborationFooterProps {
+  /** Override the probed status (e.g., for testing or SSR placeholder). */
   apiStatus?: ConnectionStatus;
   agentActivity?: string | null;
   lastSyncAt?: string | null;
@@ -20,11 +53,14 @@ interface CollaborationFooterProps {
 }
 
 export function CollaborationFooter({
-  apiStatus = "checking",
+  apiStatus,
   agentActivity = null,
   lastSyncAt = null,
   className,
 }: CollaborationFooterProps) {
+  const probedStatus = useHealthProbe();
+  // Caller-supplied prop takes precedence; otherwise use live probe result.
+  const resolvedStatus: ConnectionStatus = apiStatus ?? probedStatus;
   const statusConfig: Record<
     ConnectionStatus,
     { label: string; color: string; icon: React.ElementType }
@@ -46,7 +82,7 @@ export function CollaborationFooter({
     },
   };
 
-  const { label, color, icon: StatusIcon } = statusConfig[apiStatus];
+  const { label, color, icon: StatusIcon } = statusConfig[resolvedStatus];
 
   return (
     <footer

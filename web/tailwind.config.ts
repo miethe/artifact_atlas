@@ -143,14 +143,14 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
-          "Inter",
+          "var(--font-sans)",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
           "sans-serif",
         ],
         mono: [
-          "JetBrains Mono",
+          "var(--font-mono)",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",
