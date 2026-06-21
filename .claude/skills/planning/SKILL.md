@@ -1684,6 +1684,23 @@ Regularly optimize plans as work progresses:
 - **lead-architect**: Architecture planning assistance, task delegation
 - **documentation-writer**: Documentation for plans
 
+## IntentTree SDLC Sync (optional)
+
+When `INTENTTREE_SDLC_SYNC=1` (+ `INTENTTREE_TREE` for this repo), authored plans and their
+`.claude/progress/**` files mirror into the shared IntentTree instance as a typed
+`Feature → Phase → Task` work tree — ranked, dependency-aware, with computed progress rollup.
+Markdown stays canonical; nodes are a derived projection (source → node only). The rich task
+source is the **progress files** (they already carry `tasks[]`); plans/PRDs supply the feature
+container. Sync is automatic on status writes (via artifact-tracking's `intenttree_sync` hook) and
+available manually:
+
+```bash
+python ../artifact-tracking/scripts/intenttree_capture.py backfill --repo-root . \
+  --tree $INTENTTREE_TREE --apply
+```
+
+Full guide + repo→tree map: `artifact-tracking/intenttree-sync.md`.
+
 ## Version History
 
 - **2025-11-11**: Initial skill creation

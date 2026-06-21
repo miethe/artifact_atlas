@@ -10,3 +10,12 @@ file_count = 650
 method = "build-starter-bundle.py (local API/collection unavailable)"
 preserved = ["CLAUDE.md", "skills/op", "skills/skillmeat-cli"]
 provenance = ".claude/bundles/skillmeat-instance-starter/"
+
+# 2026-06-20: resynced methodology surface to current 0.55.1 canonical build.
+# Closed a same-day additive gap (IntentTree SDLC Sync feature landed in source
+# after the morning deploy): added artifact-tracking/{intenttree-sync.md,
+# scripts/intenttree_capture.py, scripts/intenttree_sync.py} and refreshed the
+# {planning, dev-execution, artifact-tracking} SKILL.md addenda. diff -rq against
+# a fresh --tier all build now shows zero drift, zero missing files.
+resync_date = "2026-06-20"
+resync_method = "diff -rq vs fresh build-starter-bundle.py --tier all; copied 6 files"

@@ -23,6 +23,19 @@ Token-efficient tracking artifacts for AI agent orchestration.
 
 **Scripts location**: `.claude/skills/artifact-tracking/scripts/`
 
+### IntentTree SDLC sync (optional)
+
+| Operation | Command |
+|-----------|---------|
+| Sync one file → IntentTree | `python scripts/intenttree_capture.py sync FILE --tree $INTENTTREE_TREE --apply` |
+| Backfill repo's in-flight features | `python scripts/intenttree_capture.py backfill --repo-root . --tree $INTENTTREE_TREE --apply` |
+
+Mirror plans + `.claude/progress/**` into the shared IntentTree instance as a typed
+`Feature → Phase → Task` tree (markdown stays canonical; nodes are a derived projection). When
+`INTENTTREE_SDLC_SYNC=1` and `INTENTTREE_TREE` are set, status writes auto-sync (best-effort,
+non-fatal) via `intenttree_sync.push_to_intenttree`. Full guide + repo→tree map:
+**`intenttree-sync.md`**.
+
 ## Script Inventory
 
 | Script | Purpose |

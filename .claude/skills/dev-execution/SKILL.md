@@ -431,4 +431,14 @@ Progress: 60% (6/10 tasks)
 
 ---
 
+## IntentTree SDLC Sync (optional)
+
+When `INTENTTREE_SDLC_SYNC=1` (+ `INTENTTREE_TREE`), task/phase status writes during execution
+auto-mirror into the shared IntentTree instance (best-effort, non-fatal) via artifact-tracking's
+`intenttree_sync` hook: the bound node's status flips and the feature/phase progress rolls up.
+Markdown stays canonical. See `../artifact-tracking/intenttree-sync.md` for setup, the repo→tree
+map, and the manual `intenttree_capture.py` backfill command.
+
+---
+
 **Remember**: Follow @CLAUDE.md delegation rules. Orchestrate; don't implement directly. Load only the guidance you need.

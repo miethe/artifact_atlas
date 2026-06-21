@@ -1,0 +1,15 @@
+{
+  "id": "4d5b69b3-7431-4195-8b30-ffcd60df7696",
+  "aar_path": "/Users/miethe/dev/homelab/development/artifact_atlas/docs/reports/artifact-atlas-app-completion-aar.md",
+  "project": null,
+  "title": "AAR \u2014 Artifact Atlas App Completion (MVP)",
+  "date": null,
+  "session": null,
+  "domains": [],
+  "source": "manual",
+  "metrics": {},
+  "status": "backlog",
+  "content_hash": "03045b40c6f30b66da76e2975036f0e22517969e7404c51f5ad96c033f3f6324",
+  "created_at": "2026-06-20T21:39:25.005047+00:00",
+  "updated_at": "2026-06-20T21:39:25.005201+00:00"
+}
