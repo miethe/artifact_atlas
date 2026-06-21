@@ -13,7 +13,7 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-import { LayoutGrid, List, Plus } from "lucide-react";
+import { LayoutGrid, List, Plus, FolderOpen, AlertCircle } from "lucide-react";
 import { RightDrawer } from "@/components/shell/RightDrawer";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -236,6 +236,7 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
           {isError && (
             <div className="p-8 text-center">
               <EmptyState
+                icon={<AlertCircle className="w-10 h-10" aria-hidden />}
                 title="Failed to load assets"
                 description="The API may be unavailable. Demo data shown below."
               />
@@ -246,6 +247,7 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
           {!isLoading && !isError && sortedAssets.length === 0 && (
             <div className="p-8">
               <EmptyState
+                icon={<FolderOpen className="w-10 h-10" aria-hidden />}
                 title="No assets found"
                 description="Try adjusting your filters or add a new asset."
                 action={

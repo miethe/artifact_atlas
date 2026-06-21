@@ -20,6 +20,7 @@ import {
   ExternalLink,
   AlertCircle,
   CheckCircle2,
+  FolderOpen,
 } from "lucide-react";
 import Link from "next/link";
 // Subpath import ONLY — never the @miethe/ui root barrel (no 'use client').
@@ -189,6 +190,7 @@ export function AssetDetail({ assetId, projectId }: AssetDetailProps) {
     return (
       <div className="p-8">
         <EmptyState
+          icon={<FolderOpen className="w-10 h-10" aria-hidden />}
           title="Asset not found"
           description="This asset may have been removed or you may not have access."
           action={

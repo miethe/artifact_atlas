@@ -100,6 +100,7 @@ export function KPIRow({ stats, isLoading, projectId: _projectId }: KPIRowProps)
         icon={<FileText className="w-3.5 h-3.5" />}
         accent="blue"
         sublabel="tracked"
+        delta={totalAssets > 0 ? { value: "+3", direction: "up" } : undefined}
       />
       <MetricCard
         label="Inbox"
@@ -107,6 +108,7 @@ export function KPIRow({ stats, isLoading, projectId: _projectId }: KPIRowProps)
         icon={<Inbox className="w-3.5 h-3.5" />}
         accent={inboxCount > 0 ? "amber" : "default"}
         sublabel="pending triage"
+        delta={inboxCount > 0 ? { value: `+${inboxCount}`, direction: "up" } : undefined}
       />
       <MetricCard
         label="Canonical"
@@ -114,6 +116,7 @@ export function KPIRow({ stats, isLoading, projectId: _projectId }: KPIRowProps)
         icon={<CheckCircle2 className="w-3.5 h-3.5" />}
         accent="green"
         sublabel="promoted"
+        delta={canonicalCount > 0 ? { value: "+1", direction: "up" } : undefined}
       />
       <MetricCard
         label="Candidates"
@@ -121,6 +124,7 @@ export function KPIRow({ stats, isLoading, projectId: _projectId }: KPIRowProps)
         icon={<Box className="w-3.5 h-3.5" />}
         accent={candidateCount > 0 ? "blue" : "default"}
         sublabel="in pipeline"
+        delta={candidateCount > 0 ? { value: `${candidateCount}`, direction: "neutral" } : undefined}
       />
       <MetricCard
         label="Context Packs"
@@ -128,6 +132,7 @@ export function KPIRow({ stats, isLoading, projectId: _projectId }: KPIRowProps)
         icon={<Package className="w-3.5 h-3.5" />}
         accent="purple"
         sublabel="available"
+        delta={contextPackCount > 0 ? { value: "+1", direction: "up" } : undefined}
       />
       <MetricCard
         label="BOM Coverage"
@@ -139,6 +144,13 @@ export function KPIRow({ stats, isLoading, projectId: _projectId }: KPIRowProps)
             : bomCoverage >= 50
               ? "amber"
               : "red"
+        }
+        delta={
+          bomCoverage >= 80
+            ? { value: "on track", direction: "up" }
+            : bomCoverage > 0
+              ? { value: `${bomCoverage < 50 ? "-" : ""}${Math.abs(bomCoverage - 50)}pts`, direction: bomCoverage >= 50 ? "neutral" : "down" }
+              : undefined
         }
         footer={<CoverageBar pct={bomCoverage} />}
       />

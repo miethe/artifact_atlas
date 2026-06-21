@@ -9,6 +9,7 @@ import * as React from "react";
 import { CheckCircle2 } from "lucide-react";
 import { StatusBadge, EmptyState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
+import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { PanelShell } from "./PanelShell";
 import type { Asset } from "@/lib/types";
 
@@ -79,9 +80,11 @@ export function CanonicalArtifactsPanel({
           {canonical.map((asset) => (
             <li key={asset.id}>
               <div className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors">
-                <CheckCircle2
-                  aria-hidden
-                  className="w-3.5 h-3.5 text-green-600 shrink-0"
+                {/* 24×24 asset thumbnail (P5-P1-004) */}
+                <AssetThumbnail
+                  asset={asset}
+                  size="xs"
+                  className="!w-6 !h-6 shrink-0"
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">

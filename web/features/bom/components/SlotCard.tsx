@@ -83,7 +83,8 @@ function getCardStyle(status: BomSlotStatus, required: boolean): string {
     return "border-2 border-dashed border-red-300 bg-red-50/30 hover:border-red-400 hover:bg-red-50/50";
   }
   if (status === "missing" && !required) {
-    return "border border-dashed border-[var(--border)] bg-[var(--surface-sunken)] hover:border-blue-300 hover:bg-blue-50/20";
+    // P5-P1-003: unassigned/empty optional slot — dotted-purple treatment
+    return "border border-dashed border-purple-300 bg-purple-50 hover:border-purple-400 hover:bg-purple-50/70";
   }
   if (status === "partial") {
     return "border border-amber-200 bg-amber-50/20 hover:border-amber-300";
@@ -107,7 +108,7 @@ function getCardStyle(status: BomSlotStatus, required: boolean): string {
 function getStatusAccent(status: BomSlotStatus, required: boolean): string {
   if (status === "not_applicable") return "border-l-gray-300";
   if (status === "missing" && required) return "border-l-red-500";
-  if (status === "missing") return "border-l-gray-400";
+  if (status === "missing") return "border-l-purple-400";
   if (status === "partial") return "border-l-amber-500";
   if (status === "in_progress") return "border-l-sky-500";
   if (status === "complete") return "border-l-emerald-600";
@@ -120,7 +121,7 @@ function getStatusAccent(status: BomSlotStatus, required: boolean): string {
 function getHeaderBg(status: BomSlotStatus, required: boolean): string {
   if (status === "not_applicable") return "bg-gray-100";
   if (status === "missing" && required) return "bg-red-50";
-  if (status === "missing") return "bg-gray-50";
+  if (status === "missing") return "bg-purple-50";
   if (status === "partial") return "bg-amber-50";
   if (status === "in_progress") return "bg-sky-50";
   if (status === "complete") return "bg-emerald-50";

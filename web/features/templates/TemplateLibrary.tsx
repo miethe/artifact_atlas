@@ -13,7 +13,7 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-import { Search, X, Plus, Wrench } from "lucide-react";
+import { Search, X, Plus, Wrench, LayoutTemplate } from "lucide-react";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { isFlagEnabled } from "@/lib/flags";
 import { useTemplates } from "./hooks";
@@ -306,7 +306,11 @@ export function TemplateLibrary({
               </div>
             ) : filtered.length === 0 ? (
               <EmptyState
-                icon={<Search className="w-5 h-5" />}
+                icon={
+                  hasFilters
+                    ? <Search className="w-8 h-8" aria-hidden />
+                    : <LayoutTemplate className="w-8 h-8" aria-hidden />
+                }
                 title="No templates found"
                 description={
                   hasFilters

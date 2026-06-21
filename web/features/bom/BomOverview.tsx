@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   Clock,
   Layers,
+  Package,
 } from "lucide-react";
 import { useBom } from "@/lib/hooks/useBom";
 import { isFlagEnabled } from "@/lib/flags";
@@ -459,6 +460,7 @@ export function BomOverview({ projectId }: BomOverviewProps) {
     return (
       <div className="flex-1 p-5">
         <EmptyState
+          icon={<Package className="w-10 h-10" aria-hidden />}
           title="Failed to load BOM"
           description="Could not retrieve the artifact BOM for this project. Check the API connection."
           action={
@@ -476,6 +478,7 @@ export function BomOverview({ projectId }: BomOverviewProps) {
     return (
       <div className="flex-1 p-5">
         <EmptyState
+          icon={<Package className="w-10 h-10" aria-hidden />}
           title="No BOM slots"
           description="Apply a template to create artifact slots for this project."
           action={

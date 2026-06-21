@@ -9,6 +9,7 @@ import * as React from "react";
 import { Clock, FileText } from "lucide-react";
 import { StatusBadge, EmptyState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
+import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { PanelShell } from "./PanelShell";
 import type { Asset } from "@/lib/types";
 
@@ -107,13 +108,12 @@ export function RecentAssetsPanel({
                   }
                 }}
               >
-                {/* Type label */}
-                <span
-                  aria-hidden
-                  className="shrink-0 w-8 h-8 flex items-center justify-center rounded bg-[var(--surface-sunken)] border border-[var(--border)] text-[9px] font-bold text-[var(--ink-faint)] uppercase"
-                >
-                  {mimeShortLabel(asset.mime_type)}
-                </span>
+                {/* 24×24 asset thumbnail (P5-P1-004) */}
+                <AssetThumbnail
+                  asset={asset}
+                  size="xs"
+                  className="!w-6 !h-6 shrink-0"
+                />
 
                 {/* Title + source */}
                 <div className="flex-1 min-w-0">

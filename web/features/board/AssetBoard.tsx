@@ -33,7 +33,7 @@ import { MoveSelectedDialog, type MoveTarget } from "./MoveSelectedDialog";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
-import { Keyboard, Columns3 } from "lucide-react";
+import { Keyboard, Columns3, Kanban } from "lucide-react";
 import type { Asset, AssetStatus } from "@/lib/types";
 
 // ============================================================
@@ -307,6 +307,7 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <EmptyState
+          icon={<Kanban className="w-10 h-10" aria-hidden />}
           title="Failed to load board"
           description="Could not fetch assets. Using demo fixtures if available."
           action={

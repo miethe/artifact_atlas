@@ -95,15 +95,16 @@ function CircularGauge({ score }: { score: number }) {
           style={{ transition: "stroke-dashoffset 0.6s ease" }}
         />
       </svg>
-      {/* Center text */}
+      {/* Center text — score% + label (P5-P1-006) */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span
           className="text-2xl font-bold tabular-nums leading-none"
           style={{ color }}
+          aria-label={`${score} percent`}
         >
-          {score}
+          {score}<span className="text-sm">%</span>
         </span>
-        <span className="text-[10px] font-medium" style={{ color }}>
+        <span className="text-[10px] font-medium mt-0.5" style={{ color }}>
           {scoreLabel(score)}
         </span>
       </div>

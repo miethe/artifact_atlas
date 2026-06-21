@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Filter,
   ChevronRight,
+  Layout,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -109,6 +110,7 @@ export function CoverageView({ projectId }: CoverageViewProps) {
     return (
       <div className="flex items-center justify-center p-12">
         <EmptyState
+          icon={<Layout className="w-10 h-10" aria-hidden />}
           title="Failed to load coverage data"
           description="Could not fetch BOM or coverage from the API."
           action={

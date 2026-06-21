@@ -26,6 +26,8 @@ import {
   RefreshCw,
   Sparkles,
   LayoutGrid,
+  Package,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -126,6 +128,7 @@ export function BomMappingView({ projectId }: BomMappingViewProps) {
     return (
       <div className="flex items-center justify-center p-12">
         <EmptyState
+          icon={<AlertCircle className="h-5 w-5" />}
           title="Failed to load mapping view"
           description="Could not fetch inbox or BOM data."
           action={
@@ -236,6 +239,7 @@ export function BomMappingView({ projectId }: BomMappingViewProps) {
               {slots.length === 0 ? (
                 <div className="col-span-full flex items-center justify-center py-12">
                   <EmptyState
+                    icon={<Package className="h-5 w-5" />}
                     title="No BOM slots"
                     description="Apply a template to create slots for this project."
                   />

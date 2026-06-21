@@ -7,7 +7,7 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-import { Plus, Package, Search, RefreshCw } from "lucide-react";
+import { Plus, Layers, Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RightDrawer } from "@/components/shell/RightDrawer";
@@ -183,7 +183,7 @@ export function ContextPacksView({ projectId }: ContextPacksViewProps) {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={
-              <Package
+              <Layers
                 aria-hidden
                 className="w-10 h-10 text-[var(--ink-faint)]"
               />

@@ -251,6 +251,7 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
               <div className="p-4">
                 <EmptyState
                   size="sm"
+                  icon={<Inbox className="w-8 h-8" aria-hidden />}
                   title="Failed to load inbox"
                   description="Check backend connection or use demo fixtures."
                   action={
@@ -263,6 +264,7 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
             ) : items.length === 0 ? (
               <EmptyState
                 size="sm"
+                icon={<Inbox className="w-8 h-8" aria-hidden />}
                 title="Inbox empty"
                 description="Drop files above or use URL import to add assets."
               />
@@ -322,6 +324,7 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
                 <div className="flex-1 flex items-center justify-center p-6">
                   <EmptyState
                     size="sm"
+                    icon={<Inbox className="w-8 h-8" aria-hidden />}
                     title="Select an item"
                     description="Choose an inbox item from the queue to classify it."
                   />

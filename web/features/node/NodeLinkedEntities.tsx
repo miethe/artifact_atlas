@@ -8,6 +8,7 @@ import {
   BookOpen,
   LayoutGrid,
   ExternalLink,
+  Link2,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { NodeLinkedEntity } from "./NodeDemoFixtures";
@@ -61,6 +62,7 @@ export function NodeLinkedEntities({ entities }: NodeLinkedEntitiesProps) {
     return (
       <EmptyState
         size="sm"
+        icon={<Link2 className="w-8 h-8" aria-hidden />}
         title="No linked entities"
         description="Link assets, context packs, or BOM slots to this node."
       />

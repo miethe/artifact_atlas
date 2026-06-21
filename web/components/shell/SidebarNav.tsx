@@ -36,57 +36,77 @@ interface NavItem {
   exact?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+interface NavSection {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Overview",
-    href: (id) => `/projects/${id}`,
-    icon: LayoutDashboard,
-    exact: true,
+    label: "Project",
+    items: [
+      {
+        label: "Overview",
+        href: (id) => `/projects/${id}`,
+        icon: LayoutDashboard,
+        exact: true,
+      },
+    ],
   },
   {
-    label: "Assets",
-    href: (id) => `/projects/${id}/assets`,
-    icon: FolderOpen,
+    label: "Content",
+    items: [
+      {
+        label: "Assets",
+        href: (id) => `/projects/${id}/assets`,
+        icon: FolderOpen,
+      },
+      {
+        label: "Inbox",
+        href: (id) => `/projects/${id}/inbox`,
+        icon: Inbox,
+      },
+      {
+        label: "Intent Nodes",
+        href: (id) => `/projects/${id}/intent-nodes`,
+        icon: GitBranch,
+      },
+      {
+        label: "Board",
+        href: (id) => `/projects/${id}/board`,
+        icon: Kanban,
+      },
+    ],
   },
   {
-    label: "Inbox",
-    href: (id) => `/projects/${id}/inbox`,
-    icon: Inbox,
-  },
-  {
-    label: "Intent Nodes",
-    href: (id) => `/projects/${id}/intent-nodes`,
-    icon: GitBranch,
-  },
-  {
-    label: "Board",
-    href: (id) => `/projects/${id}/board`,
-    icon: Kanban,
-  },
-  {
-    label: "Artifact BOM",
-    href: (id) => `/projects/${id}/bom`,
-    icon: Package,
-  },
-  {
-    label: "Templates",
-    href: (id) => `/projects/${id}/templates`,
-    icon: FileText,
-  },
-  {
-    label: "Coverage & Gaps",
-    href: (id) => `/projects/${id}/coverage`,
-    icon: BarChart2,
-  },
-  {
-    label: "Inbox → BOM",
-    href: (id) => `/projects/${id}/bom-mapping`,
-    icon: ArrowRightLeft,
-  },
-  {
-    label: "Context Packs",
-    href: (id) => `/projects/${id}/context-packs`,
-    icon: Layers,
+    label: "Tools",
+    items: [
+      {
+        label: "Artifact BOM",
+        href: (id) => `/projects/${id}/bom`,
+        icon: Package,
+      },
+      {
+        label: "Templates",
+        href: (id) => `/projects/${id}/templates`,
+        icon: FileText,
+      },
+      {
+        label: "Coverage & Gaps",
+        href: (id) => `/projects/${id}/coverage`,
+        icon: BarChart2,
+      },
+      {
+        label: "Inbox → BOM",
+        href: (id) => `/projects/${id}/bom-mapping`,
+        icon: ArrowRightLeft,
+      },
+      {
+        label: "Context Packs",
+        href: (id) => `/projects/${id}/context-packs`,
+        icon: Layers,
+      },
+    ],
   },
 ];
 
@@ -132,40 +152,52 @@ export function SidebarNav({
         )}
       </div>
 
-      {/* Nav items */}
-      <ul className="flex-1 overflow-y-auto py-2 space-y-0.5 px-1.5" role="list">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item);
-          const Icon = item.icon;
-          return (
-            <li key={item.label}>
-              <Link
-                href={item.href(projectId)}
-                aria-current={active ? "page" : undefined}
-                title={collapsed ? item.label : undefined}
-                className={clsx(
-                  "flex items-center gap-2.5 rounded px-2 py-1.5 text-sm transition-colors duration-[100ms]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                  active
-                    ? "bg-blue-50 text-blue-700 font-medium"
-                    : "text-[var(--ink-muted)] hover:bg-gray-100 hover:text-[var(--ink)]",
-                  collapsed && "justify-center px-0",
-                )}
-              >
-                <Icon
-                  className={clsx(
-                    "shrink-0",
-                    collapsed ? "w-4 h-4" : "w-4 h-4",
-                    active ? "text-blue-600" : "text-gray-400",
-                  )}
-                  aria-hidden
-                />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {/* Nav sections */}
+      <div className="flex-1 overflow-y-auto py-2 px-1.5">
+        {NAV_SECTIONS.map((section, sIdx) => (
+          <div key={section.label} className={clsx(sIdx > 0 && "mt-3")}>
+            {/* Section label — hidden when collapsed */}
+            {!collapsed && (
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--ink-faint)]">
+                {section.label}
+              </p>
+            )}
+            <ul className="space-y-0.5" role="list">
+              {section.items.map((item) => {
+                const active = isActive(item);
+                const Icon = item.icon;
+                return (
+                  <li key={item.label}>
+                    <Link
+                      href={item.href(projectId)}
+                      aria-current={active ? "page" : undefined}
+                      title={collapsed ? item.label : undefined}
+                      className={clsx(
+                        "flex items-center gap-2.5 py-1.5 text-sm transition-colors duration-[100ms]",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                        /* Active: left accent bar + blue highlight */
+                        active
+                          ? "border-l-4 border-brand-500 bg-blue-50 text-blue-700 font-medium pl-1.5 pr-2 rounded-r"
+                          : "border-l-4 border-transparent pl-1.5 pr-2 rounded hover:bg-gray-100 hover:text-[var(--ink)] text-[var(--ink-muted)]",
+                        collapsed && "justify-center pl-0 pr-0 border-l-0",
+                      )}
+                    >
+                      <Icon
+                        className={clsx(
+                          "w-4 h-4 shrink-0",
+                          active ? "text-blue-600" : "text-gray-400",
+                        )}
+                        aria-hidden
+                      />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
 
       {/* Collapse toggle */}
       {onCollapsedChange && (

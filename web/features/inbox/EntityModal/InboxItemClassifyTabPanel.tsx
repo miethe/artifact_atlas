@@ -6,6 +6,7 @@
  */
 
 import * as React from "react";
+import { Inbox } from "lucide-react";
 import { useInboxItems } from "@/lib/hooks/useInbox";
 import { useImportAsset } from "@/lib/hooks/useAssets";
 import { InboxClassificationForm } from "../InboxClassificationForm";
@@ -36,6 +37,7 @@ export default function InboxItemClassifyTabPanel({
       <div className="flex flex-col items-center justify-center p-8">
         <EmptyState
           size="sm"
+          icon={<Inbox className="h-5 w-5" />}
           title="Item not found"
           description="This inbox item may have been moved or deleted."
         />

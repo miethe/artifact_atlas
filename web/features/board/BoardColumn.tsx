@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
+import { Kanban } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -45,10 +46,13 @@ export function BoardColumn({
         isOver && "border-blue-300 bg-blue-50/40",
       )}
     >
+      {/* 3px top accent bar using column color prop (P5-P1-007) */}
+      <div aria-hidden className={clsx("h-[3px] w-full rounded-t shrink-0", color)} />
+
       {/* Column header */}
       <div
         className={clsx(
-          "flex items-center gap-2 px-3 py-2 rounded-t border-b border-[var(--border)] bg-[var(--surface)]",
+          "flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--surface)]",
         )}
       >
         <span
@@ -58,7 +62,7 @@ export function BoardColumn({
         <span className="text-xs font-semibold text-[var(--ink)] flex-1 truncate">
           {title}
         </span>
-        <span className="text-[11px] font-medium text-[var(--ink-faint)] bg-gray-100 rounded-full px-1.5 py-0.5">
+        <span className="text-[11px] font-medium text-[var(--ink-muted)] bg-gray-100 rounded-full px-1.5 py-0.5">
           {assets.length}
         </span>
       </div>
@@ -79,6 +83,7 @@ export function BoardColumn({
           {assets.length === 0 ? (
             <EmptyState
               size="sm"
+              icon={<Kanban className="w-8 h-8" aria-hidden />}
               title="No assets"
               description="Drag assets here to move them."
             />
