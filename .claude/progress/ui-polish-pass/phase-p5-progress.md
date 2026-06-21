@@ -5,7 +5,7 @@ doc_type: progress
 prd: ui-polish-pass
 feature_slug: ui-polish-pass
 phase: P5
-status: in_progress
+status: completed
 created: '2026-06-21'
 updated: '2026-06-21'
 prd_ref: docs/project_plans/prds/features/ui-polish-pass-v1.md

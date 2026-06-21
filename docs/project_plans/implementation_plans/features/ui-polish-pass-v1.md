@@ -34,6 +34,12 @@ adr_refs:
 - 'ADR-6: Upstream-vs-local split policy'
 commit_refs:
 - c51a202c278ce5512b3e6a3f988cccff6d522be0
+- ffc0925
+- 423eb27
+- a4f14c4
+- 8cfd646
+- dd539dd
+- cd6e7c6
 ---
 
 # Implementation Plan: UI Polish Pass — Artifact Atlas
