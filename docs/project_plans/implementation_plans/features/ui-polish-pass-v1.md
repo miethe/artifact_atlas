@@ -47,6 +47,7 @@ commit_refs:
 - fa78ee6
 - 4848bfd
 - 8b1b11c
+- e99b57e
 ---
 
 # Implementation Plan: UI Polish Pass — Artifact Atlas
