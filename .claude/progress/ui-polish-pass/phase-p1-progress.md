@@ -12,6 +12,7 @@ prd_ref: docs/project_plans/prds/features/ui-polish-pass-v1.md
 plan_ref: docs/project_plans/implementation_plans/features/ui-polish-pass-v1/phase-p1-ds-foundation.md
 commit_refs:
 - 4b4f003cee6d36b4e44143a6568e28841bc03642
+- c51a202c278ce5512b3e6a3f988cccff6d522be0
 pr_refs: []
 owners:
 - frontend-architect

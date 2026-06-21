@@ -10,7 +10,8 @@ created: '2026-06-21'
 updated: '2026-06-21'
 prd_ref: docs/project_plans/prds/features/ui-polish-pass-v1.md
 plan_ref: docs/project_plans/implementation_plans/features/ui-polish-pass-v1/phase-p4a-asset-viewer.md
-commit_refs: []
+commit_refs:
+- c51a202c278ce5512b3e6a3f988cccff6d522be0
 pr_refs: []
 owners:
 - ui-engineer-enhanced

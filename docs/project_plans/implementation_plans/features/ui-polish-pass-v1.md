@@ -1,17 +1,19 @@
 ---
 schema_version: 2
 doc_type: implementation_plan
-title: "Implementation Plan: UI Polish Pass — Artifact Atlas"
-status: draft
-created: 2026-06-20
-updated: 2026-06-20
+title: "Implementation Plan: UI Polish Pass \u2014 Artifact Atlas"
+status: in_progress
+created: '2026-06-20'
+updated: '2026-06-21'
 feature_slug: ui-polish-pass
 feature_version: v1
 prd_ref: docs/project_plans/prds/features/ui-polish-pass-v1.md
 plan_ref: null
 spike_ref: docs/project_plans/spikes/ui-polish-pass-spike.md
-scope: "Adopt @miethe/ui design system, replace 5 bespoke detail surfaces with canonical tabbed-modal pattern, redesign cards with real per-format previews, ship multi-format AssetViewer, and land a prioritized facelift pass across AA web."
-effort_estimate: "55 pts"
+scope: Adopt @miethe/ui design system, replace 5 bespoke detail surfaces with canonical
+  tabbed-modal pattern, redesign cards with real per-format previews, ship multi-format
+  AssetViewer, and land a prioritized facelift pass across AA web.
+effort_estimate: 55 pts
 priority: high
 risk_level: medium
 tier: 3
@@ -19,16 +21,19 @@ deferred_items_spec_refs: []
 findings_doc_ref: null
 changelog_required: true
 related_documents:
-  - .claude/worknotes/ui-polish-pass/decisions-block.md
-  - docs/project_plans/upstream/miethe-ui-additions-v1.md
-  - .claude/worknotes/ui-polish-pass/discovery/leg-1-aa-frontend.md
+- .claude/worknotes/ui-polish-pass/decisions-block.md
+- docs/project_plans/upstream/miethe-ui-additions-v1.md
+- .claude/worknotes/ui-polish-pass/discovery/leg-1-aa-frontend.md
 adr_refs:
-  - "ADR-1: Adopt @miethe/ui via token-bridge, subpath imports, v0.6.0"
-  - "ADR-2: Canonical detail pattern — tabbed modal + full-page route, URL-driven"
-  - "ADR-3: Preview-card pattern — zone-composition card with top thumbnail"
-  - "ADR-4: Asset-viewer stack — dispatcher + per-format libs; PPTX server-side→PDF"
-  - "ADR-5: Facelift scope — P0 a11y/correctness + P1 high-impact; defer dark mode"
-  - "ADR-6: Upstream-vs-local split policy"
+- 'ADR-1: Adopt @miethe/ui via token-bridge, subpath imports, v0.6.0'
+- "ADR-2: Canonical detail pattern \u2014 tabbed modal + full-page route, URL-driven"
+- "ADR-3: Preview-card pattern \u2014 zone-composition card with top thumbnail"
+- "ADR-4: Asset-viewer stack \u2014 dispatcher + per-format libs; PPTX server-side\u2192\
+  PDF"
+- "ADR-5: Facelift scope \u2014 P0 a11y/correctness + P1 high-impact; defer dark mode"
+- 'ADR-6: Upstream-vs-local split policy'
+commit_refs:
+- c51a202c278ce5512b3e6a3f988cccff6d522be0
 ---
 
 # Implementation Plan: UI Polish Pass — Artifact Atlas
