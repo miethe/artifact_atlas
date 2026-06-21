@@ -42,6 +42,15 @@ const ContentRenderer = dynamic(
   },
 );
 
+// docx-preview manipulates the DOM — must be ssr:false (ADR-4)
+const DocxRenderer = dynamic(
+  () => import("./DocxRenderer").then((m) => ({ default: m.DocxRenderer })),
+  {
+    ssr: false,
+    loading: () => <RendererSkeleton />,
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -80,6 +89,10 @@ function isPdfMime(mime: string | null | undefined): boolean {
   return mime === "application/pdf";
 }
 
+function isDocxMime(mime: string | null | undefined): boolean {
+  return mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+}
+
 function isImageMime(mime: string | null | undefined): boolean {
   return !!mime && mime.startsWith("image/");
 }
@@ -109,7 +122,7 @@ function getFilePath(asset: Asset): string {
  * Determine the renderer type from MIME + extension.
  * Falls back to "content" for text-like types, "unknown" for unhandled.
  */
-type RendererKind = "image" | "svg" | "pdf" | "content" | "unknown";
+type RendererKind = "image" | "svg" | "pdf" | "docx" | "content" | "unknown";
 
 function resolveRenderer(asset: Asset): RendererKind {
   const mime = asset.mime_type;
@@ -117,6 +130,9 @@ function resolveRenderer(asset: Asset): RendererKind {
 
   // PDF
   if (isPdfMime(mime) || ext === ".pdf") return "pdf";
+
+  // DOCX (OpenXML Word document)
+  if (isDocxMime(mime) || ext === ".docx") return "docx";
 
   // SVG (handled separately to enforce <img>-only rendering)
   if (isSvgMime(mime) || ext === ".svg") return "svg";
@@ -214,6 +230,16 @@ export function AssetViewer({ asset, mode, editable = false, className }: AssetV
     case "pdf":
       return (
         <PdfRenderer
+          src={contentUrl}
+          originalUrl={originalUrl}
+          mode={mode}
+          className={className}
+        />
+      );
+
+    case "docx":
+      return (
+        <DocxRenderer
           src={contentUrl}
           originalUrl={originalUrl}
           mode={mode}

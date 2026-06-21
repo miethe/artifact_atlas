@@ -21,6 +21,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.3",
     "clsx": "^2.1.1",
+    "docx-preview": "0.3.7",
     "highlight.js": "^11.11.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.21.0",
