@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -15,15 +16,21 @@
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
+    "@miethe/ui": "^0.6.0",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.3",
     "clsx": "^2.1.1",
+    "highlight.js": "^11.11.1",
+    "lowlight": "^3.3.0",
     "lucide-react": "^1.21.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.6.0"
+    "react-hook-form": "^7.80.0",
+    "react-pdf": "^10.4.1",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
@@ -43,5 +50,10 @@
     "typescript": "^5.6.0",
     "vite": "^5.4.21",
     "vitest": "^2.1.9"
+  },
+  "overrides": {
+    "@codemirror/state": "^6.4.0",
+    "lucide-react": "^1.21.0",
+    "tailwind-merge": "^3.6.0"
   }
 }

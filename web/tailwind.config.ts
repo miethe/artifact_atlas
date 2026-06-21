@@ -6,6 +6,8 @@ const config: Config = {
     "./components/**/*.{ts,tsx}",
     "./features/**/*.{ts,tsx}",
     "./lib/**/*.{ts,tsx}",
+    // @miethe/ui compiled output — scan so its utility classes survive purge
+    "./node_modules/@miethe/ui/dist/**/*.{js,mjs}",
   ],
   theme: {
     extend: {
@@ -85,6 +87,42 @@ const config: Config = {
           DEFAULT: "var(--bg)",
           subtle: "var(--bg-subtle)",
         },
+        // --- shadcn token bridge (@miethe/ui) ---
+        // HSL-triplet vars wrapped in hsl(); border/input/ring point at
+        // the existing AA hex vars (valid for utility classes). See the
+        // SHADCN TOKEN BRIDGE block in app/globals.css.
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        input: "var(--border)",
+        ring: "var(--border-focus)",
       },
       borderRadius: {
         card: "8px",

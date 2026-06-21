@@ -22,6 +22,9 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
+// Subpath import ONLY — never the @miethe/ui root barrel (no 'use client').
+import { ContentPane } from "@miethe/ui/content-viewer";
+import { isFlagEnabled } from "@/lib/flags";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SensitivityBadge } from "@/components/ui/SensitivityBadge";
 import { Button } from "@/components/ui/Button";
@@ -35,6 +38,24 @@ import { AssetPreview } from "./components/AssetPreview";
 import { ProvenancePanel } from "./components/ProvenancePanel";
 import { PolicyPanel } from "./components/PolicyBadge";
 import { MetadataEditForm } from "./components/MetadataEditForm";
+
+// ============================================================
+// @miethe/ui design-system smoke screen (UI Polish Pass P1)
+// Behind the `miethe-ui-ds` flag. Renders ContentPane with static
+// markdown to prove the shadcn token bridge resolves (styled, not a
+// gray/unstyled box). Removed/replaced once real content views land.
+// ============================================================
+
+const DS_FLAG = "miethe-ui-ds";
+
+const SMOKE_MARKDOWN = `# Design-system smoke test
+
+This pane renders **@miethe/ui** \`ContentPane\` to verify the shadcn
+token bridge resolves against Artifact Atlas tokens.
+
+- Background, foreground, muted, and border tokens should match the app palette.
+- If this block renders gray/unstyled, the token bridge is not wired up.
+`;
 
 // ============================================================
 // Lifecycle status transition config
@@ -321,6 +342,21 @@ export function AssetDetail({ assetId, projectId }: AssetDetailProps) {
             </p>
           </div>
         </section>
+
+        {/* @miethe/ui design-system smoke screen (flagged) */}
+        {isFlagEnabled(DS_FLAG) && (
+          <section aria-label="Design-system smoke test">
+            <SectionHeader icon={Layers} title="Content viewer (preview)" />
+            <div className="rounded border border-[var(--border)] overflow-hidden">
+              <ContentPane
+                path="design-system-smoke.md"
+                content={SMOKE_MARKDOWN}
+                isLoading={false}
+                readOnly
+              />
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Right rail: actions + policy + provenance */}

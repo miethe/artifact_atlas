@@ -134,6 +134,43 @@
   --t-base: 150ms;
   --t-slow: 250ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ============================================================
+     SHADCN TOKEN BRIDGE (@miethe/ui) — ADDITIVE
+     @miethe/ui components consume these as hsl(var(--X)) (both as
+     Tailwind utility classes like bg-background and as raw inline
+     hsl() values), so every value below MUST be a bare HSL channel
+     triplet ("H S% L%") — NOT hex, NOT wrapped in hsl().
+
+     These mirror the AA palette (hex tokens defined above) but live
+     under shadcn names. NOTE: the AA `--border` / `--border-focus`
+     tokens stay hex (~240 `border-[var(--border)]` direct usages in
+     app code rely on the hex). The shadcn border / input / ring
+     Tailwind color keys therefore point straight at those AA hex
+     vars in tailwind.config.ts (a hex color is valid for the
+     border-border / border-input / ring-ring utilities, which never
+     wrap the value in hsl()). Do not rename or remove any AA hex
+     token above; this block only adds shadcn-named aliases.
+       background  ← --surface          foreground  ← --ink
+       card        ← --surface-raised   popover     ← --surface-overlay
+       primary     ← --brand-600        muted       ← --bg-subtle
+     ============================================================ */
+  --background: 0 0% 100%;
+  --foreground: 221 39% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 221 39% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 221 39% 11%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 100%;
+  --secondary-foreground: 221 39% 11%;
+  --muted: 218 21% 93%;
+  --muted-foreground: 219 10% 40%;
+  --accent: 0 0% 100%;
+  --accent-foreground: 221 39% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
 }
 
 /* ============================================================
