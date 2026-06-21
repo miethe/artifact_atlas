@@ -3,9 +3,17 @@
 /**
  * SlotCard — renders a single BOM slot in all UI states.
  *
- * States: empty/missing (dotted), partial, in_progress, complete, stale, blocked, not_applicable, optional.
- * Interactions: click-to-open drawer, assign, unassign, mark N/A, request asset, view assignments.
- * Keyboard: Enter/Space opens menu; all actions accessible without mouse.
+ * Zone model (P3-003):
+ *   HeaderZone  — status-colored band with large status icon (full-width ~96px)
+ *   ContentZone — slot name, phase+domain chips, optional "Assign" CTA
+ *   StatusZone  — SlotStatusBadge, optional/required badge, assignment count
+ *   ActionZone  — MoreHorizontal menu trigger
+ *
+ * States: empty/missing (dotted), partial, in_progress, complete, stale, blocked,
+ *         not_applicable, optional.
+ * Click-to-open guard: e.target.closest check on card root.
+ * Keyboard: Enter/Space opens slot detail; tabIndex=0 on non-N/A cards.
+ * Per-status border/bg styles preserved via ZoneCard className override.
  * Audit-sensitive actions (unassign, N/A) require confirm Dialog.
  */
 
@@ -29,7 +37,13 @@ import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { BomSlot, BomSlotStatus } from "@/lib/types";
 import { SlotStatusBadge, SLOT_STATUS_CONFIG } from "./SlotStatusBadge";
-import { useSlotAssign, useSlotUnassign, useSlotMarkNA, useSlotRequestAsset } from "../hooks/useBomSlot";
+import {
+  useSlotAssign,
+  useSlotUnassign,
+  useSlotMarkNA,
+  useSlotRequestAsset,
+} from "../hooks/useBomSlot";
+import { ZoneCard, isInteractiveTarget } from "@/features/ui/components/Card";
 
 // ============================================================
 // Status icon mapping
@@ -45,13 +59,25 @@ const STATUS_ICONS: Record<BomSlotStatus, React.ReactNode> = {
   not_applicable: <MinusCircle className="w-4 h-4" aria-hidden />,
 };
 
+/** Larger icons for the HeaderZone status band (~96px tall). */
+const STATUS_ICONS_LG: Record<BomSlotStatus, React.ReactNode> = {
+  missing: <Plus className="w-8 h-8" aria-hidden />,
+  partial: <AlertTriangle className="w-8 h-8" aria-hidden />,
+  in_progress: <Clock className="w-8 h-8" aria-hidden />,
+  complete: <CheckCircle2 className="w-8 h-8" aria-hidden />,
+  stale: <AlertTriangle className="w-8 h-8" aria-hidden />,
+  blocked: <Ban className="w-8 h-8" aria-hidden />,
+  not_applicable: <MinusCircle className="w-8 h-8" aria-hidden />,
+};
+
 // ============================================================
-// Card border/bg by status
+// Per-status styles
 // ============================================================
 
+/** Background + border for the card root (passed as ZoneCard className). */
 function getCardStyle(status: BomSlotStatus, required: boolean): string {
   if (status === "not_applicable") {
-    return "border border-[var(--border)] bg-gray-50 opacity-60";
+    return "border border-[var(--border)] bg-gray-50 opacity-60 cursor-default";
   }
   if (status === "missing" && required) {
     return "border-2 border-dashed border-red-300 bg-red-50/30 hover:border-red-400 hover:bg-red-50/50";
@@ -75,6 +101,45 @@ function getCardStyle(status: BomSlotStatus, required: boolean): string {
     return "border border-red-200 bg-red-50/20 hover:border-red-300";
   }
   return "border border-[var(--border)] bg-white hover:border-blue-300";
+}
+
+/** Left-accent color class per status. */
+function getStatusAccent(status: BomSlotStatus, required: boolean): string {
+  if (status === "not_applicable") return "border-l-gray-300";
+  if (status === "missing" && required) return "border-l-red-500";
+  if (status === "missing") return "border-l-gray-400";
+  if (status === "partial") return "border-l-amber-500";
+  if (status === "in_progress") return "border-l-sky-500";
+  if (status === "complete") return "border-l-emerald-600";
+  if (status === "stale") return "border-l-orange-500";
+  if (status === "blocked") return "border-l-red-700";
+  return "border-l-gray-400";
+}
+
+/** Background + icon color for the HeaderZone status band. */
+function getHeaderBg(status: BomSlotStatus, required: boolean): string {
+  if (status === "not_applicable") return "bg-gray-100";
+  if (status === "missing" && required) return "bg-red-50";
+  if (status === "missing") return "bg-gray-50";
+  if (status === "partial") return "bg-amber-50";
+  if (status === "in_progress") return "bg-sky-50";
+  if (status === "complete") return "bg-emerald-50";
+  if (status === "stale") return "bg-orange-50";
+  if (status === "blocked") return "bg-red-50";
+  return "bg-gray-50";
+}
+
+/** Icon color for the large header status icon. */
+function getHeaderIconColor(status: BomSlotStatus, required: boolean): string {
+  if (status === "not_applicable") return "text-gray-300";
+  if (status === "missing" && required) return "text-red-300";
+  if (status === "missing") return "text-gray-300";
+  if (status === "partial") return "text-amber-300";
+  if (status === "in_progress") return "text-sky-300";
+  if (status === "complete") return "text-emerald-400";
+  if (status === "stale") return "text-orange-300";
+  if (status === "blocked") return "text-red-300";
+  return "text-gray-300";
 }
 
 // ============================================================
@@ -119,7 +184,10 @@ function SlotMenu({
       {canAssign && (
         <button
           role="menuitem"
-          onClick={() => { onAssign(); onClose(); }}
+          onClick={() => {
+            onAssign();
+            onClose();
+          }}
           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--ink)] hover:bg-gray-50 text-left"
         >
           <Paperclip className="w-3.5 h-3.5 text-blue-500" aria-hidden />
@@ -129,7 +197,10 @@ function SlotMenu({
       {hasAssignments && (
         <button
           role="menuitem"
-          onClick={() => { onViewAssignments(); onClose(); }}
+          onClick={() => {
+            onViewAssignments();
+            onClose();
+          }}
           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--ink)] hover:bg-gray-50 text-left"
         >
           <ListChecks className="w-3.5 h-3.5 text-[var(--ink-muted)]" aria-hidden />
@@ -139,7 +210,10 @@ function SlotMenu({
       {canUnassign && (
         <button
           role="menuitem"
-          onClick={() => { onUnassign(); onClose(); }}
+          onClick={() => {
+            onUnassign();
+            onClose();
+          }}
           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 text-left"
         >
           <Unlink className="w-3.5 h-3.5" aria-hidden />
@@ -148,7 +222,10 @@ function SlotMenu({
       )}
       <button
         role="menuitem"
-        onClick={() => { onRequestAsset(); onClose(); }}
+        onClick={() => {
+          onRequestAsset();
+          onClose();
+        }}
         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--ink)] hover:bg-gray-50 text-left"
       >
         <MessageSquarePlus className="w-3.5 h-3.5 text-purple-500" aria-hidden />
@@ -159,7 +236,10 @@ function SlotMenu({
           <div className="my-1 border-t border-[var(--border)]" role="separator" />
           <button
             role="menuitem"
-            onClick={() => { onMarkNA(); onClose(); }}
+            onClick={() => {
+              onMarkNA();
+              onClose();
+            }}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 text-left"
           >
             <MinusCircle className="w-3.5 h-3.5" aria-hidden />
@@ -172,7 +252,7 @@ function SlotMenu({
 }
 
 // ============================================================
-// Assign dialog (simple: enter asset ID or search)
+// Assign dialog
 // ============================================================
 
 interface AssignDialogProps {
@@ -286,7 +366,6 @@ function ConfirmUnassignDialog({ open, slot, onClose }: ConfirmUnassignDialogPro
   const unassign = useSlotUnassign(slot.id);
 
   function handleConfirm() {
-    // We don't have assignment IDs from the slot card; unassign all
     unassign.mutate("all", { onSuccess: onClose });
   }
 
@@ -454,7 +533,7 @@ function RequestAssetDialog({ open, slot, onClose }: RequestAssetDialogProps) {
 }
 
 // ============================================================
-// View assignments drawer panel (inline list)
+// View assignments panel
 // ============================================================
 
 interface AssignmentsPanelProps {
@@ -548,157 +627,164 @@ export function SlotCard({ slot, onOpen }: SlotCardProps) {
   }, [menuOpen]);
 
   const cfg = SLOT_STATUS_CONFIG[slot.status];
+  const isNA = slot.status === "not_applicable";
+
+  // ── P3-006: Click-to-open guard ──────────────────────────────
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (isNA) return;
+    if (isInteractiveTarget(e)) return;
+    onOpen?.(slot);
+  };
+
+  // ── P3-007: Keyboard activation ──────────────────────────────
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      if (isNA) return;
+      e.preventDefault();
+      onOpen?.(slot);
+    }
+  };
+
+  // ── HeaderZone: status color band with large icon ────────────
+  const header = (
+    <div
+      className={clsx(
+        "w-full h-full flex items-center justify-center gap-3",
+        getHeaderBg(slot.status, slot.required),
+      )}
+    >
+      <span className={clsx(getHeaderIconColor(slot.status, slot.required))}>
+        {STATUS_ICONS_LG[slot.status]}
+      </span>
+      {/* Small status icon duplicate for extra visual clarity */}
+      {slot.status === "complete" && (
+        <span className="opacity-30 group-hover:opacity-0 transition-opacity duration-[100ms]">
+          {STATUS_ICONS[slot.status]}
+        </span>
+      )}
+    </div>
+  );
+
+  // ── ActionZone: MoreHorizontal menu ──────────────────────────
+  const actions = (
+    <div className="flex items-center gap-1 w-full">
+      {!slot.required && (
+        <span className="text-[10px] text-[var(--ink-faint)] font-medium uppercase tracking-wide">
+          opt
+        </span>
+      )}
+      <div className="relative ml-auto" ref={menuRef}>
+        <Tooltip content="Slot actions">
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-label={`Open actions for ${slot.name}`}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            className={clsx(
+              "rounded p-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+              "text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-white/70",
+              "transition-opacity duration-[100ms]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+            )}
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" aria-hidden />
+          </button>
+        </Tooltip>
+        {menuOpen && (
+          <SlotMenu
+            slot={slot}
+            onAssign={() => setAssignOpen(true)}
+            onUnassign={() => setUnassignOpen(true)}
+            onMarkNA={() => setNaOpen(true)}
+            onRequestAsset={() => setRequestOpen(true)}
+            onViewAssignments={() => setViewOpen(true)}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <>
-      <div
-        className={clsx(
-          "relative rounded-lg p-3 group transition-all duration-[150ms] cursor-pointer",
-          getCardStyle(slot.status, slot.required),
-          slot.status === "not_applicable" && "cursor-default",
-        )}
-        onClick={() => slot.status !== "not_applicable" && onOpen?.(slot)}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && slot.status !== "not_applicable") {
-            e.preventDefault();
-            onOpen?.(slot);
-          }
-        }}
+      <ZoneCard
+        accentColor={getStatusAccent(slot.status, slot.required)}
+        tier="default"
         role="article"
+        tabIndex={isNA ? -1 : 0}
         aria-label={`BOM slot: ${slot.name}, status: ${cfg.label}`}
-        tabIndex={slot.status === "not_applicable" ? -1 : 0}
-      >
-        {/* Top row: icon + status + optional badge + actions */}
-        <div className="flex items-start justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span
-              aria-hidden
+        onClick={handleCardClick}
+        onKeyDown={handleKeyDown}
+        className={getCardStyle(slot.status, slot.required)}
+        header={header}
+        content={
+          <>
+            <p
               className={clsx(
-                "shrink-0 mt-0.5",
-                slot.status === "missing" && slot.required && "text-red-500",
-                slot.status === "missing" && !slot.required && "text-[var(--ink-faint)]",
-                slot.status === "partial" && "text-amber-600",
-                slot.status === "in_progress" && "text-sky-600",
-                slot.status === "complete" && "text-emerald-600",
-                slot.status === "stale" && "text-orange-600",
-                slot.status === "blocked" && "text-red-700",
-                slot.status === "not_applicable" && "text-gray-400",
+                "text-xs font-semibold leading-tight truncate",
+                isNA ? "text-gray-400" : "text-[var(--ink)]",
               )}
             >
-              {STATUS_ICONS[slot.status]}
-            </span>
-            <SlotStatusBadge status={slot.status} size="xs" />
-          </div>
+              {slot.name}
+            </p>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {!slot.required && (
-              <span className="text-[10px] text-[var(--ink-faint)] font-medium uppercase tracking-wide">
-                opt
+            {/* Phase + domain chips */}
+            {(slot.phase || slot.domain) && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {slot.phase && (
+                  <span className="text-[10px] text-[var(--ink-faint)] bg-gray-100 rounded px-1.5 py-0.5 capitalize">
+                    {slot.phase}
+                  </span>
+                )}
+                {slot.domain && (
+                  <span className="text-[10px] text-[var(--ink-faint)] bg-gray-100 rounded px-1.5 py-0.5">
+                    {slot.domain}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Missing required — CTA strip */}
+            {slot.status === "missing" && slot.required && (
+              <button
+                type="button"
+                aria-label={`Assign asset to ${slot.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAssignOpen(true);
+                }}
+                className={clsx(
+                  "mt-1 w-full flex items-center justify-center gap-1.5",
+                  "py-1 rounded text-[11px] font-medium",
+                  "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200",
+                  "transition-colors duration-[100ms]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
+                )}
+              >
+                <Plus className="w-3 h-3" aria-hidden />
+                Assign
+              </button>
+            )}
+          </>
+        }
+        status={
+          <>
+            <SlotStatusBadge status={slot.status} size="xs" />
+            {slot.assignment_count > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--ink-muted)]">
+                <Paperclip className="w-2.5 h-2.5" aria-hidden />
+                {slot.assignment_count}
               </span>
             )}
-            {/* More actions button */}
-            <div className="relative" ref={menuRef}>
-              <Tooltip content="Slot actions">
-                <button
-                  ref={triggerRef}
-                  type="button"
-                  aria-label={`Open actions for ${slot.name}`}
-                  aria-expanded={menuOpen}
-                  aria-haspopup="menu"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen((v) => !v);
-                  }}
-                  className={clsx(
-                    "rounded p-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-                    "text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-white/70",
-                    "transition-opacity duration-[100ms]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                  )}
-                >
-                  <MoreHorizontal className="w-3.5 h-3.5" aria-hidden />
-                </button>
-              </Tooltip>
-              {menuOpen && (
-                <SlotMenu
-                  slot={slot}
-                  onAssign={() => setAssignOpen(true)}
-                  onUnassign={() => setUnassignOpen(true)}
-                  onMarkNA={() => setNaOpen(true)}
-                  onRequestAsset={() => setRequestOpen(true)}
-                  onViewAssignments={() => setViewOpen(true)}
-                  onClose={() => setMenuOpen(false)}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Slot name */}
-        <p
-          className={clsx(
-            "mt-2 text-xs font-semibold leading-tight truncate",
-            slot.status === "not_applicable"
-              ? "text-gray-400"
-              : "text-[var(--ink)]",
-          )}
-        >
-          {slot.name}
-        </p>
-
-        {/* Phase + domain metadata */}
-        <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-          {slot.phase && (
-            <span className="text-[10px] text-[var(--ink-faint)] bg-gray-100 rounded px-1.5 py-0.5 capitalize">
-              {slot.phase}
-            </span>
-          )}
-          {slot.domain && (
-            <span className="text-[10px] text-[var(--ink-faint)] bg-gray-100 rounded px-1.5 py-0.5">
-              {slot.domain}
-            </span>
-          )}
-        </div>
-
-        {/* Assignment count pill */}
-        {slot.assignment_count > 0 && (
-          <div className="mt-2 flex items-center gap-1">
-            <Paperclip className="w-3 h-3 text-[var(--ink-faint)]" aria-hidden />
-            <span className="text-[10px] text-[var(--ink-muted)]">
-              {slot.assignment_count} asset{slot.assignment_count !== 1 ? "s" : ""}
-            </span>
-          </div>
-        )}
-
-        {/* Missing required — CTA strip */}
-        {slot.status === "missing" && slot.required && (
-          <button
-            type="button"
-            aria-label={`Assign asset to ${slot.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setAssignOpen(true);
-            }}
-            className={clsx(
-              "mt-2.5 w-full flex items-center justify-center gap-1.5",
-              "py-1 rounded text-[11px] font-medium",
-              "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200",
-              "transition-colors duration-[100ms]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
-            )}
-          >
-            <Plus className="w-3 h-3" aria-hidden />
-            Assign
-          </button>
-        )}
-
-        {/* Complete checkmark overlay */}
-        {slot.status === "complete" && (
-          <div className="absolute top-2 right-2 opacity-20 group-hover:opacity-0 transition-opacity duration-[100ms]">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden />
-          </div>
-        )}
-      </div>
+          </>
+        }
+        actions={actions}
+      />
 
       {/* Dialogs — rendered outside the card to avoid z-index issues */}
       <AssignDialog
@@ -736,15 +822,16 @@ export function SlotCard({ slot, onOpen }: SlotCardProps) {
 
 export function SlotCardSkeleton() {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-white p-3 animate-pulse">
-      <div className="flex items-center gap-2">
-        <div className="w-4 h-4 rounded-full bg-gray-200" />
-        <div className="w-14 h-4 rounded-full bg-gray-200" />
-      </div>
-      <div className="mt-2 w-3/4 h-3 rounded bg-gray-200" />
-      <div className="mt-1.5 flex gap-1">
-        <div className="w-12 h-3.5 rounded bg-gray-100" />
-        <div className="w-16 h-3.5 rounded bg-gray-100" />
+    <div className="rounded-lg border border-l-4 border-l-gray-200 border-[var(--border)] bg-white animate-pulse overflow-hidden">
+      {/* Header band skeleton */}
+      <div className="w-full h-24 bg-gray-100" />
+      {/* Body skeleton */}
+      <div className="p-3 flex flex-col gap-2">
+        <div className="w-3/4 h-3 rounded bg-gray-200" />
+        <div className="flex gap-1">
+          <div className="w-12 h-3.5 rounded bg-gray-100" />
+          <div className="w-16 h-3.5 rounded bg-gray-100" />
+        </div>
       </div>
     </div>
   );

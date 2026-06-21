@@ -52,3 +52,8 @@ commit (this is the first time the feature is tracked).
 - Confirm no other feature dir collides with a bare gitignore pattern.
 - The Coverage feature being newly-tracked means its first commit carries pre-existing
   (non-P2b) code; this is expected and called out in the P2b commit message.
+- **Second exposed dir:** scoping the rule also revealed the Next.js *route*
+  `web/app/(projects)/projects/[projectId]/coverage/page.tsx` (pre-existing, Jun-20)
+  was likewise ignored and never committed — a fresh clone would 404 the coverage route
+  and fail `next build`. Tracked in the P3 commit. Swept for further `coverage` dirs:
+  none remain ignored.
