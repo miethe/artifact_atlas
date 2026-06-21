@@ -406,19 +406,50 @@ A SPIKE evaluated six architectural questions for the UI Polish Pass feature. Ea
 
 ### ADR-1 — Design System: CSS-Var + Tailwind Token Bridge for @miethe/ui
 
-Adopt `@miethe/ui` as the Artifact Atlas design system via a **shadcn-compatible CSS-var + Tailwind token bridge** (subpath imports only; consume v0.6.0, which requires a publish-from-source step as a prerequisite). A clean adoption path was adversarially refuted — the bridge is required to reconcile token namespacing between the upstream library and the local Tailwind config.
+#### Context
+Artifact Atlas uses a local Tailwind config whose token namespacing conflicts with `@miethe/ui`'s CSS custom property conventions. A clean adoption (no bridge) was adversarially evaluated and refuted — the bridge is load-bearing to reconcile the two namespacing schemes without forking either side. `@miethe/ui@0.6.0` had not yet been published and requires a publish-from-source prerequisite task before P1 can start.
+
+#### Decision
+Adopt `@miethe/ui` via a **shadcn-compatible CSS-var + Tailwind token bridge** with subpath imports only (e.g., `@miethe/ui/button`). Pin to v0.6.0. The bridge file lives in `web/src/styles/`; no upstream source is forked. The P1 ContentPane smoke screen is the hard gate — if the bridge fails, no downstream phase starts.
+
+#### Consequences
+Token bridge is a one-time integration cost; subsequent @miethe/ui upgrades follow semver. AA does not fork or vendor @miethe/ui source. The hard gate at P1 ensures downstream phases only proceed on a validated bridge.
+
+---
 
 ### ADR-2 — Canonical Detail Pattern: Tabbed Modal + Full-Page Route with Shared Tab Registry
 
-The canonical detail experience is a **tabbed modal (preview) + full-page route pair sharing one tab registry**, with state driven by URL query params (`?item=&tab=`). This replaces five bespoke detail surfaces that existed across the application.
+#### Context
+Five bespoke detail surfaces (asset library, BOM slot, coverage, template, inbox) each implemented their own layout, keyboard handling, and URL behavior inconsistently. Deep-linking was absent or broken; a11y focus management varied per surface, creating a fragmented maintenance burden. (Context-packs intentionally retains its RightDrawer and is out of scope for this migration.)
+
+#### Decision
+Replace all five surfaces with one **`EntityModal` shell + full-page route pair sharing a single tab registry**, with state driven by URL query params (`?item=&tab=`). The tab registry is the sole registration point for adding tabs across all entity types.
+
+#### Consequences
+Five migration targets (P2b) converge on one pattern, reducing future maintenance to a single codebase path. Deep-linking, keyboard-close, and focus management are correct for all surfaces simultaneously. Adding a new entity type requires registering one tab set, not building a bespoke surface.
+
+---
 
 ### ADR-3 — Preview Card Pattern: Zone-Composition Card with Full-Width Top Thumbnail
 
-The preview card pattern is a **zone-composition card** with a full-width top thumbnail that renders a real per-format preview (not a generic placeholder icon). Card zones are composed from discrete slot components.
+#### Context
+Existing card components used generic placeholder icons and offered no per-format asset identification at a glance. The card structure was monolithic, making it difficult to compose card variants or reuse preview logic across contexts.
+
+#### Decision
+Adopt a **zone-composition card** with a full-width top thumbnail that renders a real per-format preview (re-using P4a viewer renderers for thumbnail generation). Card zones (thumbnail, header, metadata, actions) are composed from discrete slot components rather than a single template.
+
+#### Consequences
+Cards share renderer logic with the AssetViewer (no duplication). Per-format thumbnails improve at-a-glance identification. Zone composition makes card variants (compact, expanded, drag-handle) straightforward to assemble from existing slot components.
+
+---
 
 ### ADR-4 — Asset Viewer: Dispatcher + Per-Format Libs; PPTX Server-Side Seam
 
-An `AssetViewer` dispatcher routes to per-format rendering libraries:
+#### Context
+No unified asset preview component existed. Library evaluation confirmed no React 19-compatible PPTX renderer is available at the time of the SPIKE. DOCX requires `docx-preview`; PDF requires `react-pdf`. Untrusted uploaded files require a centralised security posture preventing XSS and SSRF across all formats.
+
+#### Decision
+An `AssetViewer` dispatcher routes by MIME type to per-format rendering libraries:
 
 | Format | Library |
 |---|---|
@@ -428,15 +459,38 @@ An `AssetViewer` dispatcher routes to per-format rendering libraries:
 | DOCX | `docx-preview` |
 | PPTX | Server-side PPTX→PDF conversion seam (no React 19–compatible PPTX renderer exists) |
 
-Only code and Markdown files are editable; binaries are read-only. An untrusted-file security posture applies to all uploaded content.
+Only Markdown and code formats are editable; all binary formats are read-only. Untrusted-file security posture is enforced centrally in the dispatcher (`sanitize=true`, `fetchRelated:false`, SVG via `<img>`).
+
+#### Consequences
+PPTX requires a backend conversion seam (P4c); client-side PPTX preview is blocked until a React 19-compatible renderer ships. Dispatcher pattern allows new format renderers to be added by registering a MIME entry without touching existing renderers. Security posture is centrally enforced rather than duplicated per-renderer.
+
+---
 
 ### ADR-5 — Facelift Scope: P0 A11y/Correctness First, P1 High-Impact Visual; Dark Mode Deferred
 
-Facelift work is prioritized as: **P0 — accessibility and correctness fixes** (blocking issues); **P1 — high-impact visual improvements**. Dark mode is explicitly deferred out of scope for this pass.
+#### Context
+The facelift backlog spanned critical blocking a11y failures (contrast, font stack, reduced-motion), high-impact visual improvements, and aspirational dark mode support. Dark mode requires a whole new token axis in `@miethe/ui` and is an AA product direction decision; shipping it in this sprint was assessed as out of scope.
+
+#### Decision
+Prioritize as two bands: **P0 — a11y/correctness** (font stack, contrast ≥4.5:1, `prefers-reduced-motion`, surface icons, collaboration footer) runs in parallel with P1 as it touches independent files. **P1 — high-impact visual** items follow P3. Dark mode is explicitly deferred (DEFER-1).
+
+#### Consequences
+Critical a11y issues land before any other visual work; P5-P0 is independent of the design-system gate and can start immediately. Dark mode is promoted to a dedicated design spec (`docs/project_plans/design-specs/dark-mode-aa.md`) gated on an AA product direction change. Facelift scope is bounded to prevent blocking the wider feature.
+
+---
 
 ### ADR-6 — Upstream vs Local Split: Shared Gaps Go to @miethe/ui, AA-Specific Stays Local
 
-Component work is split by ownership: gaps that are broadly reusable (and belong in the shared design system) are contributed **upstream to @miethe/ui**; Artifact Atlas–specific components remain **local**. This preserves the design system's role as the shared canonical library.
+#### Context
+Several component gaps identified during the SPIKE (shiki syntax highlighting, CM6 language packs, dark-mode MarkdownEditor) are broadly reusable across projects beyond AA. Keeping them local would create a diverging fork; contributing them upstream unblocks other consumers of `@miethe/ui`.
+
+#### Decision
+Broadly reusable component gaps are contributed **upstream to `@miethe/ui`** (tracked separately in `docs/project_plans/upstream/miethe-ui-additions-v1.md`). AA-specific components remain local. Ambiguous cases default to local with a promotion note; the split is evaluated per-component during P6.
+
+#### Consequences
+`@miethe/ui` grows as the shared canonical library; AA avoids accumulating a diverging fork. Upstream additions are gated on `@miethe/ui` release cadence (DEFER-5). Local-only components can be promoted upstream in future sprints without changing any AA API.
+
+---
 
 ### References
 
@@ -450,4 +504,4 @@ Component work is split by ownership: gaps that are broadly reusable (and belong
 - The token bridge is a one-time integration cost; subsequent @miethe/ui upgrades follow semver.
 - Five bespoke detail surfaces are consolidated into one tab-registry pattern, reducing maintenance surface.
 - PPTX rendering requires a server-side conversion seam; PPTX files cannot be previewed client-side until a React 19–compatible renderer exists.
-- Facelift scope is bounded; dark mode and other visual enhancements are explicitly deferred.
+- Facelift scope is bounded; dark mode and other visual enhancements are explicitly deferred with design-spec stubs.

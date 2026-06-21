@@ -293,21 +293,32 @@ Aligned with spec §22.1. Epic E6 (Template Builder) is elevated to its own epic
 
 ---
 
-### Phase UI — UI Polish Pass (Planned)
+### Phase UI — UI Polish Pass (In Progress)
 
-> Tier 3 feature sprint. ~55 story points across 6 phases. Status: **Planned** — ready for execution via `/dev:execute-plan`. Gated on `@miethe/ui@0.6.0` publish (publish-from-source prerequisite) and token-bridge integration (ADR-1, D-012).
+> Tier 3 feature sprint. ~55 story points across 6 phases. Status: **In Progress** — core pillars (P1–P5) complete; P6 hardening in progress. Gated on `@miethe/ui@0.6.0` publish (publish-from-source prerequisite) and token-bridge integration (ADR-1, D-012).
 >
 > PRD: `docs/project_plans/prds/features/ui-polish-pass-v1.md`
 > Plan: `docs/project_plans/implementation_plans/features/ui-polish-pass-v1.md`
 
-| ID | Phase | Title | Notes |
-|---|---|---|---|
-| UI-P1 | Design System Foundation | CSS-var + Tailwind token bridge; @miethe/ui v0.6.0 subpath import wiring | Gated on @miethe/ui@0.6.0 publish; ADR-1 (D-012) |
-| UI-P2 | Tabbed Modal Pattern | Shared tab registry; tabbed modal (preview) + full-page route; URL-driven `?item=&tab=`; replaces 5 bespoke detail surfaces | ADR-2 (D-012) |
-| UI-P3 | Preview Cards | Zone-composition card pattern; full-width top thumbnail with real per-format preview | ADR-3 (D-012) |
-| UI-P4 | Multi-Format Asset Viewer | AssetViewer dispatcher; next/image, react-pdf, @miethe/ui ContentPane, docx-preview; PPTX→PDF server-side seam; untrusted-file security posture | ADR-4 (D-012) |
-| UI-P5 | Facelift | P0 a11y/correctness fixes; P1 high-impact visual improvements; dark mode deferred | ADR-5 (D-012) |
-| UI-P6 | Hardening | Upstream/local component split finalized; @miethe/ui gap contributions; integration QA and regression tests | ADR-6 (D-012) |
+| ID | Phase | Title | Status | Notes |
+|---|---|---|---|---|
+| UI-P1 | Design System Foundation | CSS-var + Tailwind token bridge; @miethe/ui v0.6.0 subpath import wiring | ✓ Complete | ADR-1 (D-012) |
+| UI-P2 | Tabbed Modal Pattern | Shared tab registry; tabbed modal (preview) + full-page route; URL-driven `?item=&tab=`; replaces 5 bespoke detail surfaces | ✓ Complete | ADR-2 (D-012) |
+| UI-P3 | Preview Cards | Zone-composition card pattern; full-width top thumbnail with real per-format preview | ✓ Complete | ADR-3 (D-012) |
+| UI-P4 | Multi-Format Asset Viewer | AssetViewer dispatcher; next/image, react-pdf, @miethe/ui ContentPane, docx-preview; PPTX→PDF server-side seam; untrusted-file security posture | ✓ Complete | ADR-4 (D-012) |
+| UI-P5 | Facelift | P0 a11y/correctness fixes; P1 high-impact visual improvements; dark mode deferred | ✓ Complete | ADR-5 (D-012) |
+| UI-P6 | Hardening | Upstream/local component split finalized; @miethe/ui gap contributions; integration QA and regression tests | In Progress | ADR-6 (D-012) |
+
+#### UI Polish Pass — Deferred Items
+
+Items descoped during the UI Polish Pass sprint. Each has a design-spec stub for future promotion.
+
+| Item ID | Title | Reason Deferred | Trigger for Promotion | Design Spec |
+|---------|-------|-----------------|-----------------------|-------------|
+| DEFER-1 | Dark Mode (AA) | AA intentionally light-only; dark mode requires a whole new token axis in `@miethe/ui` | AA product direction change | [dark-mode-aa.md](docs/project_plans/design-specs/dark-mode-aa.md) |
+| DEFER-2 | Leg-5 P2 Facelift Items | Filter-bar, view-mode labels, board add-card, and other polish items deferred after P1 landed | Post-P1 polish sprint decision | [facelift-p2-items.md](docs/project_plans/design-specs/facelift-p2-items.md) |
+| DEFER-3 | Leg-5 P3 Facelift Items | Facepile, provenance ribbon, Board Group By, and deeper visual work deferred | Product priority decision | [facelift-p3-items.md](docs/project_plans/design-specs/facelift-p3-items.md) |
+| DEFER-4 | Asset Viewer Extensions | Preview formats beyond the 6 defined (video, audio, ZIP, etc.) blocked on verified-compatible libraries | New verified-compatible library available | [asset-viewer-extensions.md](docs/project_plans/design-specs/asset-viewer-extensions.md) |
 
 ---
 
