@@ -8,7 +8,7 @@ updated: 2026-06-20
 feature_slug: "ui-polish-pass"
 estimated_points: "55 (Tier 3)"
 tier: "3"
-related_feature_prd: "docs/project_plans/prds/features/ui-polish-pass-prd.md"
+related_feature_prd: "docs/project_plans/prds/features/ui-polish-pass-v1.md"
 related_spike: "docs/project_plans/spikes/ui-polish-pass-spike.md"
 ---
 
