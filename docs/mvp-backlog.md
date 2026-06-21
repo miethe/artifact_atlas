@@ -293,6 +293,24 @@ Aligned with spec §22.1. Epic E6 (Template Builder) is elevated to its own epic
 
 ---
 
+### Phase UI — UI Polish Pass (Planned)
+
+> Tier 3 feature sprint. ~55 story points across 6 phases. Status: **Planned** — ready for execution via `/dev:execute-plan`. Gated on `@miethe/ui@0.6.0` publish (publish-from-source prerequisite) and token-bridge integration (ADR-1, D-012).
+>
+> PRD: `docs/project_plans/prds/features/ui-polish-pass-v1.md`
+> Plan: `docs/project_plans/implementation_plans/features/ui-polish-pass-v1.md`
+
+| ID | Phase | Title | Notes |
+|---|---|---|---|
+| UI-P1 | Design System Foundation | CSS-var + Tailwind token bridge; @miethe/ui v0.6.0 subpath import wiring | Gated on @miethe/ui@0.6.0 publish; ADR-1 (D-012) |
+| UI-P2 | Tabbed Modal Pattern | Shared tab registry; tabbed modal (preview) + full-page route; URL-driven `?item=&tab=`; replaces 5 bespoke detail surfaces | ADR-2 (D-012) |
+| UI-P3 | Preview Cards | Zone-composition card pattern; full-width top thumbnail with real per-format preview | ADR-3 (D-012) |
+| UI-P4 | Multi-Format Asset Viewer | AssetViewer dispatcher; next/image, react-pdf, @miethe/ui ContentPane, docx-preview; PPTX→PDF server-side seam; untrusted-file security posture | ADR-4 (D-012) |
+| UI-P5 | Facelift | P0 a11y/correctness fixes; P1 high-impact visual improvements; dark mode deferred | ADR-5 (D-012) |
+| UI-P6 | Hardening | Upstream/local component split finalized; @miethe/ui gap contributions; integration QA and regression tests | ADR-6 (D-012) |
+
+---
+
 ## Phase 6 — v1 Expansion (Deferred)
 
 > Spec §21 Phase 5 (enterprise hardening) + v1 growth features. These items are out of scope for MVP.

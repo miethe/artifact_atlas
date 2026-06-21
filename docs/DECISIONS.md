@@ -390,3 +390,64 @@ MVP is feature-complete (Phases 0–4). Phase 5 hardens the system for pilot dep
 - Developers can contribute to Phases 6+ without re-learning architecture
 - Pilot operator has a structured checklist to validate MVP functionality
 - Phase 6 planning can reference completed Phase 5 decisions as foundation
+
+---
+
+## D-012 — UI Polish Pass: Design System Bridge, Detail Pattern, Preview Cards, Asset Viewer, and Facelift Strategy
+
+**Status**: Accepted (planning; SPIKE verdict CONDITIONAL GO, gated on @miethe/ui@0.6.0 + token-bridge)
+**Date**: 2026-06-21
+**Phase**: UI Polish Pass
+**Deciders**: lead-architect, frontend-architect
+
+### Context
+
+A SPIKE evaluated six architectural questions for the UI Polish Pass feature. Each question was adversarially reviewed before acceptance. The six resulting ADRs are recorded below.
+
+### ADR-1 — Design System: CSS-Var + Tailwind Token Bridge for @miethe/ui
+
+Adopt `@miethe/ui` as the Artifact Atlas design system via a **shadcn-compatible CSS-var + Tailwind token bridge** (subpath imports only; consume v0.6.0, which requires a publish-from-source step as a prerequisite). A clean adoption path was adversarially refuted — the bridge is required to reconcile token namespacing between the upstream library and the local Tailwind config.
+
+### ADR-2 — Canonical Detail Pattern: Tabbed Modal + Full-Page Route with Shared Tab Registry
+
+The canonical detail experience is a **tabbed modal (preview) + full-page route pair sharing one tab registry**, with state driven by URL query params (`?item=&tab=`). This replaces five bespoke detail surfaces that existed across the application.
+
+### ADR-3 — Preview Card Pattern: Zone-Composition Card with Full-Width Top Thumbnail
+
+The preview card pattern is a **zone-composition card** with a full-width top thumbnail that renders a real per-format preview (not a generic placeholder icon). Card zones are composed from discrete slot components.
+
+### ADR-4 — Asset Viewer: Dispatcher + Per-Format Libs; PPTX Server-Side Seam
+
+An `AssetViewer` dispatcher routes to per-format rendering libraries:
+
+| Format | Library |
+|---|---|
+| Images | `next/image` |
+| PDF | `react-pdf` |
+| Rich content | `@miethe/ui ContentPane` |
+| DOCX | `docx-preview` |
+| PPTX | Server-side PPTX→PDF conversion seam (no React 19–compatible PPTX renderer exists) |
+
+Only code and Markdown files are editable; binaries are read-only. An untrusted-file security posture applies to all uploaded content.
+
+### ADR-5 — Facelift Scope: P0 A11y/Correctness First, P1 High-Impact Visual; Dark Mode Deferred
+
+Facelift work is prioritized as: **P0 — accessibility and correctness fixes** (blocking issues); **P1 — high-impact visual improvements**. Dark mode is explicitly deferred out of scope for this pass.
+
+### ADR-6 — Upstream vs Local Split: Shared Gaps Go to @miethe/ui, AA-Specific Stays Local
+
+Component work is split by ownership: gaps that are broadly reusable (and belong in the shared design system) are contributed **upstream to @miethe/ui**; Artifact Atlas–specific components remain **local**. This preserves the design system's role as the shared canonical library.
+
+### References
+
+- `docs/project_plans/spikes/ui-polish-pass-spike.md`
+- `docs/project_plans/prds/features/ui-polish-pass-v1.md`
+- `docs/project_plans/implementation_plans/features/ui-polish-pass-v1.md`
+
+### Consequences
+
+- Artifact Atlas UI adopts a consistent design language via @miethe/ui once v0.6.0 is published.
+- The token bridge is a one-time integration cost; subsequent @miethe/ui upgrades follow semver.
+- Five bespoke detail surfaces are consolidated into one tab-registry pattern, reducing maintenance surface.
+- PPTX rendering requires a server-side conversion seam; PPTX files cannot be previewed client-side until a React 19–compatible renderer exists.
+- Facelift scope is bounded; dark mode and other visual enhancements are explicitly deferred.
