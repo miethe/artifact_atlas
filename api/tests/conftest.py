@@ -36,8 +36,10 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     settings.reports_dir = tmp_path / "reports"
     settings.thumbnails_dir = tmp_path / "thumbnails"
     settings.previews_dir = tmp_path / "previews"
+    settings.pptx_cache_dir = tmp_path / "pptx-cache"
     settings.workspace_id = "ws_test"
     settings.workspace_name = "Test Workspace"
+    settings.workspace_root = tmp_path
     settings.default_sensitivity = "personal"
     settings.default_agent_access = "metadata_only"
     settings.automated_promotion_allowed = False

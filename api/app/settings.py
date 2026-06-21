@@ -78,6 +78,12 @@ class Settings:
         self.workspace_id: str = workspace_cfg.get("id", "ws_artifact_atlas_local")
         self.workspace_name: str = workspace_cfg.get("name", "Artifact Atlas Local")
 
+        # Containment root for asset-file path resolution. Asset URIs are
+        # repo-relative (or absolute under the repo); the preview proxy/convert
+        # seam confines resolved paths to this root to block file:// LFI/SSRF
+        # (R6; findings F-002). Tests override this to the tmp workspace.
+        self.workspace_root: Path = _REPO_ROOT
+
         # -- Storage directories (relative to repo root; env overrides are absolute-safe)
         reg_dir_raw = os.environ.get("ATLAS_REGISTRY_DIR") or storage.get(
             "registry_dir", "registry"
@@ -99,6 +105,9 @@ class Settings:
 
         previews_dir_raw = storage.get("previews_dir", "assets/previews")
         self.previews_dir: Path = _make_absolute(previews_dir_raw, _REPO_ROOT)
+
+        pptx_cache_dir_raw = storage.get("pptx_cache_dir", "assets/pptx-cache")
+        self.pptx_cache_dir: Path = _make_absolute(pptx_cache_dir_raw, _REPO_ROOT)
 
         # -- Integration export directories (Phase 4 adapters)
         meatywiki_dir_raw = exports_cfg.get("meatywiki_dir", "exports/meatywiki")

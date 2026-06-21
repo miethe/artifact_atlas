@@ -14,6 +14,7 @@ from app.api import (
     inbox,
     integrations,
     policies,
+    preview,
     projects,
     search,
     templates,
@@ -30,6 +31,7 @@ all_routers = [
     audit.router,
     policies.router,
     integrations.router,
+    preview.router,
 ]
 
 __all__ = ["all_routers"]
