@@ -2,7 +2,12 @@
 
 /**
  * AssetLibrary — main client component for the asset library page.
- * Wires: FilterBar + URL state, ViewToggle, AssetGallery/Table, BulkActionBar, RightDrawer.
+ * Wires: FilterBar + URL state, ViewToggle, AssetGallery/Table, BulkActionBar.
+ *
+ * P2b: When flag:ui-tabbed-modal (or flag:ui-tabbed-modal-asset) is on, asset
+ * inspection uses EntityModal (URL-driven, tabbed). Legacy RightDrawer + AssetDrawerContent
+ * remain available when both flags are off.
+ *
  * ViewModes: gallery (default), table. Board/timeline scaffolded but hidden.
  */
 
@@ -14,6 +19,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { useAssets } from "@/lib/hooks/useAssets";
+import { isFlagEnabled } from "@/lib/flags";
 import type { Asset } from "@/lib/types";
 import { FilterBar } from "./components/FilterBar";
 import { AssetCard, AssetCardSkeleton } from "./components/AssetCard";
@@ -23,6 +29,8 @@ import { BulkActionBar } from "./components/BulkActionBar";
 import { SortMenu } from "./components/SortMenu";
 import { MetadataEditDialog } from "./components/MetadataEditForm";
 import { useAssetFilters } from "./hooks/useAssetFilters";
+import { EntityModal, useEntityModalUrl } from "@/features/ui/components/EntityModal";
+import { ASSET_TAB_REGISTRY } from "./components/EntityModal/AssetTabRegistry";
 
 // ============================================================
 // View mode options
@@ -93,10 +101,19 @@ export interface AssetLibraryProps {
 export function AssetLibrary({ projectId }: AssetLibraryProps) {
   const { filters, sortField, sortDir, setFilters, setSort } = useAssetFilters();
 
+  // Feature flag: use EntityModal (P2b) vs legacy RightDrawer.
+  const useEntityModalFlag =
+    isFlagEnabled("ui-tabbed-modal") || isFlagEnabled("ui-tabbed-modal-asset");
+
   const [viewMode, setViewMode] = React.useState<ViewMode>("gallery");
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-  const [inspectAssetId, setInspectAssetId] = React.useState<string | null>(null);
+  // Legacy drawer state (used when flag is off).
+  const [legacyInspectId, setLegacyInspectId] = React.useState<string | null>(null);
   const [editAssetId, setEditAssetId] = React.useState<string | null>(null);
+
+  // EntityModal URL state (used when flag is on — always called per hook rules).
+  const { isOpen: modalIsOpen, itemId: modalItemId, open: modalOpen, close: modalClose } =
+    useEntityModalUrl(ASSET_TAB_REGISTRY);
 
   // Data
   const { data, isLoading, isError } = useAssets(projectId, {
@@ -114,12 +131,12 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
     [allAssets, sortField, sortDir],
   );
 
-  // Inspected asset
-  const inspectAsset = inspectAssetId
-    ? sortedAssets.find((a) => a.id === inspectAssetId) ?? null
+  // Legacy: inspected asset object (only needed when drawer is active).
+  const legacyInspectAsset = legacyInspectId
+    ? sortedAssets.find((a) => a.id === legacyInspectId) ?? null
     : null;
 
-  // Edit asset
+  // Edit asset (used by legacy drawer's MetadataEditDialog).
   const editAsset = editAssetId
     ? sortedAssets.find((a) => a.id === editAssetId) ?? null
     : null;
@@ -140,7 +157,16 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
   }
 
   function handleOpen(assetId: string) {
-    setInspectAssetId((prev) => (prev === assetId ? null : assetId));
+    if (useEntityModalFlag) {
+      // Toggle: close modal if same asset is clicked while open.
+      if (modalIsOpen && modalItemId === assetId) {
+        modalClose();
+      } else {
+        modalOpen(assetId);
+      }
+    } else {
+      setLegacyInspectId((prev) => (prev === assetId ? null : assetId));
+    }
   }
 
   function handleCopyLink(assetId: string) {
@@ -149,7 +175,7 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
     );
   }
 
-  const drawerOpen = !!inspectAssetId;
+  const drawerOpen = !useEntityModalFlag && !!legacyInspectId;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -253,7 +279,9 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
                     onSelect={handleSelect}
                     onOpen={handleOpen}
                     onCopyLink={handleCopyLink}
-                    onAddToPack={(id) => setInspectAssetId(id)}
+                    onAddToPack={(id) =>
+                      useEntityModalFlag ? modalOpen(id) : setLegacyInspectId(id)
+                    }
                   />
                 ))
               )}
@@ -273,31 +301,49 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
           )}
         </div>
 
-        {/* Right Inspector Drawer — uses shell RightDrawer for focus-trap + Escape */}
-        <RightDrawer
-          open={drawerOpen}
-          onClose={() => setInspectAssetId(null)}
-          title="Inspector"
-          width="md"
-          overlay={false}
-        >
-          <AssetDrawerContent
-            asset={inspectAsset}
-            loading={isLoading}
-            projectId={projectId}
-            onEdit={(id) => setEditAssetId(id)}
-            onCopyLink={handleCopyLink}
-            onAddToPack={(id) => setInspectAssetId(id)}
-          />
-        </RightDrawer>
+        {/* Legacy Right Inspector Drawer — shown only when flag is OFF */}
+        {!useEntityModalFlag && (
+          <RightDrawer
+            open={drawerOpen}
+            onClose={() => setLegacyInspectId(null)}
+            title="Inspector"
+            width="md"
+            overlay={false}
+          >
+            <AssetDrawerContent
+              asset={legacyInspectAsset}
+              loading={isLoading}
+              projectId={projectId}
+              onEdit={(id) => setEditAssetId(id)}
+              onCopyLink={handleCopyLink}
+              onAddToPack={(id) => setLegacyInspectId(id)}
+            />
+          </RightDrawer>
+        )}
       </div>
 
-      {/* Metadata edit dialog */}
-      <MetadataEditDialog
-        asset={editAsset}
-        open={!!editAssetId}
-        onClose={() => setEditAssetId(null)}
-      />
+      {/* EntityModal — shown only when flag is ON */}
+      {useEntityModalFlag && modalIsOpen && (
+        <EntityModal
+          entityType="asset"
+          entityId={modalItemId ?? undefined}
+          projectId={projectId}
+          tabRegistry={ASSET_TAB_REGISTRY}
+          onClose={modalClose}
+          title={
+            sortedAssets.find((a) => a.id === modalItemId)?.title
+          }
+        />
+      )}
+
+      {/* Metadata edit dialog (legacy path — Details tab owns it when flag is on) */}
+      {!useEntityModalFlag && (
+        <MetadataEditDialog
+          asset={editAsset}
+          open={!!editAssetId}
+          onClose={() => setEditAssetId(null)}
+        />
+      )}
     </div>
   );
 }

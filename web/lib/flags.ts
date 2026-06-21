@@ -16,6 +16,21 @@ const FLAG_DEV_DEFAULTS: Record<string, boolean> = {
   // @miethe/ui design-system adoption (UI Polish Pass P1). On in dev so the
   // token bridge / ContentPane surfaces render without extra env setup.
   "miethe-ui-ds": true,
+
+  // EntityModal migration (UI Polish Pass P2b). On in dev so all 5 migrated
+  // surfaces render the new canonical modal without extra env wiring.
+  // Post-P6 global cutover: add "ui-tabbed-modal" to NEXT_PUBLIC_FLAGS and
+  // remove this dev default.
+  "ui-tabbed-modal": true,
+
+  // Per-surface overrides — enable a single surface when the master flag is
+  // off (useful for incremental rollout or cherry-pick testing in non-dev).
+  // All default false; the master flag above covers dev.
+  "ui-tabbed-modal-asset": false,
+  "ui-tabbed-modal-bom": false,
+  "ui-tabbed-modal-coverage": false,
+  "ui-tabbed-modal-template": false,
+  "ui-tabbed-modal-inbox": false,
 };
 
 function parseFlagList(raw: string | undefined): Set<string> {

@@ -4,18 +4,25 @@
  * TemplateLibrary — BOM-UI-001
  * Filterable template list + right preview inspector.
  * Left panel: search/filter + template cards.
- * Right panel: TemplatePreviewPanel with domains, slot counts, apply button.
+ * Right panel: TemplatePreviewPanel (legacy) OR EntityModal (P2b flag).
+ *
+ * P2b: When flag:ui-tabbed-modal (or flag:ui-tabbed-modal-template) is on, the
+ * persistent right aside (TemplatePreviewPanel) is replaced by EntityModal
+ * triggered by template selection. The template list fills the full width.
  */
 
 import * as React from "react";
 import { clsx } from "clsx";
 import { Search, X, Plus, Wrench } from "lucide-react";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
+import { isFlagEnabled } from "@/lib/flags";
 import { useTemplates } from "./hooks";
 import { TemplateCard } from "./components/TemplateCard";
 import { TemplatePreviewPanel } from "./components/TemplatePreviewPanel";
 import type { ArtifactTemplate, TemplateLibraryFilters } from "./types";
 import type { TemplateStatus, TemplateType } from "@/lib/types";
+import { EntityModal, useEntityModalUrl } from "@/features/ui/components/EntityModal";
+import { TEMPLATE_TAB_REGISTRY } from "./components/EntityModal/TemplateTabRegistry";
 
 // ============================================================
 // Props
@@ -97,13 +104,22 @@ export function TemplateLibrary({
   const { data: templatesRaw, isLoading } = useTemplates();
   const templates: ArtifactTemplate[] = (templatesRaw ?? []) as ArtifactTemplate[];
 
+  // Feature flag: EntityModal (P2b) vs legacy persistent aside.
+  const useEntityModalFlag =
+    isFlagEnabled("ui-tabbed-modal") || isFlagEnabled("ui-tabbed-modal-template");
+
   const [filters, setFilters] = React.useState<TemplateLibraryFilters>({
     q: "",
     status: "all",
     type: "all",
     domainFilter: "",
   });
+  // Local selected ID for the legacy aside / Apply button.
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+
+  // EntityModal URL state (always called per hook rules).
+  const { isOpen: modalIsOpen, itemId: modalItemId, open: modalOpen, close: modalClose } =
+    useEntityModalUrl(TEMPLATE_TAB_REGISTRY);
 
   const filtered = React.useMemo(
     () => filterTemplates(templates, filters),
@@ -259,7 +275,12 @@ export function TemplateLibrary({
       <div className="flex flex-1 min-h-0">
         {/* Left: template list */}
         <div
-          className="w-[340px] shrink-0 flex flex-col border-r border-[var(--border)] overflow-hidden"
+          className={clsx(
+            "flex flex-col overflow-hidden",
+            useEntityModalFlag
+              ? "flex-1"
+              : "w-[340px] shrink-0 border-r border-[var(--border)]",
+          )}
           role="listbox"
           aria-label="Templates"
           aria-multiselectable={false}
@@ -301,7 +322,12 @@ export function TemplateLibrary({
                     key={t.id}
                     template={t}
                     selected={t.id === selectedId}
-                    onClick={() => setSelectedId(t.id)}
+                    onClick={() => {
+                      // Keep selectedId for the Apply button; open the modal when
+                      // the P2b flag is on, else fall back to the legacy aside.
+                      setSelectedId(t.id);
+                      if (useEntityModalFlag) modalOpen(t.id);
+                    }}
                   />
                 ))}
               </div>
@@ -309,14 +335,28 @@ export function TemplateLibrary({
           </div>
         </div>
 
-        {/* Right: preview inspector */}
-        <TemplatePreviewPanel
-          template={selected}
-          showApplyButton={!!onApplyTemplate}
-          onApply={() => selected && onApplyTemplate?.(selected)}
-          className="flex-1"
-        />
+        {/* Right: preview inspector (legacy persistent aside — flag OFF) */}
+        {!useEntityModalFlag && (
+          <TemplatePreviewPanel
+            template={selected}
+            showApplyButton={!!onApplyTemplate}
+            onApply={() => selected && onApplyTemplate?.(selected)}
+            className="flex-1"
+          />
+        )}
       </div>
+
+      {/* EntityModal — template detail (P2b, flag:ui-tabbed-modal ON) */}
+      {useEntityModalFlag && modalIsOpen && (
+        <EntityModal
+          entityType="template"
+          entityId={modalItemId ?? undefined}
+          projectId={projectId}
+          tabRegistry={TEMPLATE_TAB_REGISTRY}
+          onClose={modalClose}
+          title={filtered.find((t) => t.id === modalItemId)?.name}
+        />
+      )}
     </div>
   );
 }

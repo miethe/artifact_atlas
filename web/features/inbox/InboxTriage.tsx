@@ -4,6 +4,10 @@
  * InboxTriage — full inbox triage layout
  * Queue list (left) | Preview pane (center) | Classification panel (right)
  * UI-INBOX-001 + UI-INBOX-002
+ *
+ * P2b: When flag:ui-tabbed-modal (or flag:ui-tabbed-modal-inbox) is on, the
+ * center preview column + right classification column are replaced by EntityModal
+ * triggered by item selection. The queue column fills the remaining width.
  */
 
 import * as React from "react";
@@ -16,6 +20,7 @@ import {
   useBulkDelete,
 } from "@/lib/hooks/useInbox";
 import { useImportAsset } from "@/lib/hooks/useAssets";
+import { isFlagEnabled } from "@/lib/flags";
 import { InboxQueueItem } from "./InboxQueueItem";
 import { InboxPreviewPane } from "./InboxPreviewPane";
 import { InboxClassificationForm } from "./InboxClassificationForm";
@@ -24,6 +29,8 @@ import { InboxCaptureBar } from "./InboxCaptureBar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
+import { EntityModal, useEntityModalUrl } from "@/features/ui/components/EntityModal";
+import { INBOX_ITEM_TAB_REGISTRY } from "./EntityModal/InboxItemTabRegistry";
 import type { AssetCreate, AssetStatus, InboxItem } from "@/lib/types";
 
 // ============================================================
@@ -40,6 +47,14 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
   const importAsset = useImportAsset(projectId);
   const bulkStatusMutation = useBulkStatusChange();
   const bulkDeleteMutation = useBulkDelete();
+
+  // Feature flag: EntityModal (P2b) vs legacy 3-column layout.
+  const useEntityModalFlag =
+    isFlagEnabled("ui-tabbed-modal") || isFlagEnabled("ui-tabbed-modal-inbox");
+
+  // EntityModal URL state (always called per hook rules).
+  const { isOpen: modalIsOpen, itemId: modalItemId, open: modalOpen, close: modalClose } =
+    useEntityModalUrl(INBOX_ITEM_TAB_REGISTRY);
 
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [multiSelectedIds, setMultiSelectedIds] = React.useState<Set<string>>(new Set());
@@ -68,6 +83,14 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
     setSelectedId(id);
     // Clear multi-select if no modifier
     setMultiSelectedIds(new Set());
+    // EntityModal path: open/toggle modal on selection.
+    if (useEntityModalFlag) {
+      if (modalIsOpen && modalItemId === id) {
+        modalClose();
+      } else {
+        modalOpen(id);
+      }
+    }
   };
 
   const handleToggleMultiSelect = (id: string) => {
@@ -258,52 +281,68 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
           </div>
         </div>
 
-        {/* ---- Center: Preview ---- */}
-        <div
-          className={clsx(
-            "flex flex-col flex-1 min-w-0",
-            "border-r border-[var(--border)] bg-[var(--surface-sunken)]",
-            "overflow-hidden",
-          )}
-        >
-          <InboxPreviewPane item={selectedItem} />
-        </div>
+        {/* ---- Center: Preview (legacy, flag OFF) ---- */}
+        {!useEntityModalFlag && (
+          <div
+            className={clsx(
+              "flex flex-col flex-1 min-w-0",
+              "border-r border-[var(--border)] bg-[var(--surface-sunken)]",
+              "overflow-hidden",
+            )}
+          >
+            <InboxPreviewPane item={selectedItem} />
+          </div>
+        )}
 
-        {/* ---- Right: Classification form ---- */}
-        <div
-          className={clsx(
-            "flex flex-col w-72 shrink-0",
-            "bg-[var(--surface)] overflow-hidden",
-          )}
-        >
-          {selectedItem ? (
-            <InboxClassificationForm
-              key={selectedItem.id}
-              item={selectedItem}
-              onClassify={handleClassify}
-              isLoading={classifyState.isLoading}
-              isSuccess={classifyState.isSuccess}
-              isError={classifyState.isError}
-              errorMessage={classifyState.errorMessage}
-            />
-          ) : (
-            <div className="flex flex-col h-full">
-              <div className="px-4 py-2.5 border-b border-[var(--border)] bg-[var(--surface-sunken)]">
-                <h3 className="text-xs font-semibold text-[var(--ink-muted)] uppercase tracking-wider">
-                  Classify Asset
-                </h3>
+        {/* ---- Right: Classification form (legacy, flag OFF) ---- */}
+        {!useEntityModalFlag && (
+          <div
+            className={clsx(
+              "flex flex-col w-72 shrink-0",
+              "bg-[var(--surface)] overflow-hidden",
+            )}
+          >
+            {selectedItem ? (
+              <InboxClassificationForm
+                key={selectedItem.id}
+                item={selectedItem}
+                onClassify={handleClassify}
+                isLoading={classifyState.isLoading}
+                isSuccess={classifyState.isSuccess}
+                isError={classifyState.isError}
+                errorMessage={classifyState.errorMessage}
+              />
+            ) : (
+              <div className="flex flex-col h-full">
+                <div className="px-4 py-2.5 border-b border-[var(--border)] bg-[var(--surface-sunken)]">
+                  <h3 className="text-xs font-semibold text-[var(--ink-muted)] uppercase tracking-wider">
+                    Classify Asset
+                  </h3>
+                </div>
+                <div className="flex-1 flex items-center justify-center p-6">
+                  <EmptyState
+                    size="sm"
+                    title="Select an item"
+                    description="Choose an inbox item from the queue to classify it."
+                  />
+                </div>
               </div>
-              <div className="flex-1 flex items-center justify-center p-6">
-                <EmptyState
-                  size="sm"
-                  title="Select an item"
-                  description="Choose an inbox item from the queue to classify it."
-                />
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* EntityModal — inbox item detail (P2b, flag:ui-tabbed-modal ON) */}
+      {useEntityModalFlag && modalIsOpen && (
+        <EntityModal
+          entityType="inbox-item"
+          entityId={modalItemId ?? undefined}
+          projectId={projectId}
+          tabRegistry={INBOX_ITEM_TAB_REGISTRY}
+          onClose={modalClose}
+          title={items.find((i) => i.id === modalItemId)?.title}
+        />
+      )}
     </div>
   );
 }

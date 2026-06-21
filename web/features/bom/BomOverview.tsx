@@ -11,6 +11,10 @@
  * - Status legend
  * - Quick actions: Apply template, Export BOM
  *
+ * P2b: When flag:ui-tabbed-modal (or flag:ui-tabbed-modal-bom) is on, slot detail
+ * uses EntityModal (tabbed, URL-driven). The bespoke inline SlotDetailPanel is removed
+ * from the flagged path; the legacy fixed-panel is retained for fallback.
+ *
  * All slot interactions route through API hooks (useBomSlot).
  * Audit-sensitive actions (unassign, N/A) confirm via Dialog.
  */
@@ -28,6 +32,7 @@ import {
   Layers,
 } from "lucide-react";
 import { useBom } from "@/lib/hooks/useBom";
+import { isFlagEnabled } from "@/lib/flags";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/Button";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
@@ -37,6 +42,8 @@ import { SlotCard, SlotCardSkeleton } from "./components/SlotCard";
 import { SlotLegend } from "./components/SlotLegend";
 import { CoverageBar } from "./components/CoverageBar";
 import { useBomCoverageExtended } from "./hooks/useBomCoverage";
+import { EntityModal, useEntityModalUrl } from "@/features/ui/components/EntityModal";
+import { SLOT_TAB_REGISTRY } from "./components/EntityModal/SlotTabRegistry";
 
 // ============================================================
 // Domain tab
@@ -379,8 +386,29 @@ export function BomOverview({ projectId }: BomOverviewProps) {
 
   const { data: coverage } = useBomCoverageExtended(bom?.id, slots);
 
+  // Feature flag: use EntityModal (P2b) vs legacy inline panel.
+  const useEntityModalFlag =
+    isFlagEnabled("ui-tabbed-modal") || isFlagEnabled("ui-tabbed-modal-bom");
+
   const [activeDomain, setActiveDomain] = React.useState<string>(ALL_DOMAIN);
+  // Legacy state (used when flag is off).
   const [selectedSlot, setSelectedSlot] = React.useState<BomSlot | null>(null);
+
+  // EntityModal URL state (always called per hook rules).
+  const { isOpen: modalIsOpen, itemId: modalItemId, open: modalOpen, close: modalClose } =
+    useEntityModalUrl(SLOT_TAB_REGISTRY);
+
+  function handleSlotOpen(slot: BomSlot) {
+    if (useEntityModalFlag) {
+      if (modalIsOpen && modalItemId === slot.id) {
+        modalClose();
+      } else {
+        modalOpen(slot.id);
+      }
+    } else {
+      setSelectedSlot((prev) => (prev?.id === slot.id ? null : slot));
+    }
+  }
 
   // Derived data
   const domains = React.useMemo(() => getDomains(slots), [slots]);
@@ -597,11 +625,7 @@ export function BomOverview({ projectId }: BomOverviewProps) {
                 <SlotCard
                   key={slot.id}
                   slot={slot}
-                  onOpen={(s) =>
-                    setSelectedSlot((prev) =>
-                      prev?.id === s.id ? null : s,
-                    )
-                  }
+                  onOpen={handleSlotOpen}
                 />
               ))}
             </div>
@@ -617,8 +641,22 @@ export function BomOverview({ projectId }: BomOverviewProps) {
         </div>
       </div>
 
-      {/* Slot detail panel */}
-      {selectedSlot && (
+      {/* EntityModal — slot detail (P2b, flag:ui-tabbed-modal ON) */}
+      {useEntityModalFlag && modalIsOpen && (
+        <EntityModal
+          entityType="bom-slot"
+          entityId={modalItemId ?? undefined}
+          projectId={projectId}
+          tabRegistry={SLOT_TAB_REGISTRY}
+          onClose={modalClose}
+          title={
+            (bom?.slots ?? []).find((s) => s.id === modalItemId)?.name
+          }
+        />
+      )}
+
+      {/* Legacy bespoke SlotDetailPanel (flag OFF fallback) */}
+      {!useEntityModalFlag && selectedSlot && (
         <>
           <div
             aria-hidden

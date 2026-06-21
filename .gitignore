@@ -9,7 +9,10 @@ venv/
 node_modules/
 .next/
 dist/
-coverage/
+# Test-coverage report output only — anchored so it does not match the
+# web/features/coverage/ feature directory (see findings F-001).
+/coverage/
+/web/coverage/
 .env
 .env.*
 !.env.example

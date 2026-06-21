@@ -18,7 +18,7 @@ priority: high
 risk_level: medium
 tier: 3
 deferred_items_spec_refs: []
-findings_doc_ref: null
+findings_doc_ref: .claude/findings/ui-polish-pass-findings.md
 changelog_required: true
 related_documents:
 - .claude/worknotes/ui-polish-pass/decisions-block.md
