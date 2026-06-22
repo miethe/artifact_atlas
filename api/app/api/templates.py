@@ -57,12 +57,19 @@ def list_templates(
     status: Annotated[TemplateStatus | None, Query()] = None,
     template_type: Annotated[TemplateType | None, Query()] = None,
 ) -> dict:
-    """List artifact templates with optional filtering."""
+    """List artifact templates with optional filtering.
+
+    Returns domain/slot-enriched ``TemplateDetail`` items so the library cards
+    can render domain/slot counts without a per-card round-trip. The detail
+    merge is cheap (a handful of registry templates); the list contract is
+    documented as ``TemplateDetail`` in the OpenAPI spec.
+    """
     svc = _get_service()
-    templates = svc.list_templates(
+    headers = svc.list_templates(
         status=status,
         template_type=template_type.value if template_type is not None else None,
     )
+    templates = [svc.get_template_detail(t.id) or t for t in headers]
     return apply_cursor_page(templates, cursor=cursor, limit=limit)
 
 

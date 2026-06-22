@@ -24,6 +24,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useAssets } from "@/lib/hooks/useAssets";
+import { useAssetModal } from "@/features/assets/hooks/useAssetModal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { assetsApi } from "@/lib/api";
 import { assetKeys } from "@/lib/hooks/useAssets";
@@ -142,6 +143,11 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
 
   // Move dialog
   const [moveDialogOpen, setMoveDialogOpen] = React.useState(false);
+
+  // Asset detail modal (URL-driven via ?item=)
+  const { openAsset, assetModal } = useAssetModal(projectId, {
+    title: (id) => localAssets.find((a) => a.id === id)?.title,
+  });
 
   // Build asset map from local state
   const assetMap = React.useMemo(() => buildAssetMap(localAssets), [localAssets]);
@@ -364,7 +370,7 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
 
         {selectedIds.size === 0 && (
           <p className="text-[11px] text-[var(--ink-faint)]">
-            Click cards to select · Drag to move · Shift+M to keyboard-move
+            Click to open · ⌘/Ctrl-click to select · Drag to move · Shift+M to keyboard-move
           </p>
         )}
       </div>
@@ -386,6 +392,7 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
               assets={columnAssets}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
+              onOpenDetail={openAsset}
             />
           );
         })}
@@ -411,6 +418,9 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
         targets={MOVE_TARGETS}
         onMove={handleMoveSelected}
       />
+
+      {/* Asset detail modal — URL-driven; mounted once at board level */}
+      {assetModal}
     </DndContext>
   );
 }

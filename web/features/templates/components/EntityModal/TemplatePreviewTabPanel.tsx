@@ -60,10 +60,10 @@ export default function TemplatePreviewTabPanel({
     );
   }
 
-  const totalSlots = template.domains.flatMap((d) => d.slots).length;
-  const requiredSlots = template.domains
-    .flatMap((d) => d.slots)
-    .filter((s) => s.required).length;
+  const domains = template.domains ?? [];
+  const allSlots = domains.flatMap((d) => d.slots ?? []);
+  const totalSlots = allSlots.length;
+  const requiredSlots = allSlots.filter((s) => s.required).length;
   const optionalSlots = totalSlots - requiredSlots;
 
   return (

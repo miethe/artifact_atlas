@@ -24,6 +24,7 @@ import { useDashboard } from "@/lib/hooks/useDashboard";
 import { useAssets } from "@/lib/hooks/useAssets";
 import { useContextPacks } from "@/lib/hooks/useContextPacks";
 import { useProject } from "@/lib/hooks/useProjects";
+import { useAssetModal } from "@/features/assets/hooks/useAssetModal";
 import { useMeatyWikiIntegration } from "./hooks/useIntegrations";
 import { KPIRow } from "./components/KPIRow";
 import { ActiveNodesPanel } from "./components/ActiveNodesPanel";
@@ -71,6 +72,11 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
 
   // Derive asset list from query
   const assets = assetsQuery.data?.items;
+
+  // Asset detail modal — URL-driven, mounted once per page
+  const { openAsset, assetModal } = useAssetModal(projectId, {
+    title: (id) => assets?.find((a) => a.id === id)?.title,
+  });
 
   // Asset library href — used for "View all" links
   const assetsHref = `/projects/${projectId}/assets`;
@@ -166,12 +172,14 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
             assets={assets}
             isLoading={assetsQuery.isLoading}
             viewAllHref={assetsHref}
+            onOpenAsset={openAsset}
           />
           <CandidateAssetsPanel
             projectId={projectId}
             assets={assets}
             isLoading={assetsQuery.isLoading}
             viewAllHref={assetsHref}
+            onOpenAsset={openAsset}
           />
         </div>
 
@@ -182,6 +190,7 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
             assets={assets}
             isLoading={assetsQuery.isLoading}
             viewAllHref={assetsHref}
+            onOpenAsset={openAsset}
           />
           <MissingContextPanel
             projectId={projectId}
@@ -195,6 +204,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
           />
         </div>
       </div>
+
+      {/* Asset detail modal — URL-driven, mounted once per page */}
+      {assetModal}
     </div>
   );
 }

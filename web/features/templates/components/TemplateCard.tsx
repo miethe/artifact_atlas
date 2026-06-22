@@ -117,10 +117,13 @@ export function TemplateCard({
   onApply,
   onPreview,
 }: TemplateCardProps) {
-  const totalSlots = template.domains.flatMap((d) => d.slots).length;
-  const requiredSlots = template.domains
-    .flatMap((d) => d.slots)
-    .filter((s) => s.required).length;
+  // Defensive: the list endpoint may return header-only templates (no
+  // domains); only the detail endpoint embeds domains/slots. Guard every
+  // access so the library grid never crashes on header-shaped data.
+  const allSlots = (template.domains ?? []).flatMap((d) => d.slots ?? []);
+  const totalSlots = allSlots.length;
+  const requiredSlots = allSlots.filter((s) => s.required).length;
+  const domainCount = (template.domains ?? []).length;
 
   const headerStyle = getTemplateHeaderStyle(template.template_type);
 
@@ -257,7 +260,7 @@ export function TemplateCard({
           )}
           <span className="flex items-center gap-1 text-[10px] text-[var(--ink-faint)]">
             <Layers className="w-3 h-3" aria-hidden />
-            {template.domains.length} domains
+            {domainCount} domains
           </span>
           <span className="flex items-center gap-1 text-[10px] text-blue-600">
             <Star className="w-3 h-3" aria-hidden />

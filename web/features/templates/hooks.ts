@@ -11,6 +11,27 @@ import { FIXTURE_TEMPLATES, getTemplatePreview } from "./fixtures";
 import type { ArtifactTemplate, TemplatePreview } from "./types";
 
 // ============================================================
+// Normalization
+// ============================================================
+
+/**
+ * Guarantee `domains` (and each domain's `slots`) is always an array.
+ *
+ * The API list endpoint historically returned header-only templates (no
+ * `domains`), and the detail endpoint can return `domains: null` when a
+ * template has no YAML structure. The UI type declares `domains` as a required
+ * array, so normalizing here at the data boundary keeps every downstream
+ * consumer (cards, filters, preview/apply tabs) crash-safe without scattering
+ * `?? []` guards across the feature.
+ */
+function normalizeTemplate(t: ArtifactTemplate): ArtifactTemplate {
+  return {
+    ...t,
+    domains: (t.domains ?? []).map((d) => ({ ...d, slots: d.slots ?? [] })),
+  };
+}
+
+// ============================================================
 // Query keys
 // ============================================================
 
@@ -33,9 +54,9 @@ export function useTemplates() {
     queryFn: async (): Promise<ArtifactTemplate[]> => {
       try {
         const data = await templatesApi.list();
-        return data as ArtifactTemplate[];
+        return (data as ArtifactTemplate[]).map(normalizeTemplate);
       } catch {
-        return FIXTURE_TEMPLATES;
+        return FIXTURE_TEMPLATES.map(normalizeTemplate);
       }
     },
     staleTime: 60_000,
@@ -54,9 +75,10 @@ export function useTemplate(templateId: string | null | undefined) {
       if (!templateId) return null;
       try {
         const data = await templatesApi.get(templateId);
-        return data as ArtifactTemplate;
+        return normalizeTemplate(data as ArtifactTemplate);
       } catch {
-        return FIXTURE_TEMPLATES.find((t) => t.id === templateId) ?? null;
+        const fixture = FIXTURE_TEMPLATES.find((t) => t.id === templateId);
+        return fixture ? normalizeTemplate(fixture) : null;
       }
     },
     enabled: !!templateId,

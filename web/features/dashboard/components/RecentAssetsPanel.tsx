@@ -10,6 +10,7 @@ import { Clock, FileText } from "lucide-react";
 import { StatusBadge, EmptyState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
 import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
+import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
 import type { Asset } from "@/lib/types";
 
@@ -52,6 +53,7 @@ interface RecentAssetsPanelProps {
   assets: Asset[] | undefined;
   isLoading: boolean;
   viewAllHref?: string;
+  onOpenAsset?: (id: string) => void;
 }
 
 export function RecentAssetsPanel({
@@ -59,6 +61,7 @@ export function RecentAssetsPanel({
   assets,
   isLoading,
   viewAllHref,
+  onOpenAsset,
 }: RecentAssetsPanelProps) {
   // Sort by captured_at descending and take top 8
   const sorted = React.useMemo(() => {
@@ -97,37 +100,56 @@ export function RecentAssetsPanel({
         <ul role="list" className="divide-y divide-[var(--border)]">
           {sorted.map((asset) => (
             <li key={asset.id}>
-              <div
-                className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors focus-within:bg-[var(--surface-sunken)] group"
-                tabIndex={0}
-                role="listitem"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    // navigation placeholder — no router in this server-rendered shell
-                  }
-                }}
-              >
-                {/* 24×24 asset thumbnail (P5-P1-004) */}
-                <AssetThumbnail
-                  asset={asset}
-                  size="xs"
-                  className="!w-6 !h-6 shrink-0"
-                />
+              {onOpenAsset ? (
+                <AssetLink
+                  assetId={asset.id}
+                  onOpen={onOpenAsset}
+                  aria-label={`Open ${asset.title}`}
+                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors focus-within:bg-[var(--surface-sunken)] group"
+                >
+                  {/* 24×24 asset thumbnail (P5-P1-004) */}
+                  <AssetThumbnail
+                    asset={asset}
+                    size="xs"
+                    className="!w-6 !h-6 shrink-0"
+                  />
 
-                {/* Title + source */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
-                    {asset.title}
-                  </p>
-                  <p className="text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px">
-                    {asset.source_kind} · {relativeTime(asset.captured_at)}
-                  </p>
+                  {/* Title + source */}
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-medium text-[var(--ink)] truncate leading-tight">
+                      {asset.title}
+                    </span>
+                    <span className="block text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px">
+                      {asset.source_kind} · {relativeTime(asset.captured_at)}
+                    </span>
+                  </span>
+
+                  {/* Status badge */}
+                  <StatusBadge status={asset.status} size="xs" showDot />
+                </AssetLink>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors group">
+                  {/* 24×24 asset thumbnail (P5-P1-004) */}
+                  <AssetThumbnail
+                    asset={asset}
+                    size="xs"
+                    className="!w-6 !h-6 shrink-0"
+                  />
+
+                  {/* Title + source */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
+                      {asset.title}
+                    </p>
+                    <p className="text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px">
+                      {asset.source_kind} · {relativeTime(asset.captured_at)}
+                    </p>
+                  </div>
+
+                  {/* Status badge */}
+                  <StatusBadge status={asset.status} size="xs" showDot />
                 </div>
-
-                {/* Status badge */}
-                <StatusBadge status={asset.status} size="xs" showDot />
-              </div>
+              )}
             </li>
           ))}
         </ul>

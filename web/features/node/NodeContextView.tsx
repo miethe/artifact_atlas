@@ -20,6 +20,7 @@ import {
   DEMO_NODE_AGENT_ACTIONS,
 } from "./NodeDemoFixtures";
 import { useAssets } from "@/lib/hooks/useAssets";
+import { useAssetModal } from "@/features/assets/hooks/useAssetModal";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import type { Asset } from "@/lib/types";
@@ -47,6 +48,9 @@ interface NodeContextViewProps {
 
 export function NodeContextView({ nodeId, projectId }: NodeContextViewProps) {
   const [activeTab, setActiveTab] = React.useState<NodeTab>("context");
+
+  // Asset modal — mounted once per view, URL-driven (?item=)
+  const { openAsset, assetModal } = useAssetModal(projectId);
 
   // Use demo node (extend to real API when available)
   const node = getDemoNode(nodeId);
@@ -89,7 +93,7 @@ export function NodeContextView({ nodeId, projectId }: NodeContextViewProps) {
       {/* Tab content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === "context" && (
-          <ContextTab entities={linkedEntities} />
+          <ContextTab entities={linkedEntities} onOpenAsset={openAsset} />
         )}
         {activeTab === "assets" && (
           <AssetsTab assets={linkedAssets} isLoading={assetsLoading} />
@@ -98,6 +102,9 @@ export function NodeContextView({ nodeId, projectId }: NodeContextViewProps) {
           <OutputsTab nodeId={nodeId} />
         )}
       </div>
+
+      {/* Asset detail modal — mounted once, URL-driven */}
+      {assetModal}
     </div>
   );
 }
@@ -108,15 +115,17 @@ export function NodeContextView({ nodeId, projectId }: NodeContextViewProps) {
 
 function ContextTab({
   entities,
+  onOpenAsset,
 }: {
   entities: ReturnType<typeof getDemoLinkedEntities>;
+  onOpenAsset: (assetId: string) => void;
 }) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-0 h-full">
       {/* Linked entities */}
       <div className="border-r border-[var(--border)] px-4 py-3 overflow-y-auto">
         <SectionHeading>Linked Entities</SectionHeading>
-        <NodeLinkedEntities entities={entities} />
+        <NodeLinkedEntities entities={entities} onOpenAsset={onOpenAsset} />
       </div>
 
       {/* Agent actions */}

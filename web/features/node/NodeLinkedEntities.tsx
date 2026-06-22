@@ -11,6 +11,7 @@ import {
   Link2,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AssetLink } from "@/features/assets/components/AssetLink";
 import type { NodeLinkedEntity } from "./NodeDemoFixtures";
 
 // ============================================================
@@ -55,9 +56,10 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 
 interface NodeLinkedEntitiesProps {
   entities: NodeLinkedEntity[];
+  onOpenAsset?: (assetId: string) => void;
 }
 
-export function NodeLinkedEntities({ entities }: NodeLinkedEntitiesProps) {
+export function NodeLinkedEntities({ entities, onOpenAsset }: NodeLinkedEntitiesProps) {
   if (entities.length === 0) {
     return (
       <EmptyState
@@ -91,7 +93,12 @@ export function NodeLinkedEntities({ entities }: NodeLinkedEntitiesProps) {
             </div>
             <div className="space-y-0.5">
               {items.map((entity) => (
-                <EntityRow key={entity.id} entity={entity} config={config} />
+                <EntityRow
+                  key={entity.id}
+                  entity={entity}
+                  config={config}
+                  onOpenAsset={onOpenAsset}
+                />
               ))}
             </div>
           </div>
@@ -108,9 +115,11 @@ export function NodeLinkedEntities({ entities }: NodeLinkedEntitiesProps) {
 function EntityRow({
   entity,
   config,
+  onOpenAsset,
 }: {
   entity: NodeLinkedEntity;
   config: (typeof KIND_CONFIG)[NodeLinkedEntity["kind"]];
+  onOpenAsset?: (assetId: string) => void;
 }) {
   const statusClass =
     entity.status && STATUS_BADGE_COLORS[entity.status]
@@ -159,6 +168,19 @@ function EntityRow({
       >
         {inner}
       </a>
+    );
+  }
+
+  if (entity.kind === "asset" && onOpenAsset) {
+    return (
+      <AssetLink
+        assetId={entity.id}
+        onOpen={onOpenAsset}
+        aria-label={`Open ${entity.label}`}
+        className="block w-full"
+      >
+        {inner}
+      </AssetLink>
     );
   }
 

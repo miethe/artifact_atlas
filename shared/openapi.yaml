@@ -611,7 +611,7 @@ paths:
                       items:
                         type: array
                         items:
-                          $ref: "#/components/schemas/Template"
+                          $ref: "#/components/schemas/TemplateDetail"
     post:
       operationId: createTemplate
       tags: [templates]

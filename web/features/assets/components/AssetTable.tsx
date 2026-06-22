@@ -51,6 +51,11 @@ function formatBytes(bytes: number | null | undefined): string {
 // Column definitions
 // ============================================================
 
+/** Extra handlers threaded to column cells via TanStack table `meta`. */
+interface AssetTableMeta {
+  onOpen?: (assetId: string) => void;
+}
+
 const col = createColumnHelper<Asset>();
 
 const columns = [
@@ -141,21 +146,25 @@ const columns = [
   col.display({
     id: "actions",
     header: () => null,
-    cell: ({ row }) => (
-      <div
-        className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <IconButton
-          size="xs"
-          variant="ghost"
-          aria-label={`Open ${row.original.title}`}
-          data-open-id={row.original.id}
+    cell: ({ row, table }) => {
+      const onOpen = (table.options.meta as AssetTableMeta | undefined)?.onOpen;
+      return (
+        <div
+          className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity"
+          onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLink aria-hidden className="w-3 h-3" />
-        </IconButton>
-      </div>
-    ),
+          <IconButton
+            size="xs"
+            variant="ghost"
+            aria-label={`Open ${row.original.title}`}
+            data-open-id={row.original.id}
+            onClick={() => onOpen?.(row.original.id)}
+          >
+            <ExternalLink aria-hidden className="w-3 h-3" />
+          </IconButton>
+        </div>
+      );
+    },
     size: 36,
     enableSorting: false,
   }),
@@ -202,6 +211,7 @@ export function AssetTable({
     data: assets,
     columns,
     state: { sorting, rowSelection },
+    meta: { onOpen } satisfies AssetTableMeta,
     onSortingChange: setSorting,
     onRowSelectionChange: (updater) => {
       const newSel = typeof updater === "function" ? updater(rowSelection) : updater;

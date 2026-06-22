@@ -15,6 +15,7 @@ import {
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SensitivityBadge } from "@/components/ui/SensitivityBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { isInteractiveTarget } from "@/features/ui/components/Card";
 import type { Asset } from "@/lib/types";
 
 // ============================================================
@@ -62,8 +63,11 @@ export function DraggableAssetCard({
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
+    if (isInteractiveTarget(e)) return;
     if (e.ctrlKey || e.metaKey || e.shiftKey) {
       onToggleSelect(asset.id);
+    } else if (onOpenDetail) {
+      onOpenDetail(asset.id);
     } else {
       onToggleSelect(asset.id);
     }
@@ -72,7 +76,11 @@ export function DraggableAssetCard({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onToggleSelect(asset.id);
+      if (onOpenDetail) {
+        onOpenDetail(asset.id);
+      } else {
+        onToggleSelect(asset.id);
+      }
     }
   };
 

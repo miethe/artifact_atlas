@@ -66,12 +66,13 @@ function filterTemplates(
   return templates.filter((t) => {
     if (filters.q) {
       const q = filters.q.toLowerCase();
+      const domains = t.domains ?? [];
       const inName = t.name.toLowerCase().includes(q);
       const inDesc = t.description?.toLowerCase().includes(q) ?? false;
-      const inDomain = t.domains.some((d) => d.name.toLowerCase().includes(q));
-      const inSlot = t.domains
-        .flatMap((d) => d.slots)
-        .some((s) => s.artifact_type.toLowerCase().includes(q));
+      const inDomain = domains.some((d) => d.name.toLowerCase().includes(q));
+      const inSlot = domains
+        .flatMap((d) => d.slots ?? [])
+        .some((s) => s.artifact_type?.toLowerCase().includes(q) ?? false);
       if (!inName && !inDesc && !inDomain && !inSlot) return false;
     }
     if (filters.status !== "all" && t.status !== filters.status) return false;
@@ -82,7 +83,7 @@ function filterTemplates(
       return false;
     if (
       filters.domainFilter &&
-      !t.domains.some((d) =>
+      !(t.domains ?? []).some((d) =>
         d.name.toLowerCase().includes(filters.domainFilter.toLowerCase()),
       )
     )
