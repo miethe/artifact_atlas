@@ -25,17 +25,20 @@ RUN pip install --no-cache-dir \
 
 # App source + the repo data the API reads at runtime. settings.py resolves
 # _REPO_ROOT two levels above api/app/settings.py == /app, so config/, registry/,
-# fixtures/, assets/, exports/ must live under /app. Mutable state (registry,
-# exports, reports) is redirected to the /data volume via ATLAS_* env in compose;
-# the baked tree below is the first-boot seed + the read-only asset corpus that the
-# preview proxy is confined to (workspace_root == /app).
-COPY api      /app/api
-COPY config   /app/config
-COPY registry /app/registry
-COPY fixtures /app/fixtures
-COPY assets   /app/assets
-COPY exports  /app/exports
-COPY scripts  /app/scripts
+# fixtures/, templates/, assets/, exports/ must live under /app. Mutable state
+# (registry, exports, reports) is redirected to the /data volume via ATLAS_* env
+# in compose; the baked tree below is the first-boot seed + the read-only asset
+# corpus that the preview proxy is confined to (workspace_root == /app).
+# templates/ holds the YAML domain/slot trees the templates API merges into
+# TemplateDetail (list + detail endpoints); without it, domains resolve to null.
+COPY api       /app/api
+COPY config    /app/config
+COPY registry  /app/registry
+COPY fixtures  /app/fixtures
+COPY templates /app/templates
+COPY assets    /app/assets
+COPY exports   /app/exports
+COPY scripts   /app/scripts
 COPY deploy/api-entrypoint.sh /usr/local/bin/atlas-api-entrypoint
 RUN chmod +x /usr/local/bin/atlas-api-entrypoint
 
