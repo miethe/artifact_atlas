@@ -6,21 +6,25 @@
  * Because it is a `NEXT_PUBLIC_*` var, the value is inlined by Next at
  * build time and resolves identically in Server and Client Components.
  *
- * Known flags carry an explicit development default so local work picks
- * up in-progress UI without extra env wiring; the env var always wins
- * when a flag is named in it (presence = on).
+ * Known flags carry an explicit default so the shipped UI surfaces are on
+ * without extra env wiring; the env var always wins when a flag is named in
+ * it (presence = on), letting deployments opt additional flags on.
  */
 
-/** Per-flag default applied when the flag is not named in NEXT_PUBLIC_FLAGS. */
-const FLAG_DEV_DEFAULTS: Record<string, boolean> = {
-  // @miethe/ui design-system adoption (UI Polish Pass P1). On in dev so the
-  // token bridge / ContentPane surfaces render without extra env setup.
+/**
+ * Per-flag default applied (in every environment) when the flag is not named
+ * in NEXT_PUBLIC_FLAGS. The UI Polish Pass cutover (ADR-7) flipped these from
+ * NODE_ENV-keyed dev-only defaults to unconditional defaults, making the new
+ * UX the product default in dev and prod alike.
+ */
+const FLAG_DEFAULTS: Record<string, boolean> = {
+  // @miethe/ui design-system adoption (UI Polish Pass P1). The token bridge /
+  // ContentPane surfaces are the default presentation.
   "miethe-ui-ds": true,
 
-  // EntityModal migration (UI Polish Pass P2b). On in dev so all 5 migrated
-  // surfaces render the new canonical modal without extra env wiring.
-  // Post-P6 global cutover: add "ui-tabbed-modal" to NEXT_PUBLIC_FLAGS and
-  // remove this dev default.
+  // EntityModal migration (UI Polish Pass P2b). The canonical tabbed modal is
+  // the default for all 5 migrated detail surfaces; the master flag covers
+  // every surface, so the per-surface overrides below stay off.
   "ui-tabbed-modal": true,
 
   // Per-surface overrides — enable a single surface when the master flag is
@@ -50,14 +54,14 @@ const enabledFlags = parseFlagList(process.env.NEXT_PUBLIC_FLAGS);
  *
  * Resolution order:
  *   1. If `name` appears in NEXT_PUBLIC_FLAGS → enabled.
- *   2. Otherwise fall back to the flag's development default (when running
- *      in development) — known dev-default flags are on locally.
+ *   2. Otherwise fall back to the flag's default (applied in every
+ *      environment) — known default-on flags are on by default (ADR-7).
  *   3. Otherwise off.
+ *
+ * Note: flags not in FLAG_DEFAULTS (e.g. `pptx-server-conversion`, which needs
+ * a LibreOffice/Gotenberg backend) stay off until named in NEXT_PUBLIC_FLAGS.
  */
 export function isFlagEnabled(name: string): boolean {
   if (enabledFlags.has(name)) return true;
-  if (process.env.NODE_ENV === "development") {
-    return FLAG_DEV_DEFAULTS[name] ?? false;
-  }
-  return false;
+  return FLAG_DEFAULTS[name] ?? false;
 }

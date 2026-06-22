@@ -518,6 +518,41 @@ FullPageDetail) ship live regardless and are covered by the build/type/unit gate
 - To make the new UX the default, flip the `FLAG_DEV_DEFAULTS` gate from `NODE_ENV`-keyed to
   unconditional (`web/lib/flags.ts`) in a follow-up once validated.
 
+> **Superseded by ADR-8 (2026-06-21):** the follow-up flip described in the last bullet has
+> been executed — defaults now apply in every environment. ADR-7 is retained as the record of
+> the original staged-rollout posture.
+
+### ADR-8 — Default-On Cutover: New UX is the Product Default
+
+#### Context
+ADR-7 shipped the UI Polish Pass flag-gated and dark in prod, with an explicit documented
+follow-up: "flip the `FLAG_DEV_DEFAULTS` gate from `NODE_ENV`-keyed to unconditional once
+validated." All deterministic gates are green and all reviewer gates (per-phase
+task-completion-validator, a11y-sheriff, final karen) APPROVED. The remaining gap (F-002 —
+flags-ON live axe/Playwright) is a verification follow-up, not a code defect, and was accepted
+as non-blocking by both final reviewers. The operator has elected to make the new UX the
+default ahead of that live-verification pass.
+
+#### Decision
+Flip the default-on mechanism in `web/lib/flags.ts` from `NODE_ENV`-keyed to **unconditional**.
+The map (renamed `FLAG_DEV_DEFAULTS` → `FLAG_DEFAULTS` for accuracy) now applies in every
+environment, so a plain `next build`/`next start` with no `NEXT_PUBLIC_FLAGS` serves the new
+`miethe-ui-ds` + `ui-tabbed-modal` (all 5 surfaces) UX by default. `NEXT_PUBLIC_FLAGS` still
+wins by presence, so deployments can additionally opt **on** flags that default off — notably
+`pptx-server-conversion`, which stays off (it is absent from `FLAG_DEFAULTS`) until a
+LibreOffice/Gotenberg backend is provisioned (R4).
+
+#### Consequences
+- The new UX is now the product default in dev and prod alike; the legacy flags-off surfaces
+  are no longer reachable without code changes (their bespoke panels remain in-tree for now and
+  are scheduled for removal post-cutover per P2B-006).
+- **F-002 residual risk is now live in prod:** the flags-ON EntityModal/DOCX/PPTX paths still
+  lack a live axe + Playwright pass. Recommended as the immediate next verification step now
+  that these surfaces are the default. PPTX itself remains gated off, so its risk is deferred.
+- The env-presence-only resolution means a default-on flag cannot be turned **off** via
+  `NEXT_PUBLIC_FLAGS` (the var only adds). A kill-switch (env-driven force-off) is a small
+  future addition if a fast prod rollback of an individual surface is ever needed.
+
 ---
 
 ### References
