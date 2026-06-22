@@ -1,0 +1,56 @@
+# Artifact Atlas — agentic-node deployment stack (api + web).
+#
+# Built and run by agentic_meta_dev/infra/agentic-node/bootstrap-agentic-node.sh
+# (ph_artifact_atlas). Ports, bind host, the build-time-baked web API URL, and the
+# API CORS origin are injected via deploy/.env (written by the bootstrap from the
+# node's port map + LAN host). The defaults below suit a plain local run:
+#
+#   ( cd deploy && docker compose --env-file .env up -d --build )   # or podman compose
+#
+# Mutable state persists in the named `atlas-data` volume; rebuilding the images
+# (e.g. on redeploy after a git sync) does not clear it.
+name: artifact-atlas
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    image: artifact-atlas-api:local
+    environment:
+      ATLAS_API_PORT: "8042"
+      ATLAS_DATA_DIR: /data
+      ATLAS_REGISTRY_DIR: /data/registry
+      ATLAS_EXPORTS_DIR: /data/exports/context-packs
+      ATLAS_REPORTS_DIR: /data/exports/reports
+      ATLAS_CCDASH_EVENTS_PATH: /data/exports/events/ccdash-events.jsonl
+      # Origin(s) the browser loads the web app from (cross-origin to this API).
+      ATLAS_CORS_ORIGINS: ${ATLAS_CORS_ORIGINS:-http://localhost:3040}
+    volumes:
+      - atlas-data:/data
+    ports:
+      - "${ATLAS_BIND_HOST:-127.0.0.1}:${ATLAS_API_PORT:-8042}:8042"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8042/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        # Inlined into the web bundle at build time — must be browser-reachable.
+        NEXT_PUBLIC_API_BASE_URL: ${ATLAS_WEB_API_BASE_URL:-http://localhost:8042}
+    image: artifact-atlas-web:local
+    depends_on:
+      - api
+    ports:
+      - "${ATLAS_BIND_HOST:-127.0.0.1}:${ATLAS_WEB_PORT:-3040}:3040"
+    restart: unless-stopped
+
+volumes:
+  atlas-data:

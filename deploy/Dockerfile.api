@@ -1,0 +1,43 @@
+# Artifact Atlas — API (FastAPI) production image.
+#
+# Pure-Python service (JSONL/SQLite-stdlib storage), so python:3.12-slim suffices;
+# `curl` is added only for the container healthcheck. LibreOffice is intentionally
+# NOT installed — the PPTX server-side converter is gated off by default
+# (pptx-server-conversion flag), so its `soffice` dependency is only needed if that
+# flag is later enabled with a real backend.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# Runtime deps — mirror api/pyproject.toml [project].dependencies.
+RUN pip install --no-cache-dir \
+      "fastapi>=0.115.0" \
+      "pydantic>=2.8.0" \
+      "uvicorn[standard]>=0.30.0" \
+      "pyyaml>=6.0"
+
+# App source + the repo data the API reads at runtime. settings.py resolves
+# _REPO_ROOT two levels above api/app/settings.py == /app, so config/, registry/,
+# fixtures/, assets/, exports/ must live under /app. Mutable state (registry,
+# exports, reports) is redirected to the /data volume via ATLAS_* env in compose;
+# the baked tree below is the first-boot seed + the read-only asset corpus that the
+# preview proxy is confined to (workspace_root == /app).
+COPY api      /app/api
+COPY config   /app/config
+COPY registry /app/registry
+COPY fixtures /app/fixtures
+COPY assets   /app/assets
+COPY exports  /app/exports
+COPY scripts  /app/scripts
+COPY deploy/api-entrypoint.sh /usr/local/bin/atlas-api-entrypoint
+RUN chmod +x /usr/local/bin/atlas-api-entrypoint
+
+EXPOSE 8042
+ENTRYPOINT ["atlas-api-entrypoint"]
