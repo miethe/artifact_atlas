@@ -37,6 +37,7 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     settings.thumbnails_dir = tmp_path / "thumbnails"
     settings.previews_dir = tmp_path / "previews"
     settings.pptx_cache_dir = tmp_path / "pptx-cache"
+    settings.content_store_dir = tmp_path / "assets" / "content"
     settings.workspace_id = "ws_test"
     settings.workspace_name = "Test Workspace"
     settings.workspace_root = tmp_path

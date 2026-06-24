@@ -87,8 +87,11 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     }
   }
 
+  // FormData bodies: let the browser set the multipart boundary via Content-Type.
+  const isFormData = body instanceof FormData;
+
   const headers: HeadersInit = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     Accept: "application/json",
     ...(rest.headers ?? {}),
   };
@@ -96,7 +99,9 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   const response = await fetch(url.toString(), {
     ...rest,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body !== undefined
+      ? (isFormData ? body : JSON.stringify(body))
+      : undefined,
   });
 
   if (!response.ok) {
@@ -221,6 +226,19 @@ export const assetsApi = {
       { method: "POST" },
     );
   },
+
+  /**
+   * Upload binary content for an existing asset.
+   * PUT /api/assets/{assetId}/content  — multipart/form-data field "file"
+   */
+  uploadContent(assetId: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiFetch<Asset>(`/api/assets/${assetId}/content`, {
+      method: "PUT",
+      body: form,
+    });
+  },
 };
 
 // ============================================================
@@ -242,6 +260,25 @@ export const inboxApi = {
     return apiFetch<{ imported_count: number; asset_ids: string[] }>(
       `/api/projects/${projectId}/inbox/import`,
       { method: "POST", body: data },
+    );
+  },
+
+  /**
+   * Upload binary file bytes to the inbox.
+   * POST /api/projects/{projectId}/inbox/upload  — multipart/form-data field "files" (multiple)
+   */
+  upload(
+    projectId: string,
+    files: File[],
+    opts?: { sensitivity?: string; agent_access?: string },
+  ) {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    if (opts?.sensitivity) form.append("sensitivity", opts.sensitivity);
+    if (opts?.agent_access) form.append("agent_access", opts.agent_access);
+    return apiFetch<{ imported_count: number; asset_ids: string[]; duplicate_ids: string[] }>(
+      `/api/projects/${projectId}/inbox/upload`,
+      { method: "POST", body: form },
     );
   },
 };

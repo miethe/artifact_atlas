@@ -226,6 +226,7 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
           {/* Capture bar */}
           <div className="px-3 py-3 border-b border-[var(--border)] bg-[var(--surface-sunken)] shrink-0">
             <InboxCaptureBar
+              projectId={projectId}
               onImport={handleImport}
               isLoading={importToInbox.isPending}
               isSuccess={importToInbox.isSuccess}

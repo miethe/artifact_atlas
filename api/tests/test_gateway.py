@@ -62,6 +62,7 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     settings.reports_dir = tmp_path / "reports"
     settings.thumbnails_dir = tmp_path / "thumbnails"
     settings.previews_dir = tmp_path / "previews"
+    settings.content_store_dir = tmp_path / "assets" / "content"
     settings.workspace_id = "ws_test"
     settings.workspace_name = "Test Workspace"
     settings.default_sensitivity = "personal"
@@ -454,3 +455,48 @@ class TestUnknownTool:
     def test_unknown_tool_returns_error(self, svcs: dict[str, Any]) -> None:
         result = dispatch_tool("nonexistent.tool", {}, svcs=svcs)
         assert result["error"] == "unknown_tool"
+
+
+# ---------------------------------------------------------------------------
+# content.upload — write-gated agent content upload (V1-011)
+# ---------------------------------------------------------------------------
+
+
+class TestContentUpload:
+    def _b64(self, data: bytes) -> str:
+        import base64
+
+        return base64.b64encode(data).decode("ascii")
+
+    def test_upload_personal_content_allowed_as_suggestion(
+        self, svcs: dict[str, Any]
+    ) -> None:
+        result = dispatch_tool(
+            "content.upload",
+            {
+                "filename": "note.txt",
+                "content_base64": self._b64(b"agent bytes"),
+                "sensitivity": "personal",
+            },
+            svcs=svcs,
+        )
+        assert result.get("error") is None
+        assert result.get("decision") != "deny"
+        # Agent uploads always land as metadata-only suggestion/draft, never promoted.
+        assert result["agent_access"] == "metadata_only"
+        assert result["suggestion_only"] is True
+        assert result["asset_id"].startswith("asset_")
+
+    def test_upload_sensitive_content_denied(self, svcs: dict[str, Any]) -> None:
+        for level in ("work_sensitive", "client_sensitive", "restricted"):
+            result = dispatch_tool(
+                "content.upload",
+                {
+                    "filename": "secret.txt",
+                    "content_base64": self._b64(b"top secret"),
+                    "sensitivity": level,
+                },
+                svcs=svcs,
+            )
+            assert result["decision"] == "deny", f"{level} should be denied"
+            assert "asset_id" not in result

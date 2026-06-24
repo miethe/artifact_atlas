@@ -11,8 +11,11 @@ import {
   AlertCircle,
   Keyboard,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { inboxApi } from "@/lib/api";
+import { inboxKeys } from "@/lib/hooks/useInbox";
 import type { InboxImportRequest, Sensitivity } from "@/lib/types";
 
 // ============================================================
@@ -22,6 +25,8 @@ import type { InboxImportRequest, Sensitivity } from "@/lib/types";
 // ============================================================
 
 export interface InboxCaptureBarProps {
+  /** Project ID to scope inbox uploads/imports against. */
+  projectId: string;
   onImport: (req: InboxImportRequest) => void;
   isLoading?: boolean;
   isSuccess?: boolean;
@@ -33,17 +38,43 @@ export interface InboxCaptureBarProps {
 const DEFAULT_SENSITIVITY: Sensitivity = "personal";
 
 export function InboxCaptureBar({
+  projectId,
   onImport,
   isLoading = false,
   isSuccess = false,
   isError = false,
   onDragActive,
 }: InboxCaptureBarProps) {
+  const qc = useQueryClient();
   const [urlInput, setUrlInput] = React.useState("");
   const [urlMode, setUrlMode] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
+  const [uploadState, setUploadState] = React.useState<{
+    isLoading: boolean;
+    isSuccess: boolean;
+    isError: boolean;
+  }>({ isLoading: false, isSuccess: false, isError: false });
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const urlInputRef = React.useRef<HTMLInputElement>(null);
+
+  const uploadFiles = React.useCallback(
+    async (files: File[]) => {
+      if (!files.length) return;
+      setUploadState({ isLoading: true, isSuccess: false, isError: false });
+      try {
+        await inboxApi.upload(projectId, files, {
+          sensitivity: DEFAULT_SENSITIVITY,
+        });
+        // Mirror useImportToInbox.onSuccess: refresh inbox + assets queries.
+        qc.invalidateQueries({ queryKey: inboxKeys.all });
+        qc.invalidateQueries({ queryKey: ["assets"] });
+        setUploadState({ isLoading: false, isSuccess: true, isError: false });
+      } catch {
+        setUploadState({ isLoading: false, isSuccess: false, isError: true });
+      }
+    },
+    [projectId, qc],
+  );
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,12 +92,7 @@ export function InboxCaptureBar({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const uris = Array.from(files).map((f) => `file://${f.name}`);
-    onImport({
-      source_kind: "local",
-      uris,
-      sensitivity: DEFAULT_SENSITIVITY,
-    });
+    void uploadFiles(Array.from(files));
     // Reset file input
     e.target.value = "";
   };
@@ -102,11 +128,7 @@ export function InboxCaptureBar({
     }
 
     if (files.length > 0) {
-      onImport({
-        source_kind: "local",
-        uris: files.map((f) => `file://${f.name}`),
-        sensitivity: DEFAULT_SENSITIVITY,
-      });
+      void uploadFiles(files);
     } else if (urls.length > 0) {
       onImport({
         source_kind: "url",
@@ -130,6 +152,12 @@ export function InboxCaptureBar({
     }
   }, [urlMode]);
 
+  // Merge local upload state with parent-driven URL import state for the
+  // status indicator. Local upload wins when active.
+  const combinedLoading = uploadState.isLoading || isLoading;
+  const combinedSuccess = uploadState.isSuccess || isSuccess;
+  const combinedError = uploadState.isError || isError;
+
   return (
     <div className="flex flex-col gap-2">
       {/* Drag-and-drop zone */}
@@ -151,17 +179,17 @@ export function InboxCaptureBar({
             : "border-[var(--border)] hover:border-blue-300 hover:bg-gray-50/50",
         )}
       >
-        {isLoading ? (
+        {combinedLoading ? (
           <div className="flex flex-col items-center gap-2">
             <Loader2 aria-hidden className="w-6 h-6 text-blue-500 animate-spin" />
             <p className="text-xs text-[var(--ink-muted)]">Importing…</p>
           </div>
-        ) : isSuccess ? (
+        ) : combinedSuccess ? (
           <div className="flex flex-col items-center gap-2">
             <CheckCircle2 aria-hidden className="w-6 h-6 text-green-500" />
             <p className="text-xs text-green-700">Import queued</p>
           </div>
-        ) : isError ? (
+        ) : combinedError ? (
           <div className="flex flex-col items-center gap-2">
             <AlertCircle aria-hidden className="w-6 h-6 text-red-500" />
             <p className="text-xs text-red-700">Import failed — try again</p>
@@ -199,7 +227,7 @@ export function InboxCaptureBar({
             size="xs"
             iconLeft={<FolderOpen aria-hidden className="w-3.5 h-3.5" />}
             onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading}
+            disabled={combinedLoading}
           >
             Pick files
           </Button>
@@ -211,7 +239,7 @@ export function InboxCaptureBar({
             size="xs"
             iconLeft={<Link2 aria-hidden className="w-3.5 h-3.5" />}
             onClick={() => setUrlMode((v) => !v)}
-            disabled={isLoading}
+            disabled={combinedLoading}
             aria-expanded={urlMode}
           >
             URL import
@@ -248,7 +276,7 @@ export function InboxCaptureBar({
             type="submit"
             variant="primary"
             size="xs"
-            disabled={isLoading || !urlInput.trim()}
+            disabled={combinedLoading || !urlInput.trim()}
           >
             Import
           </Button>

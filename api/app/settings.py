@@ -13,6 +13,7 @@ Environment variables (all optional, override workspace.yaml values):
   ATLAS_WORKSPACE_YAML        – override path to workspace.yaml itself
   ATLAS_DEFAULT_SENSITIVITY   – override policy.default_sensitivity
   ATLAS_DEFAULT_AGENT_ACCESS  – override policy.default_agent_access
+  ATLAS_CONTENT_STORE_DIR     – override storage.content_store_dir (managed blob store)
 """
 
 from __future__ import annotations
@@ -108,6 +109,14 @@ class Settings:
 
         pptx_cache_dir_raw = storage.get("pptx_cache_dir", "assets/pptx-cache")
         self.pptx_cache_dir: Path = _make_absolute(pptx_cache_dir_raw, _REPO_ROOT)
+
+        # Managed content store (V1-011): content-addressed blob storage for
+        # uploaded asset bytes. Lives under workspace_root so the preview proxy
+        # serves blobs through its existing LFI/SSRF containment guard.
+        content_store_dir_raw = os.environ.get("ATLAS_CONTENT_STORE_DIR") or storage.get(
+            "content_store_dir", "assets/content"
+        )
+        self.content_store_dir: Path = _make_absolute(content_store_dir_raw, _REPO_ROOT)
 
         # -- Integration export directories (Phase 4 adapters)
         meatywiki_dir_raw = exports_cfg.get("meatywiki_dir", "exports/meatywiki")

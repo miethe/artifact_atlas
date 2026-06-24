@@ -131,6 +131,7 @@ def dispatch_tool(
         "intent_node.context":  ("node_id",     {"node_id"}),
         "project.snapshot":     ("project_id",  {"project_id"}),
         "atlas.record_event":   ("event_type",  {"event_type"}),
+        "content.upload":       (None,          set()),
     }
 
     dispatch_entry = _DISPATCH_MAP.get(tool_name)

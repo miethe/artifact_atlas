@@ -117,11 +117,20 @@ def cmd_import(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
         print(f"ERROR: path does not exist: {path}", file=sys.stderr)
         return 1
 
-    result = import_svc.import_local_path(
-        path,
-        project_id=args.project or None,
-        actor_id="cli",
-    )
+    if getattr(args, "store", False):
+        with open(path, "rb") as fh:
+            result = import_svc.import_content(
+                path.name,
+                fh,
+                project_id=args.project or None,
+                actor_id="cli",
+            )
+    else:
+        result = import_svc.import_local_path(
+            path,
+            project_id=args.project or None,
+            actor_id="cli",
+        )
     verb = "duplicate of" if result.is_duplicate else "imported"
     print(f"Asset {verb}: {result.asset.id}")
     print(f"  Title:       {result.asset.title}")
@@ -129,6 +138,32 @@ def cmd_import(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     print(f"  Sensitivity: {result.asset.sensitivity.value if hasattr(result.asset.sensitivity, 'value') else result.asset.sensitivity}")
     if result.is_duplicate and result.duplicate_of:
         print(f"  Duplicate of: {result.duplicate_of}")
+    return 0
+
+
+def cmd_attach(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
+    """Attach file content to an existing asset."""
+    import_svc = svcs["import_svc"]
+    path = Path(args.path)
+    if not path.exists():
+        print(f"ERROR: path does not exist: {path}", file=sys.stderr)
+        return 1
+
+    with open(path, "rb") as fh:
+        asset = import_svc.attach_content(
+            args.asset_id,
+            path.name,
+            fh,
+            actor_id="cli",
+        )
+
+    if asset is None:
+        print(f"ERROR: asset not found: {args.asset_id}", file=sys.stderr)
+        return 1
+
+    storage_uri = getattr(asset, "storage_uri", None) or "N/A"
+    print(f"Content attached to asset: {asset.id}")
+    print(f"  Storage URI: {storage_uri}")
     return 0
 
 
@@ -417,6 +452,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_import = sub.add_parser("import", help="Import a local file asset.")
     p_import.add_argument("path", help="Path to the file to import.")
     p_import.add_argument("--project", help="Project slug or ID to associate.")
+    p_import.add_argument(
+        "--store",
+        action="store_true",
+        help="Copy file bytes into the managed content store.",
+    )
+
+    # attach
+    p_attach = sub.add_parser("attach", help="Attach file content to an existing asset.")
+    p_attach.add_argument("asset_id", help="Asset ID to attach content to.")
+    p_attach.add_argument("path", help="Path to the file to attach.")
 
     # index
     p_index = sub.add_parser("index", help="List indexed assets.")
@@ -513,6 +558,9 @@ def main(argv: list[str] | None = None) -> int:
 
     elif cmd == "import":
         return cmd_import(args, svcs)
+
+    elif cmd == "attach":
+        return cmd_attach(args, svcs)
 
     elif cmd == "index":
         return cmd_index(args, svcs)

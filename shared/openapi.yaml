@@ -436,6 +436,41 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
 
+  /api/assets/{assetId}/content:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    put:
+      operationId: putAssetContent
+      tags: [assets]
+      summary: Upload or replace the content blob for an existing asset
+      description: >
+        Accepts a single binary file via multipart/form-data and stores it in
+        the managed content store using content-addressed storage. Updates the
+        asset's storage_uri so the preview proxy can serve the bytes.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to attach to this asset
+      responses:
+        "200":
+          description: Updated asset with content attached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   # ---------------------------------------------------------------------------
   # Inbox
   # ---------------------------------------------------------------------------
@@ -573,6 +608,59 @@ paths:
                   updated_count:
                     type: integer
                   asset_ids:
+                    type: array
+                    items:
+                      type: string
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/projects/{projectId}/inbox/upload:
+    parameters:
+      - $ref: "#/components/parameters/projectId"
+    post:
+      operationId: uploadToInbox
+      tags: [inbox]
+      summary: Upload files into the project inbox (multipart)
+      description: >
+        Accepts one or more binary files via multipart/form-data and persists
+        them into the managed content store. Creates Asset records with
+        status=inbox. Duplicate detection is by content hash (SHA-256).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: One or more files to upload
+                sensitivity:
+                  type: string
+                  description: Override default sensitivity for all uploaded assets
+                agent_access:
+                  type: string
+                  description: Override default agent_access for all uploaded assets
+      responses:
+        "202":
+          description: Upload accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [imported_count, asset_ids, duplicate_ids]
+                properties:
+                  imported_count:
+                    type: integer
+                  asset_ids:
+                    type: array
+                    items:
+                      type: string
+                  duplicate_ids:
                     type: array
                     items:
                       type: string

@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
 from app.api._deps import apply_cursor_page, get_asset_service, not_found
 from app.models.asset import AssetUpdate
@@ -205,6 +205,41 @@ def import_to_inbox(projectId: str, data: InboxImportRequest) -> dict:
         asset_ids.append(result.asset.id)
 
     return {"imported_count": len(asset_ids), "asset_ids": asset_ids}
+
+
+@router.post("/projects/{projectId}/inbox/upload", status_code=202)
+async def upload_to_inbox(
+    projectId: str,
+    files: list[UploadFile] = File(...),
+    sensitivity: str | None = Form(None),
+    agent_access: str | None = Form(None),
+) -> dict:
+    """Upload one or more files into the project inbox (multipart)."""
+    settings = get_settings()
+    svc = ImportService(settings.registry_dir)
+
+    asset_ids: list[str] = []
+    duplicate_ids: list[str] = []
+
+    for f in files:
+        result = svc.import_content(
+            f.filename or "upload",
+            f.file,
+            project_id=projectId,
+            sensitivity=sensitivity,
+            agent_access=agent_access,
+            mime_type=f.content_type,
+            actor_id="web",
+        )
+        asset_ids.append(result.asset.id)
+        if result.is_duplicate:
+            duplicate_ids.append(result.asset.id)
+
+    return {
+        "imported_count": len(asset_ids),
+        "asset_ids": asset_ids,
+        "duplicate_ids": duplicate_ids,
+    }
 
 
 @router.post("/projects/{projectId}/inbox/classify")

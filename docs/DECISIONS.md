@@ -568,3 +568,63 @@ LibreOffice/Gotenberg backend is provisioned (R4).
 - Five bespoke detail surfaces are consolidated into one tab-registry pattern, reducing maintenance surface.
 - PPTX rendering requires a server-side conversion seam; PPTX files cannot be previewed client-side until a React 19–compatible renderer exists.
 - Facelift scope is bounded; dark mode and other visual enhancements are explicitly deferred with design-spec stubs.
+
+---
+
+## D-013 — Asset Content Upload: Content-Addressed Managed Store Under workspace_root, storage_uri Indirection, Four-Surface Parity
+
+**Status:** Accepted — 2026-06-24 (`feat/v1-011-content-upload`, V1-011)
+
+### Context
+
+The content proxy (`GET /api/preview/asset/{id}/content`, D-012/P4C-002) can only serve files
+that already exist under `workspace_root`. Browser file pickers expose only a basename (OS
+sandboxing), so Inbox imports register assets **metadata-only** (no bytes) and their previews
+legitimately 404 (originating from commit `44a4829`). V1-011 closes this: asset *content* must be
+uploadable into a managed store from any surface, while preserving the metadata-vs-blob boundary —
+Atlas indexes metadata by default; content storage is explicit and opt-in.
+
+### Decision
+
+1. **Managed content store, content-addressed.** A new `settings.content_store_dir`
+   (default `assets/content`, env `ATLAS_CONTENT_STORE_DIR`, gitignored) holds blobs at
+   `<hash[:2]>/<hash>` (sha256). Stored **under `workspace_root`** so the existing proxy
+   containment guard serves blobs unchanged.
+2. **No proxy change — `storage_uri` indirection.** The proxy already prefers `storage_uri` over
+   `uri` and confines resolved paths to `workspace_root`. Upload sets `storage_uri` to the blob;
+   the LFI/SSRF guard (R6/F-002) and MIME allow-list apply at serve time with zero new code.
+3. **Service is the single seam.** `ImportService.import_content(filename, bytes|stream, …)` and
+   `attach_content(asset_id, …)` own streamed hashing, dedup-by-hash (reuses `_find_by_hash`),
+   atomic content-addressed commit (`os.replace`), and audit emission. `attach_content` is the
+   "fix the 404" path for already-registered metadata-only assets. All four surfaces call this
+   seam; none re-implement storage.
+4. **Four-surface parity.** HTTP (`POST …/inbox/upload` multipart, `PUT /api/assets/{id}/content`),
+   CLI (`atlas import --store`, `atlas attach`), MCP (`content.upload`), Web (Inbox picker +
+   drag-drop send real `File` bytes; URL import path unchanged).
+5. **Agent write gating (per Agent Operating Rules).** The MCP `content.upload` tool **denies**
+   uploads whose sensitivity is in the `agent_full_content_sensitivity_cap`
+   (work_sensitive/client_sensitive/restricted) with a policy-denied audit event, and forces
+   created assets to `agent_access=metadata_only`, `status=inbox`, `suggestion_only=true` — agent
+   uploads are never auto-promoted.
+
+### Consequences
+
+- Browser-picked assets can now carry bytes; previews no longer 404 once content is uploaded.
+- Dedup is global by content hash — identical bytes across surfaces converge on one blob and
+  (by default `on_duplicate=return_existing`) one asset record.
+- Blobs are runtime data, not source — `assets/content/` is gitignored (matching
+  thumbnails/previews); deployments must persist this dir (the nuc deploy already mounts an
+  `atlas-data` volume over `workspace_root`).
+- Object storage (S3/MinIO) remains a future swap behind the same `import_content` seam and
+  `storage_uri` scheme; no caller changes required.
+
+### References
+
+- `api/app/services/import_index.py` (`import_content`, `attach_content`, blob helpers)
+- `api/app/api/inbox.py`, `api/app/api/assets.py` (HTTP), `api/app/cli/atlas.py` (CLI),
+  `api/app/mcp/tools.py` (MCP `content.upload`)
+- `web/lib/api.ts`, `web/features/inbox/InboxCaptureBar.tsx` (Web)
+- Tests: `api/tests/test_content_upload.py`, `api/tests/test_routes_content_upload.py`,
+  `TestContentUpload` (gateway), `TestImport`/`TestAttach` (CLI)
+- Supersedes the metadata-only limitation noted in D-012/P4C-002; depends on the proxy
+  `storage_uri` preference established there.

@@ -611,6 +611,83 @@ def tool_atlas_record_event(
 
 
 # ---------------------------------------------------------------------------
+# content.upload — write-gated content upload
+# ---------------------------------------------------------------------------
+
+
+def tool_content_upload(
+    svcs: dict[str, Any],
+    *,
+    project_id: str | None = None,
+    filename: str,
+    content_base64: str,
+    sensitivity: str | None = None,
+    mime_type: str | None = None,
+    actor_type: str = "agent",
+) -> dict[str, Any]:
+    """Upload content bytes into the managed content store.
+
+    Write-gated: agents may NOT upload sensitive content. Uploaded assets land
+    as suggestion/draft (agent_access=metadata_only, status=inbox) and are
+    never auto-promoted.
+    """
+    import base64
+
+    from app.services.import_index import ImportService
+    from app.settings import get_settings
+
+    audit: AuditService = svcs["audit"]
+
+    # Gate: deny sensitive content uploads from agents
+    _SENSITIVE_LEVELS = {"work_sensitive", "client_sensitive", "restricted"}
+    if sensitivity and sensitivity in _SENSITIVE_LEVELS:
+        audit.emit_policy_denied(
+            "content_upload",
+            "content",
+            actor_id="agent",
+            payload={
+                "tool": "content.upload",
+                "reason": "agents may not upload sensitive content",
+                "requested_sensitivity": sensitivity,
+            },
+        )
+        return {
+            "decision": "deny",
+            "reason": "agents may not upload sensitive content",
+            "tool": "content.upload",
+        }
+
+    # Decode content
+    try:
+        raw_bytes = base64.b64decode(content_base64)
+    except Exception as exc:
+        return {"error": "invalid_base64", "detail": str(exc)}
+
+    # Build or reuse ImportService
+    settings = get_settings()
+    import_svc = ImportService(settings.registry_dir, audit_service=audit)
+
+    result = import_svc.import_content(
+        filename,
+        raw_bytes,
+        project_id=project_id,
+        sensitivity=sensitivity,
+        mime_type=mime_type,
+        agent_access="metadata_only",
+        on_duplicate="return_existing",
+        actor_id="agent",
+    )
+
+    return {
+        "asset_id": result.asset.id,
+        "is_duplicate": result.is_duplicate,
+        "agent_access": "metadata_only",
+        "status": "inbox",
+        "suggestion_only": True,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Tool registry (for server.py to iterate over)
 # ---------------------------------------------------------------------------
 
@@ -721,6 +798,21 @@ TOOL_REGISTRY: dict[str, dict[str, Any]] = {
                 "payload": {"type": "object"},
             },
             "required": ["event_type", "resource_type", "resource_id"],
+        },
+    },
+    "content.upload": {
+        "fn": tool_content_upload,
+        "description": "Upload content bytes into the managed content store. Write-gated: agents may not upload sensitive content. Assets land as suggestion/draft.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string", "description": "Original filename for display and MIME inference."},
+                "content_base64": {"type": "string", "description": "Base64-encoded file content."},
+                "project_id": {"type": "string", "description": "Optional project scope."},
+                "sensitivity": {"type": "string", "description": "Sensitivity label (agents denied for work_sensitive/client_sensitive/restricted)."},
+                "mime_type": {"type": "string", "description": "Explicit MIME type; guessed from filename when absent."},
+            },
+            "required": ["filename", "content_base64"],
         },
     },
 }

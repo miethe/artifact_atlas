@@ -49,6 +49,7 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     settings.reports_dir = tmp_path / "reports"
     settings.thumbnails_dir = tmp_path / "thumbnails"
     settings.previews_dir = tmp_path / "previews"
+    settings.content_store_dir = tmp_path / "assets" / "content"
     settings.workspace_id = "ws_test"
     settings.workspace_name = "Test Workspace"
     settings.default_sensitivity = "personal"
@@ -136,6 +137,37 @@ class TestImport:
     def test_import_missing_file_exits_nonzero(self, tmp_registry: Path) -> None:
         code = run_cli("import", "/no/such/file/at/all.txt")
         assert code != 0
+
+    def test_import_store_copies_bytes_into_content_store(
+        self, tmp_registry: Path, sample_file: Path
+    ) -> None:
+        from app.settings import get_settings
+
+        code = run_cli("import", str(sample_file), "--store")
+        assert code == 0
+        # The managed content store now holds exactly one sharded blob.
+        store = get_settings().content_store_dir
+        blobs = [p for p in store.rglob("*") if p.is_file() and not p.name.startswith(".tmp-")]
+        assert len(blobs) == 1
+        assert blobs[0].read_bytes() == sample_file.read_bytes()
+
+
+class TestAttach:
+    def test_attach_populates_storage_uri(
+        self, tmp_registry: Path, sample_file: Path
+    ) -> None:
+        from app.services.import_index import ImportService
+
+        svc = ImportService(tmp_registry)
+        meta = svc.import_local_path("picked.txt", metadata_only=True)
+        assert meta.asset.storage_uri is None
+
+        code = run_cli("attach", meta.asset.id, str(sample_file))
+        assert code == 0
+
+        refreshed = ImportService(tmp_registry)._assets.get(meta.asset.id)
+        assert refreshed is not None
+        assert refreshed.storage_uri is not None
 
 
 # ---------------------------------------------------------------------------

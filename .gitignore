@@ -18,8 +18,10 @@ dist/
 !.env.example
 assets/thumbnails/*
 assets/previews/*
+assets/content/*
 !assets/thumbnails/.gitkeep
 !assets/previews/.gitkeep
+!assets/content/.gitkeep
 
 # Local Claude Code session overrides (never commit)
 .claude/settings.local.json

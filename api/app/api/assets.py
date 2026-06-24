@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, Query, UploadFile
 
 from app.api._deps import (
     apply_cursor_page,
@@ -46,6 +46,7 @@ from app.models.vocabulary import (
 )
 from app.repositories.bom import BomRepository
 from app.services.assets import PolicyDeniedError, StatusTransitionError
+from app.services.import_index import ImportService
 from app.settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["assets"])
@@ -212,6 +213,23 @@ def summarize_asset(assetId: str) -> dict:
 # ---------------------------------------------------------------------------
 # Assign to BOM slot (shorthand)
 # ---------------------------------------------------------------------------
+
+
+@router.put("/assets/{assetId}/content", response_model=Asset)
+async def put_asset_content(assetId: str, file: UploadFile = File(...)) -> Asset:
+    """Upload or replace the content blob for an existing asset."""
+    settings = get_settings()
+    svc = ImportService(settings.registry_dir)
+    asset = svc.attach_content(
+        assetId,
+        file.filename or "upload",
+        file.file,
+        mime_type=file.content_type,
+        actor_id="web",
+    )
+    if asset is None:
+        return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
+    return asset
 
 
 @router.post("/assets/{assetId}/assign-slot", status_code=201, response_model=BomAssignment)
