@@ -39,6 +39,11 @@ import type {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+/** Absolute URL to the safe asset-content proxy (GET /api/preview/asset/{id}/content). */
+export function assetContentUrl(assetId: string): string {
+  return `${API_BASE}/api/preview/asset/${assetId}/content`;
+}
+
 // ============================================================
 // Error types
 // ============================================================

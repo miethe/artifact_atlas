@@ -156,14 +156,36 @@ def import_to_inbox(projectId: str, data: InboxImportRequest) -> dict:
     for uri in uris:
         if uri.startswith("file://") or not uri.startswith(("http://", "https://", "manual://")):
             local_path = uri.replace("file://", "") if uri.startswith("file://") else uri
-            _assert_path_allowed(local_path)
-            result = svc.import_local_path(
-                local_path,
-                project_id=projectId,
-                sensitivity=data.sensitivity.value,
-                agent_access=data.agent_access.value,
-                metadata=data.metadata,
+            # Browser file pickers expose only the basename (e.g.
+            # "file://openapi.yaml") because the OS hides full filesystem
+            # paths. Treat a bare basename as a metadata-only upload: skip
+            # the workspace allowlist check and register the asset without
+            # attempting to read it from disk. Absolute paths and any path
+            # containing a separator continue to flow through the
+            # workspace-boundary guard.
+            is_bare_basename = (
+                not local_path.startswith("/")
+                and "/" not in local_path
+                and "\\" not in local_path
             )
+            if is_bare_basename:
+                result = svc.import_local_path(
+                    local_path,
+                    project_id=projectId,
+                    sensitivity=data.sensitivity.value,
+                    agent_access=data.agent_access.value,
+                    metadata=data.metadata,
+                    metadata_only=True,
+                )
+            else:
+                _assert_path_allowed(local_path)
+                result = svc.import_local_path(
+                    local_path,
+                    project_id=projectId,
+                    sensitivity=data.sensitivity.value,
+                    agent_access=data.agent_access.value,
+                    metadata=data.metadata,
+                )
         elif uri.startswith(("http://", "https://")):
             result = svc.import_url(
                 uri,

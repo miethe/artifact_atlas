@@ -81,6 +81,7 @@ class ImportService:
         on_duplicate: str = "link",  # "link" | "return_existing" | "create_new"
         actor_id: str = "system",
         metadata: dict[str, Any] | None = None,
+        metadata_only: bool = False,
     ) -> ImportResult:
         """Import a local file as an asset.
 
@@ -99,12 +100,16 @@ class ImportService:
                 existing without changes, "create_new" creates a new record.
             actor_id: Actor performing the import.
             metadata: Additional metadata to embed.
+            metadata_only: When True, skip the disk-read block entirely
+                (no size_bytes, hash, or MIME guess) and preserve the
+                supplied path verbatim in the ``file://`` URI without
+                resolving against the API process CWD. Used for browser
+                file picker uploads where only the basename is exposed.
 
         Returns:
             ImportResult with asset and duplicate flag.
         """
         p = Path(file_path)
-        uri = f"file://{p.resolve()}"
         file_title = title or p.name
 
         # Compute file attributes
@@ -112,12 +117,19 @@ class ImportService:
         hash_sha256: int | None = None
         mime_type: str | None = None
 
-        if p.exists():
-            size_bytes = p.stat().st_size
-            hash_sha256 = _sha256_file(p)
-            mime_type, _ = mimetypes.guess_type(str(p))
-            if mime_type is None:
-                mime_type = "application/octet-stream"
+        if metadata_only:
+            # Browser-uploaded file: preserve the original (bare) path in the
+            # URI; do not resolve against the API process CWD and do not read
+            # the file from disk.
+            uri = f"file://{file_path}"
+        else:
+            uri = f"file://{p.resolve()}"
+            if p.exists():
+                size_bytes = p.stat().st_size
+                hash_sha256 = _sha256_file(p)
+                mime_type, _ = mimetypes.guess_type(str(p))
+                if mime_type is None:
+                    mime_type = "application/octet-stream"
 
         # Duplicate detection by hash (only if we have a hash)
         if hash_sha256 and on_duplicate != "create_new":

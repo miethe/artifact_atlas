@@ -19,6 +19,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { clsx } from "clsx";
 import type { Asset } from "@/lib/types";
+import { assetContentUrl } from "@/lib/api";
 import { AccessRestrictedPlaceholder } from "./AccessRestrictedPlaceholder";
 import { ImageRenderer } from "./ImageRenderer";
 import { ErrorTile } from "./ErrorTile";
@@ -194,7 +195,7 @@ function resolveRenderer(asset: Asset): RendererKind {
 
 /** Returns the best URL for content display. */
 function getContentUrl(asset: Asset): string {
-  return asset.storage_uri ?? asset.uri;
+  return assetContentUrl(asset.id);
 }
 
 /** Returns the original URL used for download links in error tiles. */
