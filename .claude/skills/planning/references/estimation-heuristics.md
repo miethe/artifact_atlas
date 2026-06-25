@@ -13,7 +13,6 @@ For every plan, the author MUST be able to answer these in writing in the plan's
 3. **Algorithmic flag**: Does any service description contain `dependency`, `resolution`, `graph`, `conflict detection`, `cycle`, `solver`, `inference`, `ranking`, or `scheduling`? If yes, has it been SPIKE'd or budgeted as algorithmic?
 4. **Bundle decomposition**: If the PRD packages ≥3 capability areas, has the plan estimated each area independently and summed them?
 5. **Anchor reference**: Which prior completed feature is the closest analog, what did it actually cost, and is this estimate within ±30% of that?
-6. **Huge-file touch**: Does any task touch a file >2K lines? If yes, is the 2× multiplier applied and the file listed in High-Friction Surfaces?
 
 If any answer is "no" or "haven't checked," the estimate is not ready to lock.
 
@@ -100,7 +99,7 @@ These tasks are real, recurring, and routinely glossed in trailing bullets ("Ope
 
 This is distinct from the whole-file-refactor Tier-2 override in `planning/SKILL.md` (which exempts in-place edits). A giant file forces repeated grep/sed navigation and is the dominant driver of context-blows and fix-cycles.
 
-**Application**: `wc -l` every file in scope at planning time. List files >2K lines in a plan-level **"High-Friction Surfaces"** note. Apply a ≥2× multiplier to each task touching one, and mandate the anti-blow guardrail prompt block (do-not-read-whole, grep -n + sed only, budget ≤40 tool uses, STOP-and-report-partial — see `.claude/specs/workflows/large-file-refactor-decomposition-spec.md`) for those tasks. Evidence: a ~5,100-line router drove 2-4× per task across an entire Tier-3 plan.
+**Application**: `wc -l` every file in scope at planning time. List files >2K lines in a plan-level **"High-Friction Surfaces"** note. Apply a ≥2× multiplier to each task touching one, and mandate the anti-blow guardrail prompt block (do-not-read-whole, grep -n + sed only, budget ≤40 tool uses, STOP-and-report-partial — see `.claude/specs/workflows/large-file-refactor-decomposition-spec.md`) for those tasks. Evidence: a ~5,100-line router drove 2–4× per task across an entire Tier-3 plan.
 
 ## Anti-Patterns
 

@@ -2,11 +2,13 @@
 title: "Implementation Plan: Feature Name" # Human-readable implementation plan title
 schema_version: 2 # CCDash frontmatter schema version
 doc_type: implementation_plan # Must remain `implementation_plan`
+it_schema: 1 # Plan-frontmatter schema version (.claude/skills/planning/references/plan-frontmatter-schema.md). MUST.
 status: draft # draft|planning|in-progress|review|completed|superseded
 created: YYYY-MM-DD # Initial creation date (YYYY-MM-DD)
 updated: YYYY-MM-DD # Last edit date (YYYY-MM-DD)
 feature_slug: "feature-name" # Kebab-case feature identifier
 feature_version: "v1" # Version label for this feature document set
+tier: 2 # 0|1|2|3 complexity/routing tier. MUST.
 prd_ref: /docs/project_plans/PRDs/category/feature-name-v1.md # Parent PRD path (required)
 plan_ref: null # Root implementation plan should be null
 scope: "Describe implementation boundary in one sentence" # Scope summary used in dashboards
@@ -38,7 +40,25 @@ milestone: null # Optional release/milestone marker
 commit_refs: [] # Commit SHAs added during implementation
 pr_refs: [] # Pull request refs (e.g., #123)
 files_affected: [] # Key files expected to change
+# --- Canonical plan-frontmatter schema (it_schema: 1) — structural planning lens fields ---
+# Author open_questions and decisions as YAML lists (NOT body prose / linked files). The capture
+# pipeline projects these onto the command-center plan-lens. See plan-frontmatter-schema.md §5.4.
+planning_maturity: in_progress # idea|scoped|in_progress|shipped — derives from status if absent. SHOULD.
+open_questions: [] # SHOULD. List of str, or {q, owner, status}. Primary enrichment target.
+decisions: [] # SHOULD. List of {decision, rationale, status}. Canonical home for decisions.
+decision_gates: [] # SHOULD. List of {gate, status}; derived from decisions where status=pending.
+success_metrics: [] # SHOULD. List of measurable outcomes (CR-3 → Node.meta).
+contributors_note: null # (contributors above is the canonical author list)
+scores: {} # SHOULD (seed). {strategic_value, urgency, leverage, execution_readiness, risk, ...}. M2 engine owns runtime recompute.
+acceptance_criteria: [] # SHOULD (plan-level rollup; per-task AC lives on tasks[] in progress files).
+# Agent-facing context (projected onto Node.agent_* columns) — make delegation prompts PR-reviewable:
+execution_mode: unassigned # human|agent|hybrid|autonomous|system|unassigned. SHOULD.
+agent_title: null # SHOULD. Short delegation title for the feature/phase node.
+agent_summary: null # SHOULD. One-line summary for the agent picking up this node.
+agent_context: null # SHOULD (md). Context block the executing agent needs.
 # Optional: omit for sequential phase-number-ordered execution (safe fallback for Tier 0/1 and strictly sequential Tier 2 plans)
+# wave_plan.phases[] entries MAY carry phase-level agent_title/agent_summary/agent_context,
+# entry_criteria: [], exit_criteria: [], and node_type (work_package|milestone|...).
 wave_plan:
   serialization_barriers:           # Files that force serialization if written by >1 phase in the same wave
     - skillmeat/api/openapi.json    # Common barriers: openapi.json, CLAUDE.md, README.md, .claude/settings.json
@@ -47,8 +67,6 @@ wave_plan:
       depends_on: []                # [] = no dependencies; runs in wave 1
       isolation: shared             # shared | worktree (use worktree for migrations, auth, experiments)
       parallelizable: true          # false = force solo wave even when deps allow parallel
-      provider: claude              # Optional: default provider for all tasks in phase (from multi-model.toml defaults if absent)
-      profile: null                 # Optional: default profile for the provider in this phase
       owner_skills: []              # Skills pre-loaded into phase-owner agent (full SKILL.md injected at startup)
       files_affected:               # Files this phase writes; used for serialization-barrier intersection check
         - skillmeat/cache/models/example.py
@@ -123,17 +141,17 @@ Following MeatyPrompts layered architecture:
 
 At-a-glance view of every phase with point estimates, target subagents, and model/platform designations. Keep this table in sync with the detailed phase breakdowns below — it is the canonical orchestration index for executors.
 
-| Phase | Title | Estimate | Target Subagent(s) | Model(s) | Provider | Profile | Notes |
-|-------|-------|----------|--------------------|---------:|----------|---------|-------|
-| 1 | Database Foundation | X pts | data-layer-expert | sonnet | claude | — | — |
-| 2 | Repository Layer | X pts | python-backend-engineer, data-layer-expert | sonnet | claude | — | — |
-| 3 | Service Layer | X pts | python-backend-engineer, backend-architect | sonnet | claude | — | — |
-| 4 | API Layer | X pts | python-backend-engineer, backend-architect | sonnet | claude | — | — |
-| 5 | UI Layer | X pts | ui-engineer-enhanced, frontend-developer, ui-designer | sonnet (+ gemini-3.1-pro for design) | claude | — | External model for UI-001 wireframing |
-| 6 | Testing Layer | X pts | testing specialists, all developers | sonnet | claude | — | — |
-| 7 | Documentation Finalization | X pts | changelog-generator, documentation-writer, ai-artifacts-engineer | haiku (sonnet for skill SPECs) | ica | free-tier | — |
-| 8 | Deployment Layer | X pts | DevOps, lead-pm | sonnet | claude | — | — |
-| **Total** | — | **X pts** | — | — | — | — | — |
+| Phase | Title | Estimate | Target Subagent(s) | Model(s) | Notes |
+|-------|-------|----------|--------------------|----------|-------|
+| 1 | Database Foundation | X pts | data-layer-expert | sonnet | — |
+| 2 | Repository Layer | X pts | python-backend-engineer, data-layer-expert | sonnet | — |
+| 3 | Service Layer | X pts | python-backend-engineer, backend-architect | sonnet | — |
+| 4 | API Layer | X pts | python-backend-engineer, backend-architect | sonnet | — |
+| 5 | UI Layer | X pts | ui-engineer-enhanced, frontend-developer, ui-designer | sonnet (+ gemini-3.1-pro for design) | External model for UI-001 wireframing |
+| 6 | Testing Layer | X pts | testing specialists, all developers | sonnet | — |
+| 7 | Documentation Finalization | X pts | changelog-generator, documentation-writer, ai-artifacts-engineer | haiku (sonnet for skill SPECs) | — |
+| 8 | Deployment Layer | X pts | DevOps, lead-pm | sonnet | — |
+| **Total** | — | **X pts** | — | — | — |
 
 **Model column conventions:**
 - Claude-only phases: list the single Claude model (e.g., `sonnet`, `haiku`).
@@ -195,11 +213,11 @@ The final phase (Documentation Finalization) cannot be sealed until:
 **Dependencies**: None
 **Assigned Subagent(s)**: data-layer-expert
 
-| Task ID | Task Name | Description | Acceptance Criteria | Estimate | Subagent(s) | Model | Effort | Provider | Profile | Dependencies |
-|---------|-----------|-------------|-------------------|----------|-------------|-------|--------|----------|---------|--------------|
-| DB-001 | Schema Design | Create database schema | Schema validates, migrations run cleanly | 3 pts | data-layer-expert | sonnet | adaptive | claude | — | None |
-| DB-002 | RLS Policies | Implement Row Level Security | Security enforces correct boundaries | 2 pts | data-layer-expert | sonnet | adaptive | claude | — | DB-001 |
-| DB-003 | Indexes & Performance | Add indexes for query optimization | Query performance meets benchmarks | 1 pt | data-layer-expert | sonnet | adaptive | claude | — | DB-001 |
+| Task ID | Task Name | Description | Acceptance Criteria | Estimate | Subagent(s) | Model | Effort | Dependencies |
+|---------|-----------|-------------|-------------------|----------|-------------|-------|--------|--------------|
+| DB-001 | Schema Design | Create database schema | Schema validates, migrations run cleanly | 3 pts | data-layer-expert | sonnet | adaptive | None |
+| DB-002 | RLS Policies | Implement Row Level Security | Security enforces correct boundaries | 2 pts | data-layer-expert | sonnet | adaptive | DB-001 |
+| DB-003 | Indexes & Performance | Add indexes for query optimization | Query performance meets benchmarks | 1 pt | data-layer-expert | sonnet | adaptive | DB-001 |
 
 **Phase 1 Quality Gates:**
 - [ ] Schema migrations run successfully
@@ -456,9 +474,9 @@ Derive the PR summary bullets directly from the implementation plan's Executive 
 
 ---
 
-## Model, Provider & Profile Assignment
+## Model & Effort Assignment
 
-All tasks in the phase breakdowns include **Model**, **Effort**, **Provider**, and **Profile** columns. For the authoritative assignment procedure, see `.claude/specs/provider-routing-spec.md §3`.
+All tasks in the phase breakdowns include **Model** and **Effort** columns:
 
 ### Model Column
 

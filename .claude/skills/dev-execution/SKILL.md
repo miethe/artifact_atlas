@@ -43,7 +43,7 @@ The execution model for full Tier 2/3 plans is **workflow** (`.claude/workflows/
 
 The `adaptive` path's `phase-owner` agentType MAY nest its own implementers via the `Agent` tool,
 gated by the opt-in, default-OFF `phase_owner_nesting_enabled` args flag on the `execute-plan`
-workflow. This is a pilot capability (strategy plan §4 Tier B); it is not auto-promoted.
+workflow. This is a pilot capability; it is not auto-promoted.
 
 **Nesting is for decomposition, not throughput.** A single nested `Agent` call blocks until the
 child returns; batched nested spawns get ungoverned concurrency (no `parallel()` cap+queue). Keep
@@ -55,7 +55,7 @@ slice.
 
 | Rule | Summary |
 |---|---|
-| Depth cap | Max 1 level of nesting below the phase-owner (i.e. phase-owner → helper; no deeper). |
+| Depth cap | Max 1 level of nesting below the phase-owner (phase-owner → helper; no deeper). |
 | Bounded helpers | Nested helpers must be bounded — < ~40 tool uses per level. |
 | Single committer | The phase-owner is the **only** committer. Children never `git add/commit/push/stash`. |
 | Mode-D at depth | Nested agents are prohibited from auth/payments/migrations/deletion/force-push/secret-rotation. On hitting Mode-D territory: STOP and bubble `{needs_opus, mode_d}` up the chain unchanged until Opus handles it interactively. |
@@ -280,6 +280,48 @@ For phase execution, use artifact-tracking skill for:
 
 Integration patterns: [./integrations/artifact-tracking.md]
 
+### IntentTree SDLC Sync (AWPR v2 — FR-11)
+
+When `INTENTTREE_SDLC_SYNC=1`, the execution flow re-runs `itt sync import <file> --apply --tree
+<tree>` at four status hook points to propagate task/phase status to bound IntentTree nodes:
+
+| Hook point | Location | What syncs |
+|---|---|---|
+| Task start | phase-execution.md §2.3a | progress file → task node set to `in_progress` |
+| Task done | phase-execution.md §2.5a | progress file → task node set to `completed` |
+| Phase done | phase-execution.md §5.2a | progress file → phase node set to `completed` |
+| Inter-wave merge | plan-execution.md §3c-sync | all wave progress files; plan file at end |
+
+**Non-fatal contract**: offline / CLI-missing / non-zero exit → log warning and continue. Never
+blocks execution. All sync calls are idempotent (re-running unchanged source is a no-op).
+
+**Thin hook script**: `.claude/skills/dev-execution/hooks/sdlc-sync.sh` (flag-gated; exits 0 on
+any error). Set `INTENTTREE_TREE=<tree-id>` or let the CLI infer from artifact frontmatter.
+
+**References**:
+- Contract: `docs/project_plans/implementation_plans/features/awpr-v2-task-node-contract.md`
+- CLI: `client/src/intenttree_client/cli/commands/sync_cmd.py`
+- P0 contract task: TASK-6.2 (FR-11)
+- Planning skill pattern: `.claude/skills/planning/SKILL.md` §10 (analogous planning-time sync)
+
+### Plan status-hygiene hooks (DI-135) — opt-in
+
+The IntentTree plan-lens reads `status`/`planning_maturity` from **plan-file frontmatter** (markdown
+is canonical). When a phase or feature ships, keep that frontmatter current so the lens does not show
+stale `not_started`/`in_progress` on completed work. Two opt-in, comment-preserving, dry-run-by-default
+hooks live in `.claude/skills/dev-execution/scripts/`:
+
+| Hook | What it does | Invocation |
+|---|---|---|
+| `complete-phase.py` | Rewrites plan `status` → `completed` and `planning_maturity` → `shipped` (idempotent no-op if already current) | `python .claude/skills/dev-execution/scripts/complete-phase.py <plan.md> [--apply]` |
+| `complete-task.py` | Updates one task's `status` inside a frontmatter `tasks:` list (preserves indentation/comments) | `python .claude/skills/dev-execution/scripts/complete-task.py <file> --task <id> --status completed [--apply]` |
+
+**Contract**: opt-in (no silent background mutation — dry-run is the default; you must pass `--apply`).
+For `.claude/progress/*` task completion, `update-status.py` (artifact-tracking) remains canonical —
+it enforces the completion gate (timestamps/evidence); `complete-task.py` is the lighter companion for
+keeping a plan-file `tasks[]` status current. After `--apply`, re-running `intenttree_capture.py
+--apply` propagates the new status to the bound node with no agent involvement (DI-135 closed at source).
+
 ### meatycapture-capture
 
 For request-log operations during any execution mode:
@@ -428,16 +470,6 @@ Recent Commits:
 
 Progress: 60% (6/10 tasks)
 ```
-
----
-
-## IntentTree SDLC Sync (optional)
-
-When `INTENTTREE_SDLC_SYNC=1` (+ `INTENTTREE_TREE`), task/phase status writes during execution
-auto-mirror into the shared IntentTree instance (best-effort, non-fatal) via artifact-tracking's
-`intenttree_sync` hook: the bound node's status flips and the feature/phase progress rolls up.
-Markdown stays canonical. See `../artifact-tracking/intenttree-sync.md` for setup, the repo→tree
-map, and the manual `intenttree_capture.py` backfill command.
 
 ---
 

@@ -98,6 +98,7 @@ A user story is complete when:
 - [ ] E2E tests for critical user paths
 - [ ] Negative test cases included
 - [ ] All tests passing
+- [ ] **Mutation flows verified against the datastore (Postgres/API read), not the DOM** — optimistic caches and stale renders lie; assert the row/response (CC v3.1 doctrine; see `visual-fidelity.md` R14)
 
 ### Quality
 
@@ -172,6 +173,7 @@ An individual task is complete when:
 
 - [ ] Changes committed with descriptive message
 - [ ] References task ID in commit
+- [ ] **`git status` clean against the expected file set before pausing/handing off** — in CC v3.1 a single file missed its phase commit and sat dirty for a session; reconcile the working tree against intended changes at every pause
 
 ## Tier 1 Sprint Completion
 

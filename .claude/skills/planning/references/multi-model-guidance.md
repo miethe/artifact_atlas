@@ -2,9 +2,42 @@
 
 Reference for assigning tasks to external models. Configuration: `.claude/config/multi-model.toml`
 
-## Model Routing Decision Procedure
+## Model Routing Decision Tree
 
-For the authoritative model selection and provider routing decision procedure, see `.claude/specs/provider-routing-spec.md §3`. This document retains the Canonical Effort Vocabulary (below) as the single authoritative source for valid effort values and defaults per model family.
+```
+START: What is the task type?
+
+Is the task image/asset generation?
+  YES → nano-banana-pro (quality mode for final assets)
+  NO  → Continue
+
+Is the task UI wireframing, SVG animation, or complex visuals?
+  Is it structural (layout, component hierarchy, interaction states, data tables)?
+    YES → gemini-3.1-pro SVG wireframe (machine-readable, editable, deterministic labels)
+  Is it aesthetic (color exploration, visual feel, high-fidelity stakeholder preview)?
+    YES → nano-banana-pro raster mockup (quality mode for finals, standard for iteration)
+  Need both? → Gemini SVG first (structure), then Nano Banana (aesthetic target)
+  NO  → Continue
+
+Does the task require current web information (post-Feb 2025)?
+  YES → gemini-3.1-pro (web search capability)
+  NO  → Continue
+
+Is this a debug escalation (2+ failed Claude cycles)?
+  YES → gpt-5.3-codex (xhigh effort)
+  NO  → Continue
+
+Is this a plan review checkpoint (opt-in)?
+  YES → gpt-5.3-codex (medium effort)
+  NO  → Continue
+
+Is this documentation, exploration, or simple search?
+  YES → haiku (adaptive effort)
+  NO  → Continue
+
+DEFAULT: Implementation, code review, or standard development
+  → sonnet (adaptive effort)
+```
 
 ## Canonical Effort Vocabulary
 
