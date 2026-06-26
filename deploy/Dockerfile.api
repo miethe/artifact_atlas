@@ -16,12 +16,16 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/*
 
-# Runtime deps — mirror api/pyproject.toml [project].dependencies.
+# Runtime deps — mirror api/pyproject.toml [project].dependencies, plus the optional
+# `mcp` SDK so the in-container MCP stdio server (`python -m app.mcp.server`, exposed over
+# ssh+`podman exec` by the launchpad's aos-mcp) can start. The MCP server reads the same
+# /data volume + ATLAS_* env as the API, so it must run co-located in this container.
 RUN pip install --no-cache-dir \
       "fastapi>=0.115.0" \
       "pydantic>=2.8.0" \
       "uvicorn[standard]>=0.30.0" \
-      "pyyaml>=6.0"
+      "pyyaml>=6.0" \
+      "mcp>=1.0"
 
 # App source + the repo data the API reads at runtime. settings.py resolves
 # _REPO_ROOT two levels above api/app/settings.py == /app, so config/, registry/,
