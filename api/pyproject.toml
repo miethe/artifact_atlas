@@ -15,6 +15,24 @@ dev = [
   "pytest>=8.0.0",
   "httpx>=0.27.0",
 ]
+# Atlas MCP stdio server (app.mcp.server). Optional: the production API image
+# (deploy/Dockerfile.api) does NOT install it — it pip-installs only the runtime
+# deps above and runs uvicorn from source, so this entrypoint/extra has no effect
+# on the container. The MCP surface is exposed where the package is installed as
+# a console script (e.g. a host editable install on the node), wired over
+# ssh-stdio by the launchpad's aos-mcp (AOS remote targeting).
+mcp = ["mcp>=1.0"]
+
+[project.scripts]
+atlas-mcp = "app.mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -211,9 +211,21 @@ def run_server() -> None:
     asyncio.run(_run())
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console-script entry point (``atlas-mcp``).
+
+    Wraps :func:`run_server` so a missing optional ``mcp`` SDK surfaces as a
+    clean operator message + exit 1 rather than a traceback. Exposed over
+    ssh-stdio by the launchpad's aos-mcp (AOS remote targeting); the node must
+    install this package's console script and provide the ``ATLAS_*`` env the
+    settings layer reads (``ATLAS_REGISTRY_DIR`` etc.).
+    """
     try:
         run_server()
     except ImportError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
