@@ -171,6 +171,76 @@
   --accent-foreground: 221 39% 11%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
+
+  /* --- Shadow color layers (theme-aware; consumed by tailwind.config boxShadow) --- */
+  --shadow-card-1: rgb(0 0 0 / 0.07);
+  --shadow-card-2: rgb(0 0 0 / 0.05);
+  --shadow-card-hover-1: rgb(0 0 0 / 0.08);
+  --shadow-card-hover-2: rgb(0 0 0 / 0.04);
+  --shadow-drawer-1: rgb(0 0 0 / 0.08);
+  --shadow-drawer-2: rgb(0 0 0 / 0.05);
+  --shadow-modal-1: rgb(0 0 0 / 0.14);
+  --shadow-modal-2: rgb(0 0 0 / 0.08);
+}
+
+/* ============================================================
+   DARK MODE TOKENS (DM-1) — flag-gated via `dark-mode`, DEFAULT OFF
+   Applied via `[data-theme="dark"]` on <html>, set by the inline
+   no-FOUC script in app/layout.tsx (only rendered when the
+   `dark-mode` flag is on). `[data-theme]` is otherwise absent, so
+   this block never matches when the flag is off — light stays forced.
+
+   Palette verified against WCAG 2.1 AA via relative-luminance contrast
+   ratio (see docs/project_plans/design-specs/dark-mode-aa.md for the
+   full table). Summary (fg vs bg):
+     ink            on surface         13.44:1  (need >=4.5)
+     ink            on surface-raised  12.33:1
+     ink            on bg              14.75:1
+     ink-muted      on surface          7.05:1  (need >=4.5)
+     ink-faint      on surface          5.27:1  (need >=4.5)
+     border-strong  on surface          3.41:1  (need >=3.0, non-text UI)
+     border-strong  on surface-raised   3.13:1
+     border-focus   on surface          6.49:1  (need >=3.0)
+     ink-inverse(#fff) on brand-600     5.17:1  (need >=4.5, unchanged)
+   `--border` (decorative divider, not a UI-component boundary) stays
+   low-contrast by design — WCAG 1.4.11 does not apply to purely
+   decorative separators.
+
+   Scope note: raw palette swatches (--gray-*, --blue-*, --status-*,
+   --sens-*, shadcn bridge --background/--card/etc.) are intentionally
+   NOT overridden here — see DM-2/DM-5 status in the design spec.
+   ============================================================ */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #14161b;
+  --bg-subtle: #1a1d24;
+
+  --surface: #1c1f26;
+  --surface-raised: #23262e;
+  --surface-sunken: #14161b;
+  --surface-overlay: #23262e;
+
+  --ink: #e6e8ec;
+  --ink-muted: #a3aab5;
+  --ink-faint: #8b92a0;
+  --ink-inverse: #ffffff;
+
+  --border: #2b2f37;
+  --border-strong: #6b7280;
+  --border-focus: #60a5fa;
+
+  --focus-ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--border-focus);
+
+  --shadow-card-1: rgb(0 0 0 / 0.36);
+  --shadow-card-2: rgb(0 0 0 / 0.24);
+  --shadow-card-hover-1: rgb(0 0 0 / 0.42);
+  --shadow-card-hover-2: rgb(0 0 0 / 0.2);
+  --shadow-drawer-1: rgb(0 0 0 / 0.45);
+  --shadow-drawer-2: rgb(0 0 0 / 0.28);
+  --shadow-modal-1: rgb(0 0 0 / 0.55);
+  --shadow-modal-2: rgb(0 0 0 / 0.32);
 }
 
 /* ============================================================

@@ -17,10 +17,13 @@ client = TestClient(app)
 
 
 def test_upload_creates_asset_with_servable_content(tmp_registry: Path) -> None:
+    # agent_access=preview_allowed: the default (metadata_only) is now
+    # policy-gated to 403 by the preview content proxy (CRITICAL fix), so an
+    # asset intended to be servable via the proxy must clear that bar.
     resp = client.post(
         "/api/projects/proj1/inbox/upload",
         files=[("files", ("report.txt", b"hello bytes", "text/plain"))],
-        data={"sensitivity": "personal"},
+        data={"sensitivity": "personal", "agent_access": "preview_allowed"},
     )
     assert resp.status_code == 202, resp.text
     body = resp.json()
@@ -47,9 +50,16 @@ def test_upload_dedup_reports_duplicate(tmp_registry: Path) -> None:
 
 
 def test_put_content_attaches_to_metadata_only_asset(tmp_registry: Path) -> None:
-    # Register a metadata-only asset (browser-picked, no bytes) → preview 404s.
+    # Register a browser-picked asset with no bytes on disk yet (the
+    # `metadata_only=True` kwarg here means "path-only import, skip the
+    # disk-read block" — distinct from the agent_access enum value below).
+    # agent_access=preview_allowed so the *only* reason preview 404s before
+    # PUT is the missing file, not the policy gate (CRITICAL fix: the
+    # default agent_access=metadata_only would now also 403 here).
     svc = ImportService(tmp_registry)
-    meta = svc.import_local_path("picked.txt", project_id="p", metadata_only=True)
+    meta = svc.import_local_path(
+        "picked.txt", project_id="p", metadata_only=True, agent_access="preview_allowed"
+    )
     pre = client.get(f"/api/preview/asset/{meta.asset.id}/content")
     assert pre.status_code != 200
 

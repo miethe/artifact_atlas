@@ -2,7 +2,7 @@
 schema_version: 2
 doc_type: design-spec
 title: "Design Spec: Facelift P2 Items — Artifact Atlas"
-status: draft
+status: completed
 maturity: idea
 created: '2026-06-21'
 feature_slug: ui-polish-pass
@@ -13,9 +13,25 @@ defer_category: backlog
 
 # Design Spec: Facelift P2 Items — Artifact Atlas
 
-> **Maturity: idea** — This stub preserves deferred P2 polish scope from the UI Polish Pass v1
-> Leg-5 audit. It is NOT a commitment. Promote to `shaping` after a post-P1 polish sprint is
-> scheduled.
+## Implementation status (2026-07-08)
+
+**Shipped items** (autopilot/planning-wave-20260708):
+- P2-2: Filter-bar consolidation (AssetLibrary)
+- P2-3: View-mode labels (AssetLibrary)
+- P2-4: Board per-column add-card (BoardColumn)
+- P2-6: Context-pack token count (WizardStepReview)
+- P2-7: Inbox queue row classification tag (InboxQueueItem)
+- P2-9: Sidebar project switcher (SidebarNav)
+- P2-10: MissingContextPanel urgency treatment (MissingContextPanel)
+- P2-11: PageHeader h1 size (PageHeader)
+- P2-12: Panel "View all" click target (PanelShell)
+- P2-13: Global keyboard shortcuts
+
+**Superseded / deferred**:
+- P2-5: RightDrawer / AssetDetail tab bar — superseded by the P2b EntityModal migration (Preview/Details/Links/Policy tabs now consolidated in the canonical modal)
+
+> **Maturity: completed** — P2 items shipped in the 2026-07-08 autopilot wave. P2-5 is superseded by
+> the EntityModal pattern from P2b.
 
 ---
 

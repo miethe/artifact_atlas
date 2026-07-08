@@ -103,6 +103,19 @@ describe("FilterBar — controlled prop state", () => {
     expect(screen.getByText(/42 assets/i)).toBeInTheDocument();
   });
 
+  it("renders trailing slot alongside the result count (P2-2 consolidation)", () => {
+    render(
+      <FilterBar
+        filters={{}}
+        onChange={vi.fn()}
+        totalCount={5}
+        trailing={<button type="button">Add Asset</button>}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Add Asset" })).toBeInTheDocument();
+    expect(screen.getByText(/5 assets/i)).toBeInTheDocument();
+  });
+
   it("sensitivity select changes call onChange with correct field", async () => {
     const onChange = vi.fn();
     render(<FilterBar filters={{}} onChange={onChange} />);

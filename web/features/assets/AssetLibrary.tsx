@@ -179,49 +179,45 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* FilterBar */}
+      {/* Consolidated filter + toolbar row (P2-2): filters on the left, view/sort/add on the right */}
       <FilterBar
         filters={filters}
         onChange={setFilters}
         totalCount={isLoading ? undefined : totalCount}
+        trailing={
+          <>
+            {/* BulkActionBar */}
+            {selectedIds.size > 0 && (
+              <BulkActionBar
+                selectedIds={Array.from(selectedIds)}
+                onClear={() => setSelectedIds(new Set())}
+              />
+            )}
+
+            {/* View toggle — labeled (P2-3) */}
+            <SegmentedControl
+              value={viewMode}
+              onChange={(v) => setViewMode(v as ViewMode)}
+              options={VIEW_OPTIONS}
+              size="sm"
+              label="View mode"
+            />
+
+            {/* Sort */}
+            <SortMenu field={sortField} dir={sortDir} onChange={setSort} />
+
+            {/* Add button */}
+            <Button
+              size="sm"
+              variant="primary"
+              iconLeft={<Plus aria-hidden className="w-3.5 h-3.5" />}
+              aria-label="Add asset"
+            >
+              Add Asset
+            </Button>
+          </>
+        }
       />
-
-      {/* Toolbar: view toggle + sort + add */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border)] bg-[var(--surface)] shrink-0">
-        {/* View toggle */}
-        <SegmentedControl
-          value={viewMode}
-          onChange={(v) => setViewMode(v as ViewMode)}
-          options={VIEW_OPTIONS}
-          size="sm"
-          iconOnly
-          label="View mode"
-        />
-
-        {/* Sort */}
-        <SortMenu field={sortField} dir={sortDir} onChange={setSort} />
-
-        {/* BulkActionBar */}
-        {selectedIds.size > 0 && (
-          <BulkActionBar
-            selectedIds={Array.from(selectedIds)}
-            onClear={() => setSelectedIds(new Set())}
-            className="mx-auto"
-          />
-        )}
-
-        {/* Spacer + add button */}
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="primary"
-            iconLeft={<Plus aria-hidden className="w-3.5 h-3.5" />}
-            aria-label="Add asset"
-          >
-            Add Asset
-          </Button>
-        </div>
-      </div>
 
       {/* Content area: gallery/table + right drawer */}
       <div className="flex flex-1 overflow-hidden">

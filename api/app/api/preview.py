@@ -7,11 +7,30 @@ Routes:
 
 Security invariants (P4C-002):
   - Only local file:// URIs are proxied (no SSRF — remote URIs are rejected).
-  - MIME allow-list: only safe document/image/text types served.
+  - MIME allow-list: only safe document/image/text/audio/video types served.
   - X-Content-Type-Options: nosniff always emitted.
   - Set-Cookie / Set-Cookie2 are never forwarded.
-  - Non-inline-safe MIME types get Content-Disposition: attachment.
+  - Non-inline-safe MIME types get Content-Disposition: attachment, built via
+    RFC 5987/6266-safe encoding (control chars stripped, non-ASCII
+    percent-encoded) — a raw ``source_path.name`` is never interpolated into
+    a header value (CR/LF header-injection guard).
   - fetchRelated:false semantics: no linked/remote resources are auto-fetched.
+  - agent_access policy gate: assets with agent_access=none/metadata_only are
+    denied (403) on both the content proxy and the cached-PDF endpoint, via
+    the same PolicyService used by assets.py ("Policy-gated for content
+    fields") — see ``_check_preview_access`` below.
+
+HTTP Range support (AssetViewer WS-3 — audio/video streaming):
+  The content-proxy endpoint returns Starlette's ``FileResponse``, which
+  natively implements RFC 7233 Range handling for a single byte range:
+  it emits ``Accept-Ranges: bytes`` on every response, and — when the
+  incoming request carries a ``Range`` header — serves ``206 Partial
+  Content`` with a ``Content-Range`` header (or ``416 Range Not
+  Satisfiable`` for an out-of-bounds range). No custom range-parsing code
+  is required here; this module's responsibility is only to ensure audio/
+  video MIME types clear the allow-list below and are marked inline-safe
+  so ``<audio>``/``<video>`` elements can stream them directly instead of
+  being forced to ``Content-Disposition: attachment``.
 """
 
 from __future__ import annotations
@@ -20,12 +39,14 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from app.api._deps import get_asset_service, not_found
+from app.api._deps import forbidden, get_asset_service, get_policy_service, not_found
+from app.models.vocabulary import IncludeMode
 from app.services.pptx_converter import (
     ConversionError,
     ConverterUnavailableError,
@@ -71,6 +92,7 @@ _PROXY_ALLOWED_MIMES: frozenset[str] = frozenset(
         "text/markdown",
         "text/x-markdown",
         "text/csv",
+        "text/tab-separated-values",
         "text/html",
         "text/css",
         # --- Structured data ---
@@ -79,6 +101,27 @@ _PROXY_ALLOWED_MIMES: frozenset[str] = frozenset(
         "application/xml",
         "application/yaml",
         "text/yaml",
+        # --- Audio (AssetViewer WS-3: native <audio controls>) ---
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/ogg",
+        "audio/flac",
+        "audio/x-flac",
+        "audio/aac",
+        "audio/x-aac",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/mp4a-latm",
+        "audio/webm",
+        # --- Video (AssetViewer WS-3: native <video controls>, Range-streamed) ---
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
+        "video/x-msvideo",
+        "video/mpeg",
+        "video/ogg",
     }
 )
 
@@ -98,6 +141,28 @@ _INLINE_SAFE_MIMES: frozenset[str] = frozenset(
         "application/pdf",
         "text/plain",
         "text/css",
+        # Audio/video must stay inline-safe so <audio>/<video src> elements can
+        # stream them directly — forcing Content-Disposition: attachment on
+        # these types would break in-browser playback in some browsers.
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/ogg",
+        "audio/flac",
+        "audio/x-flac",
+        "audio/aac",
+        "audio/x-aac",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/mp4a-latm",
+        "audio/webm",
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
+        "video/x-msvideo",
+        "video/mpeg",
+        "video/ogg",
     }
 )
 
@@ -178,6 +243,109 @@ def _resolve_within_workspace(source_path: Path) -> Path | None:
     if resolved == root or root in resolved.parents:
         return resolved
     return None
+
+
+def _check_preview_access(asset: object) -> JSONResponse | None:
+    """Enforce the same agent_access policy gate as assets.py's "Policy-gated
+    for content fields" convention.
+
+    CRITICAL fix — the content proxy and cached-PDF endpoints previously
+    served bytes for any assetId with no policy check at all.
+
+    Reuses ``PolicyService.evaluate_asset_access`` (no bespoke policy logic):
+    - agent_access="none" is a hard deny in the policy engine itself.
+    - agent_access="metadata_only" caps ``effective_include_mode`` below the
+      requested "preview" mode (the policy engine returns a downgraded
+      "allow", not a deny — but a raw-bytes proxy has no way to serve a
+      "metadata" rendering of a byte stream, so a downgrade away from the
+      requested mode is treated as access-denied here too).
+    - agent_access in {preview_allowed, read_allowed, context_pack_allowed}
+      is permitted to clear the "preview" bar and the proxy serves the file.
+
+    Returns a 403 JSONResponse (API's standard error envelope, via the
+    shared ``forbidden()`` helper) when access is denied, or ``None`` when
+    the caller may proceed to serve content.
+    """
+    sensitivity = (
+        asset.sensitivity.value  # type: ignore[attr-defined]
+        if hasattr(asset.sensitivity, "value")  # type: ignore[attr-defined]
+        else str(asset.sensitivity)  # type: ignore[attr-defined]
+    )
+    agent_access = (
+        asset.agent_access.value  # type: ignore[attr-defined]
+        if hasattr(asset.agent_access, "value")  # type: ignore[attr-defined]
+        else str(asset.agent_access)  # type: ignore[attr-defined]
+    )
+
+    policy_svc = get_policy_service()
+    policy = policy_svc.evaluate_asset_access(
+        resource_id=asset.id,  # type: ignore[attr-defined]
+        sensitivity=sensitivity,
+        agent_access=agent_access,
+        action="read_content",
+        include_mode=IncludeMode.preview,
+        actor_type="agent",
+    )
+    if policy.decision == "deny" or policy.effective_include_mode != IncludeMode.preview:
+        return forbidden(policy.reason or "Asset content access denied by policy.")
+    return None
+
+
+#: Single byte-range Range header syntax: "bytes=N-M", "bytes=N-", or
+#: "bytes=-N" (suffix range). Multi-range ("bytes=0-1,2-3") is rejected as
+#: malformed by this proxy — Starlette itself still validates satisfiability
+#: (416) and range math for anything that passes this syntax check.
+_RANGE_HEADER_RE = re.compile(r"^bytes=(\d+-\d*|-\d+)$")
+
+
+def _validate_range_header(value: str | None) -> JSONResponse | None:
+    """Return a 400 JSONResponse for a syntactically malformed Range header.
+
+    MAJOR(downgraded) fix: Starlette's ``FileResponse`` responds to a
+    malformed ``Range`` header with a bare ``PlainTextResponse(400, ...)``,
+    which breaks this API's JSON error-envelope contract. Pre-validating the
+    syntax here lets us return the standard envelope for malformed input
+    while still delegating all range *math* (satisfiability, 416, partial
+    content slicing) to Starlette for anything that is syntactically valid.
+    """
+    if not value:
+        return None
+    if not _RANGE_HEADER_RE.match(value.strip()):
+        return _error_json(
+            400,
+            "bad_request",
+            "Malformed Range header; expected a single 'bytes=<start>-<end>' range.",
+        )
+    return None
+
+
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _content_disposition_header(filename: str, disposition: str = "attachment") -> str:
+    """Build a header-injection-safe Content-Disposition value.
+
+    MAJOR fix: the previous implementation built the header from
+    ``source_path.name`` with only double-quote escaping, so a filename
+    containing CR/LF could inject arbitrary response headers. This strips
+    control characters (CR, LF, and other C0/DEL bytes) before use, and
+    emits both an RFC 6266 ASCII-safe ``filename=`` fallback and an RFC 5987
+    UTF-8 percent-encoded ``filename*=`` for clients that honor it, so
+    non-ASCII names survive without being replaced.
+    """
+    cleaned = _CONTROL_CHARS_RE.sub("", filename).strip()
+    if not cleaned:
+        cleaned = "download"
+
+    # ASCII-only fallback for legacy clients: replace non-ASCII bytes and
+    # escape backslash/quote so the quoted-string stays well-formed.
+    ascii_name = cleaned.encode("ascii", "replace").decode("ascii")
+    ascii_name = ascii_name.replace("\\", "\\\\").replace('"', '\\"')
+    if not ascii_name.strip("? "):
+        ascii_name = "download"
+
+    encoded = quote(cleaned, safe="")
+    return f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded}'
 
 
 # ---------------------------------------------------------------------------
@@ -290,14 +458,27 @@ def convert_pptx(body: PptxConvertRequest) -> JSONResponse:
     "/cache/{assetId}",
     summary="Serve a cached converted PDF",
 )
-def get_cached_pdf(assetId: str) -> FileResponse:
+def get_cached_pdf(assetId: str, request: Request) -> FileResponse:
     """Return the cached PDF for a previously converted PPTX asset.
 
     The ``assetId`` path parameter is validated against a safe-character
-    pattern to prevent path-traversal attacks.
+    pattern to prevent path-traversal attacks. Enforces the same
+    agent_access policy gate as the content proxy (CRITICAL fix — this
+    endpoint had the same missing-policy-check gap): the asset backing
+    ``assetId`` must exist and clear ``_check_preview_access`` before the
+    cached PDF bytes are served.
     """
     if not _safe_asset_id(assetId):
         return _error_json(400, "bad_request", "Invalid assetId format.")  # type: ignore[return-value]
+
+    svc = get_asset_service()
+    asset = svc.get_asset(assetId)
+    if asset is None:
+        return not_found(f"No cached PDF for asset '{assetId}'.")  # type: ignore[return-value]
+
+    denied = _check_preview_access(asset)
+    if denied is not None:
+        return denied  # type: ignore[return-value]
 
     settings = get_settings()
     cache_path = settings.pptx_cache_dir / f"{assetId}.pdf"
@@ -305,10 +486,17 @@ def get_cached_pdf(assetId: str) -> FileResponse:
     if not cache_path.exists():
         return not_found(f"No cached PDF for asset '{assetId}'.")  # type: ignore[return-value]
 
+    range_error = _validate_range_header(request.headers.get("range"))
+    if range_error is not None:
+        return range_error  # type: ignore[return-value]
+
     return FileResponse(
         path=str(cache_path),
         media_type="application/pdf",
-        headers={"X-Content-Type-Options": "nosniff"},
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
     )
 
 
@@ -321,7 +509,7 @@ def get_cached_pdf(assetId: str) -> FileResponse:
     "/asset/{assetId}/content",
     summary="Proxy asset file content with MIME allow-listing and security headers",
 )
-def get_asset_content(assetId: str) -> FileResponse:
+def get_asset_content(assetId: str, request: Request) -> FileResponse:
     """Read-only, same-origin asset-content proxy (seam contract §4 / P4C-002).
 
     Enforces:
@@ -331,12 +519,26 @@ def get_asset_content(assetId: str) -> FileResponse:
     - ``Set-Cookie`` / ``Set-Cookie2`` are never forwarded (we own the response).
     - Non-inline-safe MIME types get ``Content-Disposition: attachment``.
     - No related/remote resources are auto-fetched (fetchRelated:false semantics).
+
+    HTTP Range requests (RFC 7233) are supported transparently via
+    Starlette's ``FileResponse``: a request carrying a ``Range`` header
+    gets back ``206 Partial Content`` with ``Content-Range``; an
+    out-of-bounds range gets ``416 Range Not Satisfiable``; a request with
+    no ``Range`` header gets the unchanged full-body ``200`` response.
+    ``Accept-Ranges: bytes`` is emitted on every response. This lets the
+    AssetViewer VideoRenderer stream large video blobs without buffering
+    the whole file client-side.
     """
     # 1. Resolve asset
     svc = get_asset_service()
     asset = svc.get_asset(assetId)
     if asset is None:
         return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
+
+    # 1b. Policy gate (CRITICAL fix — see _check_preview_access docstring)
+    denied = _check_preview_access(asset)
+    if denied is not None:
+        return denied  # type: ignore[return-value]
 
     # 2. Resolve source path — local only (SSRF guard)
     source_path = PptxConverter.resolve_source_path(asset)
@@ -378,7 +580,17 @@ def get_asset_content(assetId: str) -> FileResponse:
             f"MIME type '{mime}' is not permitted for preview proxy.",
         )
 
-    # 5. Build safe response headers (P4C-002: nosniff + attachment for risky types)
+    # 4b. Range header syntax pre-validation (MAJOR(downgraded) fix): reject
+    # malformed values with the API's JSON error envelope before delegating
+    # range math/satisfiability to Starlette's FileResponse.
+    range_error = _validate_range_header(request.headers.get("range"))
+    if range_error is not None:
+        return range_error  # type: ignore[return-value]
+
+    # 5. Build safe response headers (P4C-002: nosniff + attachment for risky
+    # types). Passed into the FileResponse constructor below so they carry
+    # through on both the plain 200 path and Starlette's Range-derived 206
+    # (MAJOR(downgraded) fix).
     headers: dict[str, str] = {
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "private, no-store",
@@ -386,10 +598,9 @@ def get_asset_content(assetId: str) -> FileResponse:
         # Adding a no-op comment here to document the invariant explicitly.
     }
     if mime not in _INLINE_SAFE_MIMES:
-        filename = source_path.name
-        # Escape double-quotes in filename for safety
-        safe_name = filename.replace('"', '\\"')
-        headers["Content-Disposition"] = f'attachment; filename="{safe_name}"'
+        # MAJOR fix: header-injection-safe Content-Disposition (RFC 5987/6266)
+        # instead of naive quote-escaping of source_path.name.
+        headers["Content-Disposition"] = _content_disposition_header(source_path.name)
 
     return FileResponse(
         path=str(source_path),

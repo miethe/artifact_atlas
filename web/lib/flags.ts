@@ -35,6 +35,12 @@ const FLAG_DEFAULTS: Record<string, boolean> = {
   "ui-tabbed-modal-coverage": false,
   "ui-tabbed-modal-template": false,
   "ui-tabbed-modal-inbox": false,
+
+  // Dark mode token foundation + theme switcher (DM-1/DM-4). Off by default:
+  // @miethe/ui does not yet ship dark variants (DM-2, blocked upstream), so
+  // ContentPane/MarkdownEditor would stay light while the rest of the shell
+  // went dark. Flip on only for local/AA-only smoke testing until DM-2 lands.
+  "dark-mode": false,
 };
 
 function parseFlagList(raw: string | undefined): Set<string> {

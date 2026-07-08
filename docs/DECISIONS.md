@@ -628,3 +628,65 @@ Atlas indexes metadata by default; content storage is explicit and opt-in.
   `TestContentUpload` (gateway), `TestImport`/`TestAttach` (CLI)
 - Supersedes the metadata-only limitation noted in D-012/P4C-002; depends on the proxy
   `storage_uri` preference established there.
+
+---
+
+## D-014 — AssetViewer Format Promotion: CSV/TSV, Audio, Video (Native Elements + Range Streaming)
+
+**Status:** Accepted — 2026-07-08 (WS-3)
+
+### Context
+
+DEFER-4 (`docs/project_plans/design-specs/asset-viewer-extensions.md`) deferred video, audio, and
+spreadsheet preview support pending a verified-compatible library for Next.js 15 / React 19. CSV/TSV,
+audio, and video turn out not to need a third-party rendering library at all — the promotion gate
+(a verified-compatible library) is satisfied trivially by using platform-native primitives.
+
+### Decision
+
+1. **CSV/TSV → hand-rolled RFC 4180-ish parser + `@tanstack/react-table`.** No new parsing
+   dependency (`CsvRenderer.tsx`); the parser handles quoted fields with embedded delimiters/
+   newlines and `""`-escaped quotes. Rendered rows are capped at `MAX_RENDERED_ROWS = 1000` with a
+   truncation notice — large files never fully materialize into the DOM. All cell values are plain
+   React text nodes (JSX-escaped), never `dangerouslySetInnerHTML`.
+2. **Audio/Video → native `<audio controls>` / `<video controls>`.** No third-party player
+   library. `src` always points at the safe asset-content proxy URL (`fetchRelated:false`
+   semantics — no auto-fetched linked/remote resources). Thumbnail mode renders a static
+   icon/filename tile and never mounts the media element, so grid/list views don't fire N
+   playback/metadata requests at once. `onError` falls back to the shared `ErrorTile` with a
+   download link.
+3. **Range-request streaming in the content proxy.** `GET /api/preview/asset/{id}/content`
+   (P4C-002) relies on Starlette's `FileResponse`, which natively implements RFC 7233 single-range
+   handling (`Accept-Ranges: bytes` always emitted; `206 Partial Content` + `Content-Range` for a
+   satisfiable `Range` header; `416` for an out-of-bounds range). No custom range-parsing code was
+   needed — audio/video MIME types were added to the proxy's allow-list and inline-safe set so
+   `<audio>`/`<video>` can stream them directly instead of being forced to
+   `Content-Disposition: attachment`.
+4. **Dispatcher wiring.** `AssetViewer/index.tsx` resolves CSV/TSV by MIME (`text/csv`,
+   `text/tab-separated-values`) or extension (`.csv`, `.tsv`) before the generic `text/*` branch
+   (otherwise `text/csv` would be swallowed by the ContentRenderer path); audio/video by MIME
+   prefix or extension set. `CsvRenderer` is lazy-loaded (`next/dynamic`, `ssr:false`) to keep
+   `@tanstack/react-table` out of the initial bundle, matching the `ContentRenderer`/`DocxRenderer`
+   precedent; `AudioRenderer`/`VideoRenderer` are lightweight enough to import eagerly.
+
+### Consequences
+
+- Three of the four DEFER-4 candidate formats (video, audio, spreadsheet-as-CSV/TSV) are promoted
+  without adding a single new runtime dependency — `docs/mvp-backlog.md` reflects this as a WS-3
+  entry; DEFER-4 remains open only for ZIP/archive and true spreadsheet (`.xlsx`) formats.
+  `asset-viewer-extensions.md` is left as-is (still tracks the still-deferred formats).
+  Placeholder text updates there are a candidate follow-up but out of scope for this pass.
+- Range support is generic on the proxy (Starlette-level), so it also benefits any other
+  already-allow-listed MIME type (e.g. resuming a large PDF download), not just audio/video.
+- Tests: `web/__tests__/asset-viewer-extensions.test.tsx` (renderer smoke tests — quoted-CSV
+  parsing, row-cap truncation notice, TSV, media error fallback, thumbnail-mode no-media-mount);
+  `api/tests/test_routes_preview.py::TestGetAssetContentRange` (206/416/open-ended-range/no-header
+  cases).
+
+### References
+
+- `web/features/assets/components/AssetViewer/{CsvRenderer,AudioRenderer,VideoRenderer,index}.tsx`
+- `api/app/api/preview.py` (`get_asset_content`, `_PROXY_ALLOWED_MIMES`, `_INLINE_SAFE_MIMES`)
+- `shared/openapi.yaml` (`/api/preview/asset/{assetId}/content`: `Range` request header,
+  `206`/`416` responses, `Accept-Ranges`/`Content-Range` response headers)
+- Builds on D-012 (P4C-002 proxy security invariants) without modifying its SSRF/LFI guards.

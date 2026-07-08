@@ -2,7 +2,7 @@
 schema_version: 2
 doc_type: design-spec
 title: "Design Spec: Facelift P3 Items — Artifact Atlas"
-status: draft
+status: in_progress
 maturity: idea
 created: '2026-06-21'
 feature_slug: ui-polish-pass
@@ -13,9 +13,21 @@ defer_category: backlog
 
 # Design Spec: Facelift P3 Items — Artifact Atlas
 
-> **Maturity: idea** — This stub preserves deferred P3 polish scope from the UI Polish Pass v1
-> Leg-5 audit. These are low-priority / nice-to-have items that require explicit product
-> prioritization before any implementation work begins.
+## Implementation status (2026-07-08)
+
+**Shipped items** (autopilot/planning-wave-20260708):
+- P3-3: Context Pack publish destination radio (WizardStepReview)
+- P3-5: Board Group By selector (AssetBoard / BoardColumn) — feature/domain grouping
+- P3-6: `animate-pulse-subtle` usage — applied to live agent activity dot
+
+**Blocked / deferred**:
+- P3-2: Collaborator facepile — blocked: no presence/collab API signal exists yet
+- P3-4: Asset card provenance ribbon — blocked: `source_kind` taxonomy not stable
+- P3-7: BOM slot drag from BomOverview — not scheduled for current wave
+- P3-8: Coverage Recommendations rail — deferred pending backend recommendations endpoint
+
+> **Maturity: in_progress** — Partial P3 scope shipped in 2026-07-08 autopilot wave. P3-2, P3-4, P3-7,
+> P3-8 remain blocked or deferred pending API infra and data stability.
 
 ---
 

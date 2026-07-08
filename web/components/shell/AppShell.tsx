@@ -15,10 +15,11 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-import { SidebarNav } from "./SidebarNav";
+import { SidebarNav, DEFAULT_PROJECT_ID } from "./SidebarNav";
 import { TopBar } from "./TopBar";
 import { CollaborationFooter } from "./CollaborationFooter";
 import { CommandPalette } from "./CommandPalette";
+import { useGlobalShortcuts } from "@/features/ui/hooks/useGlobalShortcuts";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -35,6 +36,9 @@ export function AppShell({
   rightRailOpen = false,
 }: AppShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+
+  // Global single-key navigation shortcuts (P2-13, spec §7.4)
+  useGlobalShortcuts(projectId ?? DEFAULT_PROJECT_ID);
 
   return (
     /*

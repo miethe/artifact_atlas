@@ -2,9 +2,10 @@
 schema_version: 2
 doc_type: design-spec
 title: "Design Spec: Dark Mode — Artifact Atlas"
-status: draft
+status: in_progress
 maturity: idea
 created: '2026-06-21'
+updated: '2026-07-08'
 feature_slug: ui-polish-pass
 source: "docs/project_plans/implementation_plans/features/ui-polish-pass-v1.md (DEFER-1)"
 defer_id: DEFER-1
@@ -37,6 +38,55 @@ any AA dark-mode effort.
 
 **Why deferred:** ADR-5 rationale — "dark mode conflicts with AA's intentional light-only stance
 and the library's dead dark styles — deferring avoids a whole token axis."
+
+---
+
+## Implementation Status (2026-07-08, WS-4)
+
+The token-foundation slice of this spec landed, flag-gated `dark-mode` (default **off** —
+`web/lib/flags.ts`). No app behavior changes unless the flag is explicitly enabled.
+
+- **DM-1 (token layer) — done.** `web/app/globals.css` gained a `[data-theme="dark"]` block with
+  dark variants for every `--surface*`, `--ink*`, `--border*`, `--focus-ring`, and shadow-color
+  token (the four `boxShadow` entries in `web/tailwind.config.ts` now resolve through
+  `var(--shadow-*)` pairs instead of hardcoded `rgb(0 0 0 / …)`, so they invert automatically).
+  `color-scheme: dark` is set inside the block. Palette + computed WCAG 2.1 contrast ratios are
+  documented inline in `globals.css` directly above the `[data-theme="dark"]` rule (summary:
+  ink/ink-muted/ink-faint on surface all ≥5.2:1, border-strong/border-focus on surface ≥3.1:1).
+  Raw palette swatches (`--gray-*`, `--blue-*`, `--status-*`, `--sens-*`) and the `@miethe/ui`
+  shadcn bridge (`--background`, `--card`, `--popover`, etc.) are intentionally **not** themed yet
+  — see DM-2 below and the gap note under DM-5.
+- **DM-3 (stray `dark:` audit) — done, zero found.** `grep`-verified no `dark:`-prefixed Tailwind
+  utility classes exist anywhere under `web/` (app, components, features, lib). Tailwind's
+  `darkMode: ['selector', '[data-theme="dark"]']` (added to `tailwind.config.ts`) is therefore
+  currently inert for utility classes — the dark theming works entirely through the CSS-variable
+  layer above, which is the correct axis per DM-1's design (components reference `var(--surface)`
+  etc. via arbitrary-value classes, so they repaint automatically without per-component `dark:`
+  variants).
+- **DM-4 (toggle) — done, flag-gated.** New `dark-mode` flag in `web/lib/flags.ts` (default
+  `false`). When on: `web/components/shell/ThemeToggle.tsx` (a 3-way light/dark/system
+  `SegmentedControl`) mounts in `web/components/shell/TopBar.tsx`; preference persists to
+  `localStorage` (`aa-theme` key, see `web/lib/theme.ts`) and defaults to `"system"`. A tiny inline
+  script in `web/app/layout.tsx` (only rendered when the flag is on) resolves the stored
+  preference to a concrete `data-theme` attribute on `<html>` before paint — no FOUC. When the flag
+  is off, the script never renders and `data-theme` is never set, so light stays forced exactly as
+  before.
+- **DM-5 (smoke/a11y pass) — partially done.** Token-level contrast is verified analytically (see
+  DM-1 above and the ratio table in `globals.css`). A live `axe-core` sweep with the flag flipped
+  on, plus visual QA of every surface with the toggle set to "dark", is **still pending** — the
+  existing `__tests__/a11y.test.tsx` suite only exercises the light (default) theme.
+- **DM-2 (`@miethe/ui` dark adoption) — blocked upstream, not attempted.** `@miethe/ui`'s shipped
+  styles have no dark variant (confirmed dead in the leg-4/leg-5 audit referenced below), so
+  `ContentPane`, `MarkdownEditor`, and other library primitives will **remain visually light**
+  even with `dark-mode` on and `data-theme="dark"` set — a jarring light-panel-in-a-dark-shell
+  seam is expected until upstream publishes dark tokens/variants. This is why the flag defaults
+  off: flipping it today produces a functional but visually inconsistent theme. Do not attempt a
+  local fork or workaround here; track upstream progress via
+  `docs/project_plans/upstream/miethe-ui-additions-v1.md`.
+
+**Net effect:** the foundation is in place and inert by default. Enabling `dark-mode` today is
+useful for local smoke-testing the token layer and toggle wiring, but is not yet a shippable
+end-user surface until DM-2 (upstream) and the full DM-5 a11y sweep land.
 
 ---
 

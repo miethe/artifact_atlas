@@ -1,6 +1,9 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  // DM-1: app-local dark tokens are scoped to [data-theme="dark"] (set by
+  // the no-FOUC script in app/layout.tsx, flag-gated via `dark-mode`).
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -170,13 +173,15 @@ const config: Config = {
         24: "96px",
       },
       boxShadow: {
-        card: "0 1px 3px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.05)",
+        // Colors reference theme-aware vars in app/globals.css so shadows
+        // stay legible under [data-theme="dark"] (DM-1).
+        card: "0 1px 3px 0 var(--shadow-card-1), 0 1px 2px -1px var(--shadow-card-2)",
         "card-hover":
-          "0 4px 12px 0 rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.04)",
+          "0 4px 12px 0 var(--shadow-card-hover-1), 0 2px 4px -1px var(--shadow-card-hover-2)",
         drawer:
-          "-4px 0 24px 0 rgb(0 0 0 / 0.08), -1px 0 3px 0 rgb(0 0 0 / 0.05)",
+          "-4px 0 24px 0 var(--shadow-drawer-1), -1px 0 3px 0 var(--shadow-drawer-2)",
         modal:
-          "0 20px 60px 0 rgb(0 0 0 / 0.14), 0 4px 16px -2px rgb(0 0 0 / 0.08)",
+          "0 20px 60px 0 var(--shadow-modal-1), 0 4px 16px -2px var(--shadow-modal-2)",
         "focus-ring": "0 0 0 2px var(--color-brand-500)",
       },
       fontFamily: {

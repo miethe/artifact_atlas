@@ -2,7 +2,7 @@
 schema_version: 2
 doc_type: design-spec
 title: "Design Spec: Asset Viewer Extensions — Artifact Atlas"
-status: draft
+status: in_progress
 maturity: idea
 created: '2026-06-21'
 feature_slug: ui-polish-pass
@@ -13,9 +13,21 @@ defer_category: scope-cut
 
 # Design Spec: Asset Viewer Extensions — Artifact Atlas
 
-> **Maturity: idea** — This stub preserves deferred AssetViewer format support beyond the 6
-> formats shipped in UI Polish Pass v1. Do NOT promote a format to `planned` until a
-> verified-compatible library is confirmed for Next.js 15 / React 19.
+## Implementation status (2026-07-08)
+
+**Shipped formats** (autopilot/planning-wave-20260708):
+- **Video** (`.mp4`, `.webm`, `.mov`) — browser native `<video>` element via renderer with HTTP Range streaming on the preview proxy seam
+- **Audio** (`.mp3`, `.wav`, `.ogg`, `.flac`, `.aac`) — browser native `<audio>` element via renderer with HTTP Range streaming
+- **CSV/TSV** (`.csv`, `.tsv`) — plain text parse + TanStack Table render via renderer, no third-party lib dependency
+
+All three formats ship with HTTP Range streaming support on the preview content proxy (docs/DECISIONS.md D-014).
+
+**Deferred / not scheduled**:
+- **ZIP/archive** (`.zip`, `.tar.gz`, `.tar`) — pending library verification (fflate vs. JSZip React 19 compat)
+- **Spreadsheet XLSX** (`.xlsx`) — pending SheetJS license review and bundle size assessment
+
+> **Maturity: in_progress** — Video, audio, and CSV/TSV renderers shipped in 2026-07-08 autopilot wave
+> with HTTP Range streaming. ZIP and XLSX remain deferred pending library verification.
 
 ---
 

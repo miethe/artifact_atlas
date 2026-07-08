@@ -308,6 +308,7 @@ Aligned with spec §22.1. Epic E6 (Template Builder) is elevated to its own epic
 | UI-P4 | Multi-Format Asset Viewer | AssetViewer dispatcher; next/image, react-pdf, @miethe/ui ContentPane, docx-preview; PPTX→PDF server-side seam; untrusted-file security posture | ✓ Complete | ADR-4 (D-012) |
 | UI-P5 | Facelift | P0 a11y/correctness fixes; P1 high-impact visual improvements; dark mode deferred | ✓ Complete | ADR-5 (D-012) |
 | UI-P6 | Hardening | Upstream/local component split finalized; @miethe/ui gap contributions; integration QA and regression tests | In Progress | ADR-6 (D-012) |
+| WS-3 | AssetViewer Format Promotion | CSV/TSV renderer (hand-rolled parser + TanStack Table, row-capped), AudioRenderer/VideoRenderer (native `<audio>`/`<video>`), HTTP Range streaming on the content proxy (206/416, `Accept-Ranges`) | ✓ Complete | D-014 |
 
 #### UI Polish Pass — Deferred Items
 
@@ -318,7 +319,7 @@ Items descoped during the UI Polish Pass sprint. Each has a design-spec stub for
 | DEFER-1 | Dark Mode (AA) | AA intentionally light-only; dark mode requires a whole new token axis in `@miethe/ui` | AA product direction change | [dark-mode-aa.md](docs/project_plans/design-specs/dark-mode-aa.md) |
 | DEFER-2 | Leg-5 P2 Facelift Items | Filter-bar, view-mode labels, board add-card, and other polish items deferred after P1 landed | Post-P1 polish sprint decision | [facelift-p2-items.md](docs/project_plans/design-specs/facelift-p2-items.md) |
 | DEFER-3 | Leg-5 P3 Facelift Items | Facepile, provenance ribbon, Board Group By, and deeper visual work deferred | Product priority decision | [facelift-p3-items.md](docs/project_plans/design-specs/facelift-p3-items.md) |
-| DEFER-4 | Asset Viewer Extensions | Preview formats beyond the 6 defined (video, audio, ZIP, etc.) blocked on verified-compatible libraries | New verified-compatible library available | [asset-viewer-extensions.md](docs/project_plans/design-specs/asset-viewer-extensions.md) |
+| DEFER-4 | Asset Viewer Extensions | Preview formats beyond the original 6 blocked on verified-compatible libraries. Video/audio/CSV-TSV promoted in WS-3 (native `<audio>`/`<video>` + hand-rolled CSV parser need no third-party lib); ZIP/archive and true spreadsheet (`.xlsx`) remain deferred | New verified-compatible library available (ZIP/`.xlsx` only) | [asset-viewer-extensions.md](docs/project_plans/design-specs/asset-viewer-extensions.md) |
 
 ---
 

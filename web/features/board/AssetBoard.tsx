@@ -23,6 +23,7 @@ import {
   type DragOverEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { useRouter } from "next/navigation";
 import { useAssets } from "@/lib/hooks/useAssets";
 import { useAssetModal } from "@/features/assets/hooks/useAssetModal";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -34,7 +35,9 @@ import { MoveSelectedDialog, type MoveTarget } from "./MoveSelectedDialog";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Keyboard, Columns3, Kanban } from "lucide-react";
+import { SHORTCUT_MOVE_SELECTED_EVENT } from "@/features/ui/hooks/useGlobalShortcuts";
 import type { Asset, AssetStatus } from "@/lib/types";
 
 // ============================================================
@@ -42,7 +45,7 @@ import type { Asset, AssetStatus } from "@/lib/types";
 // ============================================================
 
 interface ColumnConfig {
-  id: AssetStatus;
+  id: string;
   title: string;
   color: string;
   description?: string;
@@ -98,9 +101,17 @@ const MOVE_TARGETS: MoveTarget[] = BOARD_COLUMNS.map((c) => ({
 // AssetBoard
 // ============================================================
 
+type GroupByOption = "status" | "feature" | "domain";
+
+const GROUP_BY_OPTIONS: Array<{ value: GroupByOption; label: string }> = [
+  { value: "status", label: "Status" },
+  { value: "feature", label: "Feature" },
+  { value: "domain", label: "Domain" },
+];
+
 interface AssetBoardProps {
   projectId: string;
-  groupBy?: "status" | "topic";
+  groupBy?: GroupByOption;
 }
 
 type AssetMap = Record<AssetStatus, Asset[]>;
@@ -123,7 +134,57 @@ function buildAssetMap(assets: Asset[]): AssetMap {
   return map;
 }
 
-export function AssetBoard({ projectId }: AssetBoardProps) {
+// Dynamic grouping (P3-5) — groups by `metadata.feature` / `metadata.domain`
+// since Asset has no first-class feature/domain field yet. Assets without a
+// value for the chosen key land in an "Uncategorized" bucket.
+const DYNAMIC_GROUP_COLORS = [
+  "bg-blue-500",
+  "bg-purple-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-pink-500",
+  "bg-cyan-500",
+];
+const UNCATEGORIZED_GROUP_ID = "__uncategorized__";
+
+function groupKeyForAsset(asset: Asset, key: "feature" | "domain"): string {
+  const value = asset.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value : UNCATEGORIZED_GROUP_ID;
+}
+
+function buildDynamicColumns(
+  assets: Asset[],
+  key: "feature" | "domain",
+): ColumnConfig[] {
+  const ids = Array.from(new Set(assets.map((a) => groupKeyForAsset(a, key))));
+  const named = ids.filter((id) => id !== UNCATEGORIZED_GROUP_ID).sort();
+  const columns: ColumnConfig[] = named.map((id, i) => ({
+    id,
+    title: id,
+    color: DYNAMIC_GROUP_COLORS[i % DYNAMIC_GROUP_COLORS.length],
+  }));
+  if (ids.includes(UNCATEGORIZED_GROUP_ID)) {
+    columns.push({ id: UNCATEGORIZED_GROUP_ID, title: "Uncategorized", color: "bg-gray-400" });
+  }
+  return columns;
+}
+
+function buildDynamicAssetMap(
+  assets: Asset[],
+  columns: ColumnConfig[],
+  key: "feature" | "domain",
+): Record<string, Asset[]> {
+  const map: Record<string, Asset[]> = {};
+  for (const col of columns) map[col.id] = [];
+  for (const asset of assets) {
+    const groupId = groupKeyForAsset(asset, key);
+    (map[groupId] ??= []).push(asset);
+  }
+  return map;
+}
+
+export function AssetBoard({ projectId, groupBy: groupByProp }: AssetBoardProps) {
+  const router = useRouter();
   const { data, isLoading, isError, refetch } = useAssets(projectId);
 
   // Local mutable copy of assets (optimistic updates)
@@ -144,13 +205,29 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
   // Move dialog
   const [moveDialogOpen, setMoveDialogOpen] = React.useState(false);
 
+  // Group by selector (P3-5) — status is draggable/persisted; feature/domain
+  // are read-only groupings derived from asset metadata.
+  const [groupBy, setGroupBy] = React.useState<GroupByOption>(groupByProp ?? "status");
+
   // Asset detail modal (URL-driven via ?item=)
   const { openAsset, assetModal } = useAssetModal(projectId, {
     title: (id) => localAssets.find((a) => a.id === id)?.title,
   });
 
-  // Build asset map from local state
-  const assetMap = React.useMemo(() => buildAssetMap(localAssets), [localAssets]);
+  // Columns + grouped assets — status uses the fixed workflow columns and is
+  // draggable/persisted; feature/domain build read-only dynamic columns from
+  // asset metadata (no first-class feature/domain field on Asset yet).
+  const columns = React.useMemo(
+    () => (groupBy === "status" ? BOARD_COLUMNS : buildDynamicColumns(localAssets, groupBy)),
+    [groupBy, localAssets],
+  );
+  const groupedAssets = React.useMemo<Record<string, Asset[]>>(
+    () =>
+      groupBy === "status"
+        ? buildAssetMap(localAssets)
+        : buildDynamicAssetMap(localAssets, columns, groupBy),
+    [groupBy, localAssets, columns],
+  );
 
   // Sensors — pointer + keyboard
   const sensors = useSensors(
@@ -180,7 +257,8 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
   };
 
   const handleDragOver = ({ active, over }: DragOverEvent) => {
-    if (!over) return;
+    // Feature/Domain groupings are read-only — status is the only draggable axis.
+    if (!over || groupBy !== "status") return;
     const targetColumnId = over.id as AssetStatus;
     const validColumn = BOARD_COLUMNS.some((c) => c.id === targetColumnId);
     if (!validColumn) return;
@@ -194,6 +272,10 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
   };
 
   const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (groupBy !== "status") {
+      setActiveAsset(null);
+      return;
+    }
     const asset = localAssets.find((a) => a.id === active.id);
     if (!asset) {
       setActiveAsset(null);
@@ -240,6 +322,15 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
     });
   };
 
+  // ---- Add asset (P2-4) — per-column ghost button; opens Assets library ----
+  // scoped for now (no dedicated create-asset dialog exists yet).
+  const handleAddAsset = React.useCallback(
+    (_columnId: string) => {
+      router.push(`/projects/${projectId}/assets`);
+    },
+    [projectId, router],
+  );
+
   // ---- Keyboard Move Selected ----
   const handleMoveSelected = async (targetStatus: AssetStatus) => {
     const idsArr = Array.from(selectedIds);
@@ -285,6 +376,16 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
+  }, [selectedIds.size]);
+
+  // Global "M" shortcut (P2-13) — same action as Shift+M when a selection exists.
+  React.useEffect(() => {
+    function handleMoveSelected() {
+      if (selectedIds.size > 0) setMoveDialogOpen(true);
+    }
+    document.addEventListener(SHORTCUT_MOVE_SELECTED_EVENT, handleMoveSelected);
+    return () =>
+      document.removeEventListener(SHORTCUT_MOVE_SELECTED_EVENT, handleMoveSelected);
   }, [selectedIds.size]);
 
   // ============================================================
@@ -338,8 +439,15 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
       <div className="flex items-center gap-3 px-5 py-2.5 border-b border-[var(--border)] bg-[var(--surface)] shrink-0">
         <div className="flex items-center gap-1.5 text-xs text-[var(--ink-muted)]">
           <Columns3 aria-hidden className="w-3.5 h-3.5" />
-          <span>Board grouped by status</span>
+          <span>Group by</span>
         </div>
+        <SegmentedControl
+          value={groupBy}
+          onChange={setGroupBy}
+          size="xs"
+          label="Group board by"
+          options={GROUP_BY_OPTIONS}
+        />
         <div className="flex-1" />
 
         {/* Selection info */}
@@ -370,7 +478,9 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
 
         {selectedIds.size === 0 && (
           <p className="text-[11px] text-[var(--ink-faint)]">
-            Click to open · ⌘/Ctrl-click to select · Drag to move · Shift+M to keyboard-move
+            {groupBy === "status"
+              ? "Click to open · ⌘/Ctrl-click to select · Drag to move · Shift+M to keyboard-move"
+              : "Click to open · ⌘/Ctrl-click to select · Grouped read-only — switch to Status to drag"}
           </p>
         )}
       </div>
@@ -381,8 +491,8 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
         aria-label="Asset board columns"
         className="flex gap-4 p-5 overflow-x-auto h-full"
       >
-        {BOARD_COLUMNS.map((col) => {
-          const columnAssets = assetMap[col.id] ?? [];
+        {columns.map((col) => {
+          const columnAssets = groupedAssets[col.id] ?? [];
           return (
             <BoardColumn
               key={col.id}
@@ -393,6 +503,7 @@ export function AssetBoard({ projectId }: AssetBoardProps) {
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
               onOpenDetail={openAsset}
+              onAddAsset={handleAddAsset}
             />
           );
         })}

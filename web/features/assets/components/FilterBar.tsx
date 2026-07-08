@@ -30,6 +30,8 @@ export interface FilterBarProps {
   onChange: (filters: ActiveFilters) => void;
   totalCount?: number;
   className?: string;
+  /** Right-side controls (view toggle, sort, bulk actions, add button) — P2-2 consolidation */
+  trailing?: React.ReactNode;
 }
 
 // ============================================================
@@ -217,6 +219,7 @@ export function FilterBar({
   onChange,
   totalCount,
   className,
+  trailing,
 }: FilterBarProps) {
   const [searchInput, setSearchInput] = React.useState(filters.q ?? "");
   const searchRef = React.useRef<HTMLInputElement>(null);
@@ -382,12 +385,15 @@ export function FilterBar({
         </Button>
       )}
 
-      {/* Result count */}
-      {totalCount !== undefined && (
-        <span className="ml-auto text-xs text-[var(--ink-muted)] tabular-nums whitespace-nowrap">
-          {totalCount.toLocaleString()} asset{totalCount !== 1 ? "s" : ""}
-        </span>
-      )}
+      {/* Right-side cluster: bulk actions / view / sort / add (P2-2 consolidation) + result count */}
+      <div className="ml-auto flex items-center gap-2">
+        {trailing}
+        {totalCount !== undefined && (
+          <span className="text-xs text-[var(--ink-muted)] tabular-nums whitespace-nowrap">
+            {totalCount.toLocaleString()} asset{totalCount !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,7 +3,7 @@ schema_version: 2
 doc_type: prd
 title: "UI Polish Pass — Artifact Atlas"
 description: "Adopt the @miethe/ui design system, replace five bespoke detail surfaces with one canonical tabbed-modal + full-page-route pattern, redesign cards with real per-format asset previews, ship a multi-format asset viewer (images/PDF/MD/DOCX/PPTX + formatted editable code), and land a prioritized facelift pass across AA web."
-status: draft
+status: completed
 created: 2026-06-20
 updated: 2026-06-20
 feature_slug: ui-polish-pass

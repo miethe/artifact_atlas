@@ -11,7 +11,9 @@ import * as React from "react";
 import { Bell, Settings } from "lucide-react";
 import { clsx } from "clsx";
 import { GlobalSearch } from "./GlobalSearch";
+import { ThemeToggle } from "./ThemeToggle";
 import { IconButton } from "@/components/ui/IconButton";
+import { isFlagEnabled } from "@/lib/flags";
 
 interface TopBarProps {
   projectId?: string;
@@ -67,6 +69,9 @@ export function TopBar({ projectId, className }: TopBarProps) {
         <kbd className="font-mono">⌘</kbd>
         <kbd className="font-mono">K</kbd>
       </button>
+
+      {/* Theme switcher (DM-4, flag-gated) */}
+      {isFlagEnabled("dark-mode") && <ThemeToggle />}
 
       {/* Notification bell */}
       <IconButton aria-label="Notifications" size="sm" variant="ghost">

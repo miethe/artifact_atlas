@@ -21,10 +21,12 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   Boxes,
   BarChart2,
   ArrowRightLeft,
 } from "lucide-react";
+import { useProject, useProjects } from "@/lib/hooks/useProjects";
 
 // Default seed project id used when no project is in context
 export const DEFAULT_PROJECT_ID = "proj_artifact_atlas";
@@ -110,6 +112,140 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+// ============================================================
+// ProjectSwitcher — collapsible project pill below the brand mark (P2-9)
+// ============================================================
+
+function ProjectAvatar({ name, size = "sm" }: { name: string; size?: "sm" | "xs" }) {
+  const initial = (name.trim()[0] ?? "?").toUpperCase();
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        "flex items-center justify-center rounded-full bg-blue-100 text-blue-700 font-semibold shrink-0",
+        size === "xs" ? "w-5 h-5 text-[10px]" : "w-6 h-6 text-[11px]",
+      )}
+    >
+      {initial}
+    </span>
+  );
+}
+
+function ProjectSwitcher({
+  projectId,
+  collapsed,
+}: {
+  projectId: string;
+  collapsed: boolean;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  const { data: current } = useProject(projectId);
+  const { data: projectsPage } = useProjects();
+  const projects = projectsPage?.items ?? [];
+
+  React.useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handle);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  const currentName = current?.name ?? projectId;
+
+  return (
+    <div
+      ref={containerRef}
+      className={clsx(
+        "relative border-b border-[var(--border)] shrink-0",
+        collapsed ? "px-0 py-2" : "px-2 py-2",
+      )}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={collapsed ? currentName : undefined}
+        className={clsx(
+          "flex items-center gap-2 w-full rounded py-1 text-left",
+          "hover:bg-gray-100 transition-colors duration-[100ms]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+          collapsed ? "justify-center px-0" : "px-1.5",
+        )}
+      >
+        <ProjectAvatar name={currentName} size={collapsed ? "xs" : "sm"} />
+        {!collapsed && (
+          <>
+            <span className="flex-1 min-w-0 text-xs font-medium text-[var(--ink)] truncate">
+              {currentName}
+            </span>
+            <ChevronsUpDown
+              className="w-3.5 h-3.5 text-gray-400 shrink-0"
+              aria-hidden
+            />
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label="Switch project"
+          className={clsx(
+            "absolute z-30 mt-1 min-w-[192px] max-h-64 overflow-y-auto",
+            "bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg py-1",
+            collapsed ? "left-1" : "left-1.5 right-1.5",
+          )}
+        >
+          {projects.length === 0 && (
+            <p className="px-3 py-1.5 text-xs text-[var(--ink-faint)]">
+              No projects found
+            </p>
+          )}
+          {projects.map((p) => (
+            <Link
+              key={p.id}
+              href={`/projects/${p.id}`}
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className={clsx(
+                "flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50",
+                p.id === projectId
+                  ? "text-blue-700 font-medium bg-blue-50/60"
+                  : "text-[var(--ink)]",
+              )}
+            >
+              <ProjectAvatar name={p.name} size="xs" />
+              <span className="truncate">{p.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface SidebarNavProps {
   projectId?: string;
   collapsed?: boolean;
@@ -151,6 +287,9 @@ export function SidebarNav({
           </span>
         )}
       </div>
+
+      {/* Project switcher pill (P2-9) */}
+      <ProjectSwitcher projectId={projectId} collapsed={collapsed} />
 
       {/* Nav sections */}
       <div className="flex-1 overflow-y-auto py-2 px-1.5">

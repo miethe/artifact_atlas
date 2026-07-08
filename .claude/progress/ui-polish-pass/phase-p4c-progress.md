@@ -21,7 +21,7 @@ tasks:
   description: "Define convert\u2192render API contract \u2014 endpoint path, request/response\
     \ shape, error codes, caching; output: pptx-seam-contract.md; signed off by both\
     \ agents"
-  status: pending
+  status: completed
   assigned_to:
   - python-backend-engineer
   - ui-engineer-enhanced
@@ -31,7 +31,7 @@ tasks:
   description: "FastAPI PPTX-convert endpoint \u2014 POST /api/preview/convert/pptx,\
     \ magic bytes validation, async convert (LibreOffice or Gotenberg), cache, error\u2192\
     download fallback, 30s timeout"
-  status: pending
+  status: completed
   assigned_to:
   - python-backend-engineer
   dependencies:
@@ -39,7 +39,7 @@ tasks:
 - id: P4C-002
   description: "Asset-fetch proxy seam \u2014 backend MIME enforcement, strip dangerous\
     \ response headers (X-Frame-Options override, Content-Disposition attachment)"
-  status: pending
+  status: completed
   assigned_to:
   - python-backend-engineer
   dependencies:
@@ -48,7 +48,7 @@ tasks:
   description: "FE render via react-pdf on converted PDF \u2014 call convert endpoint\
     \ when flag:pptx-server-conversion on, loading state, download fallback on error;\
     \ must not merge before SEAM-P4C-001 sign-off"
-  status: pending
+  status: completed
   assigned_to:
   - ui-engineer-enhanced
   dependencies:
@@ -58,7 +58,7 @@ tasks:
   description: "Feature flag + download fallback \u2014 flag:pptx-server-conversion\
     \ off \u2192 show download + 'Preview not available'; wire in AssetViewer dispatcher\
     \ for PPTX MIME"
-  status: pending
+  status: completed
   assigned_to:
   - ui-engineer-enhanced
   dependencies:
@@ -66,14 +66,14 @@ tasks:
 - id: P4C-005
   description: "Update shared/openapi.yaml for convert endpoint \u2014 request/response\
     \ schema, status codes, security scheme; coordinate with P6-010"
-  status: pending
+  status: completed
   assigned_to:
   - python-backend-engineer
   dependencies:
   - P4C-001
 - id: P4C-006
   description: "task-completion-validator gate \u2014 all P4c exit criteria"
-  status: pending
+  status: completed
   assigned_to:
   - task-completion-validator
   dependencies:

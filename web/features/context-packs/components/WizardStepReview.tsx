@@ -28,6 +28,7 @@ import {
   computeTokenEstimate,
   type ContextPackPreview,
 } from "../hooks";
+import type { TokenEstimate } from "../types";
 
 // ============================================================
 // TokenMeter
@@ -63,6 +64,49 @@ function TokenMeter({ totalTokens }: { totalTokens: number }) {
         {pct.toFixed(1)}% of 128k context window (estimates only — actual size
         depends on include mode and content)
       </p>
+    </div>
+  );
+}
+
+// ============================================================
+// ItemBreakdownList — per-asset token counts (P2-6)
+// ============================================================
+
+function ItemBreakdownList({ itemBreakdown }: { itemBreakdown: TokenEstimate["itemBreakdown"] }) {
+  const [expanded, setExpanded] = React.useState(false);
+
+  if (itemBreakdown.length === 0) return null;
+
+  const visible = expanded ? itemBreakdown : itemBreakdown.slice(0, 5);
+
+  return (
+    <div className="flex flex-col gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+      <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide">
+        Per-item token estimate
+      </p>
+      <ul className="flex flex-col gap-1">
+        {visible.map((item, i) => (
+          <li
+            key={`${item.label}-${i}`}
+            className="flex items-center justify-between gap-2 text-[11px]"
+          >
+            <span className="text-[var(--ink)] truncate">{item.label}</span>
+            <span className="font-mono text-[var(--ink-muted)] shrink-0">
+              {item.tokens.toLocaleString()} tok
+            </span>
+          </li>
+        ))}
+      </ul>
+      {itemBreakdown.length > 5 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="self-start text-[11px] text-[var(--blue-600)] hover:underline focus-visible:outline-none"
+        >
+          {expanded ? "Show fewer" : `Show all ${itemBreakdown.length} items`}
+        </button>
+      )}
     </div>
   );
 }
@@ -217,12 +261,12 @@ export function WizardStepReview({
         )}
 
         <div className="grid grid-cols-2 gap-3 text-xs">
-          <div>
+          <div className="min-w-0">
             <span className="text-[var(--ink-muted)]">Target</span>
             <div className="font-medium text-[var(--ink)] mt-0.5 capitalize">
               {draft.target_type.replace(/_/g, " ")}
               {draft.target_id && (
-                <span className="ml-1 font-mono text-[11px] text-[var(--ink-muted)]">
+                <span className="ml-1 font-mono text-[11px] text-[var(--ink-muted)] break-all">
                   ({draft.target_id})
                 </span>
               )}
@@ -299,6 +343,9 @@ export function WizardStepReview({
           Token / payload estimate
         </h3>
         <TokenMeter totalTokens={estimate.totalTokens} />
+        <div className="mt-3">
+          <ItemBreakdownList itemBreakdown={estimate.itemBreakdown} />
+        </div>
       </section>
 
       {/* YAML preview */}

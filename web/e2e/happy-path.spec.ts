@@ -121,9 +121,19 @@ test.describe("Local-first happy path (fixture fallback)", () => {
   });
 
   /**
-   * Step 4: Open the asset inspector drawer by clicking an asset card.
+   * Step 4: Open the asset detail surface by clicking an asset card.
+   *
+   * P6 / F-002 note: ADR-8 flipped `ui-tabbed-modal` to default-ON, so
+   * clicking a card now opens the EntityModal (role="dialog") rather than
+   * the legacy RightDrawer ("Inspector" heading) this test originally
+   * asserted — updated to match current default behavior. The flags-on
+   * Playwright project (e2e/flags-on/) covers the EntityModal contract in
+   * depth (open/close/tab/Escape/deep-link); this smoke test just confirms
+   * the click-to-open affordance still works at all under fixture-fallback.
    */
-  test("asset library — open asset inspector drawer", async ({ page }) => {
+  test("asset library — open asset detail (EntityModal, default flags)", async ({
+    page,
+  }) => {
     await page.goto(ASSETS_URL);
     await waitForPageReady(page);
 
@@ -140,17 +150,16 @@ test.describe("Local-first happy path (fixture fallback)", () => {
     const cardCount = await cards.count();
 
     if (cardCount > 0) {
-      // Click the first card to open the inspector
+      // Click the first card to open the detail surface
       await cards.first().click();
     } else {
       // Fallback: click first child element
       await gallery.locator("> div").first().click();
     }
 
-    // The inspector panel should now be visible.
-    // It renders with text "Inspector" as the panel heading.
-    const inspector = page.getByText("Inspector", { exact: true });
-    await expect(inspector).toBeVisible({ timeout: 5_000 });
+    // EntityModal renders as a Radix dialog (role="dialog").
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
   });
 
   /**
@@ -161,8 +170,8 @@ test.describe("Local-first happy path (fixture fallback)", () => {
     await waitForPageReady(page);
 
     // SegmentedControl renders buttons with role="radio" and aria-label.
-    // The "Table" option has ariaLabel "Table view" (from VIEW_OPTIONS in AssetLibrary).
-    const tableToggle = page.getByRole("radio", { name: /Table view/i });
+    // The "Table" option has ariaLabel "Table" (VIEW_OPTIONS in AssetLibrary).
+    const tableToggle = page.getByRole("radio", { name: "Table", exact: true });
     await expect(tableToggle).toBeVisible({ timeout: 15_000 });
     await tableToggle.click();
 

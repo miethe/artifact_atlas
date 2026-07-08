@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { clsx } from "clsx";
-import { Kanban } from "lucide-react";
+import { Kanban, Plus } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -24,6 +24,8 @@ export interface BoardColumnProps {
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onOpenDetail?: (id: string) => void;
+  /** P2-4 — per-column "+ Add asset" ghost button at the bottom of the list. */
+  onAddAsset?: (columnId: string) => void;
 }
 
 export function BoardColumn({
@@ -34,6 +36,7 @@ export function BoardColumn({
   selectedIds,
   onToggleSelect,
   onOpenDetail,
+  onAddAsset,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -99,6 +102,25 @@ export function BoardColumn({
             ))
           )}
         </SortableContext>
+
+        {/* Per-column add-card ghost button (P2-4) */}
+        {onAddAsset && (
+          <button
+            type="button"
+            onClick={() => onAddAsset(id)}
+            aria-label={`Add asset to ${title}`}
+            className={clsx(
+              "flex items-center justify-center gap-1.5 w-full rounded border border-dashed",
+              "border-[var(--border)] py-1.5 text-xs text-[var(--ink-faint)]",
+              "hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50/40",
+              "transition-colors duration-100",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+            )}
+          >
+            <Plus aria-hidden className="w-3.5 h-3.5" />
+            Add asset
+          </button>
+        )}
       </div>
     </div>
   );

@@ -65,7 +65,12 @@ export function PanelShell({
           {viewAllHref && (
             <a
               href={viewAllHref}
-              className="text-[10px] font-medium text-blue-600 hover:text-blue-700 whitespace-nowrap focus-ring rounded"
+              className={clsx(
+                "inline-flex items-center text-xs font-medium text-blue-600 hover:text-blue-700",
+                "whitespace-nowrap focus-ring rounded hover:bg-blue-50 transition-colors",
+                // Expand the tap target to >=28px without growing the header row visually.
+                "px-2 py-1.5 -my-1.5",
+              )}
             >
               {viewAllLabel} →
             </a>

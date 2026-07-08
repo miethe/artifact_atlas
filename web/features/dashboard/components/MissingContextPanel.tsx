@@ -6,6 +6,7 @@
  */
 
 import * as React from "react";
+import { clsx } from "clsx";
 import { AlertTriangle } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
@@ -96,42 +97,62 @@ export function MissingContextPanel({
         />
       ) : (
         <ul role="list" className="divide-y divide-[var(--border)]">
-          {(gaps as BomSlot[]).map((slot) => (
-            <li key={slot.id}>
-              <div className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors">
-                <AlertTriangle
-                  aria-hidden
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    slot.status === "missing"
-                      ? "text-red-500"
-                      : "text-amber-500"
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
-                    {slot.name}
-                  </p>
-                  {slot.phase && (
-                    <p className="text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px capitalize">
-                      {slot.phase}
-                      {slot.required && (
-                        <span className="ml-1 text-red-500 font-semibold">
-                          · Required
-                        </span>
-                      )}
+          {(gaps as BomSlot[]).map((slot) => {
+            // High priority: a required slot with no coverage at all (P2-10 urgency treatment).
+            const isHighPriority = slot.status === "missing" && !!slot.required;
+            return (
+              <li
+                key={slot.id}
+                className={clsx(
+                  isHighPriority && "border-l-2 border-red-500 bg-red-50/40",
+                )}
+              >
+                <div className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors">
+                  <AlertTriangle
+                    aria-hidden
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      slot.status === "missing"
+                        ? "text-red-500"
+                        : "text-amber-500"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
+                      {slot.name}
                     </p>
-                  )}
+                    {slot.phase && (
+                      <p className="text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px capitalize">
+                        {slot.phase}
+                        {slot.required && (
+                          <span className="ml-1 text-red-500 font-semibold">
+                            · Required
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isHighPriority && (
+                      <span
+                        role="status"
+                        aria-label="Needs attention: required slot with no coverage"
+                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-600 text-white uppercase tracking-wide"
+                      >
+                        Needs Attention
+                      </span>
+                    )}
+                    <span
+                      role="status"
+                      aria-label={`Slot status: ${GAP_STATUS_LABELS[slot.status] ?? slot.status}`}
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${GAP_STATUS_CLASSES[slot.status] ?? "bg-gray-100 text-gray-600"}`}
+                    >
+                      {GAP_STATUS_LABELS[slot.status] ?? slot.status}
+                    </span>
+                  </div>
                 </div>
-                <span
-                  role="status"
-                  aria-label={`Slot status: ${GAP_STATUS_LABELS[slot.status] ?? slot.status}`}
-                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${GAP_STATUS_CLASSES[slot.status] ?? "bg-gray-100 text-gray-600"}`}
-                >
-                  {GAP_STATUS_LABELS[slot.status] ?? slot.status}
-                </span>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
     </PanelShell>

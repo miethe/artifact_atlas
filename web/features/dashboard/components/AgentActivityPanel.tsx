@@ -7,6 +7,7 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { clsx } from "clsx";
 import { Activity } from "lucide-react";
 import { EmptyState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
@@ -118,10 +119,14 @@ export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
           {events.map((evt) => (
             <li key={evt.id}>
               <div className="flex items-start gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors">
-                {/* Actor dot */}
+                {/* Actor dot — pulses while an agent is actively querying (P3-6) */}
                 <span
                   aria-hidden
-                  className={`mt-1 w-2 h-2 rounded-full shrink-0 ${actorDotColor(evt.actor_type)}`}
+                  className={clsx(
+                    "mt-1 w-2 h-2 rounded-full shrink-0",
+                    actorDotColor(evt.actor_type),
+                    evt.event_type === "agent_query" && "animate-pulse-subtle",
+                  )}
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-[var(--ink)] leading-tight truncate">

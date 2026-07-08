@@ -22,3 +22,8 @@ export {
   PanelSlot,
   PanelSkeleton,
 } from "./components/EntityModal/PanelSlot";
+export {
+  useGlobalShortcuts,
+  SHORTCUT_LINK_SELECTED_EVENT,
+  SHORTCUT_MOVE_SELECTED_EVENT,
+} from "./hooks/useGlobalShortcuts";

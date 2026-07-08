@@ -103,9 +103,21 @@ export function ActionZone({ children, className }: ZoneProps) {
  */
 export function isInteractiveTarget(e: React.MouseEvent | MouseEvent): boolean {
   try {
-    return !!(e.target as Element).closest(
+    const match = (e.target as Element).closest(
       "button,a,input,select,textarea,[role=menuitem],[role=option],[role=checkbox]",
     );
+    if (!match) return false;
+    // Bugfix (P6/F-002, live e2e catch): cards that are themselves
+    // role="option" (AssetCard, TemplateCard) previously matched their OWN
+    // root here on every click — `.closest()` walks up from e.target and
+    // includes the element itself — which made isInteractiveTarget always
+    // return true and silently swallowed every card click (click-to-open
+    // never fired; only keyboard Enter/Space worked, since handleKeyDown
+    // doesn't call this guard). Only a *descendant* interactive element
+    // should block open — never the card root the handler is bound to.
+    const currentTarget = e.currentTarget as Element | null;
+    if (currentTarget && match === currentTarget) return false;
+    return true;
   } catch {
     return false;
   }

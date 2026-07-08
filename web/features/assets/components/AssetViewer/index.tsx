@@ -9,6 +9,9 @@
  * Otherwise dispatches to the appropriate renderer by MIME type / file extension:
  *   - image/*         → ImageRenderer
  *   - application/pdf → PdfRenderer (lazy-loaded, ssr:false)
+ *   - text/csv, .csv, .tsv → CsvRenderer (lazy-loaded, ssr:false)
+ *   - audio/*         → AudioRenderer (native <audio controls>)
+ *   - video/*         → VideoRenderer (native <video controls>; Range-streamed)
  *   - text/*, code    → ContentRenderer (lazy-loaded, ssr:false)
  *
  * Error tile with download link is shown on any renderer failure or non-200
@@ -22,6 +25,8 @@ import type { Asset } from "@/lib/types";
 import { assetContentUrl } from "@/lib/api";
 import { AccessRestrictedPlaceholder } from "./AccessRestrictedPlaceholder";
 import { ImageRenderer } from "./ImageRenderer";
+import { AudioRenderer } from "./AudioRenderer";
+import { VideoRenderer } from "./VideoRenderer";
 import { ErrorTile } from "./ErrorTile";
 
 // ---------------------------------------------------------------------------
@@ -56,6 +61,16 @@ const DocxRenderer = dynamic(
 // Gated by flag "pptx-server-conversion"; shows download fallback when off.
 const PptxRenderer = dynamic(
   () => import("./PptxRenderer").then((m) => ({ default: m.PptxRenderer })),
+  {
+    ssr: false,
+    loading: () => <RendererSkeleton />,
+  },
+);
+
+// CSV/TSV: pulls in @tanstack/react-table — lazy-loaded to keep it out of the
+// initial bundle, same rationale as ContentRenderer/DocxRenderer above.
+const CsvRenderer = dynamic(
+  () => import("./CsvRenderer").then((m) => ({ default: m.CsvRenderer })),
   {
     ssr: false,
     loading: () => <RendererSkeleton />,
@@ -112,6 +127,25 @@ function isImageMime(mime: string | null | undefined): boolean {
   return !!mime && mime.startsWith("image/");
 }
 
+function isCsvMime(mime: string | null | undefined): boolean {
+  return mime === "text/csv";
+}
+
+function isTsvMime(mime: string | null | undefined): boolean {
+  return mime === "text/tab-separated-values" || mime === "text/tsv";
+}
+
+function isAudioMime(mime: string | null | undefined): boolean {
+  return !!mime && mime.startsWith("audio/");
+}
+
+function isVideoMime(mime: string | null | undefined): boolean {
+  return !!mime && mime.startsWith("video/");
+}
+
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".weba"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v", ".ogv"]);
+
 /** Extracts the lowercase extension from a URI/path (e.g. ".md", ".pdf"). */
 function getExtension(uri: string): string {
   // Strip query string / hash first
@@ -137,7 +171,17 @@ function getFilePath(asset: Asset): string {
  * Determine the renderer type from MIME + extension.
  * Falls back to "content" for text-like types, "unknown" for unhandled.
  */
-type RendererKind = "image" | "svg" | "pdf" | "docx" | "pptx" | "content" | "unknown";
+type RendererKind =
+  | "image"
+  | "svg"
+  | "pdf"
+  | "docx"
+  | "pptx"
+  | "csv"
+  | "audio"
+  | "video"
+  | "content"
+  | "unknown";
 
 function resolveRenderer(asset: Asset): RendererKind {
   const mime = asset.mime_type;
@@ -161,6 +205,17 @@ function resolveRenderer(asset: Asset): RendererKind {
 
   // Any other image/* → generic image
   if (isImageMime(mime)) return "image";
+
+  // CSV / TSV (checked before the generic "text/" prefix match below, since
+  // text/csv would otherwise be swallowed by the text-content branch)
+  if (isCsvMime(mime) || ext === ".csv") return "csv";
+  if (isTsvMime(mime) || ext === ".tsv") return "csv";
+
+  // Audio (native <audio controls>)
+  if (isAudioMime(mime) || AUDIO_EXTENSIONS.has(ext)) return "audio";
+
+  // Video (native <video controls>; streamed via the Range-enabled preview proxy)
+  if (isVideoMime(mime) || VIDEO_EXTENSIONS.has(ext)) return "video";
 
   // Text / code
   const TEXT_MIME_PREFIXES = ["text/"];
@@ -272,6 +327,42 @@ export function AssetViewer({ asset, mode, editable = false, className }: AssetV
       return (
         <PptxRenderer
           assetId={asset.id}
+          originalUrl={originalUrl}
+          mode={mode}
+          className={className}
+        />
+      );
+
+    case "csv": {
+      const ext = getExtension(asset.uri);
+      const isTsv = isTsvMime(asset.mime_type) || ext === ".tsv";
+      return (
+        <CsvRenderer
+          src={contentUrl}
+          isTsv={isTsv}
+          originalUrl={originalUrl}
+          mode={mode}
+          className={className}
+        />
+      );
+    }
+
+    case "audio":
+      return (
+        <AudioRenderer
+          src={contentUrl}
+          filename={asset.title}
+          originalUrl={originalUrl}
+          mode={mode}
+          className={className}
+        />
+      );
+
+    case "video":
+      return (
+        <VideoRenderer
+          src={contentUrl}
+          filename={asset.title}
           originalUrl={originalUrl}
           mode={mode}
           className={className}

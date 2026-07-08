@@ -108,6 +108,31 @@ export function EntityModal({
 }: EntityModalProps) {
   const { activeTab, setTab } = useEntityModalUrl(tabRegistry);
 
+  // Focus-restore-to-trigger (a11y, P6/F-002).
+  //
+  // BaseArtifactModal wraps Radix's Dialog without a <Dialog.Trigger> (every
+  // surface opens the modal via its own onClick handler + URL state, not
+  // Radix's trigger primitive). Radix's *default* onCloseAutoFocus always
+  // calls `event.preventDefault()` and focuses `context.triggerRef.current`
+  // (see @radix-ui/react-dialog's DialogContentModal) — which is null here,
+  // so the built-in restore silently no-ops and focus drops to <body> on
+  // every close. Capture the real trigger ourselves on mount (before Radix's
+  // FocusScope moves focus into the dialog) and restore it on unmount, which
+  // runs after Radix's own (no-op) attempt for this component.
+  const triggerRef = React.useRef<HTMLElement | null>(
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  );
+  React.useEffect(() => {
+    return () => {
+      const el = triggerRef.current;
+      if (el && document.contains(el)) {
+        el.focus();
+      }
+    };
+  }, []);
+
   const resolvedTitle = title ?? `${humanizeType(entityType)} ${entityId ?? ""}`.trim();
 
   // Tab bar definitions derived from the registry (order preserved).

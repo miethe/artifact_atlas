@@ -19,7 +19,7 @@ tasks:
 - id: P4B-001
   description: "DOCX renderer (docx-preview 0.3.7) \u2014 next/dynamic ssr:false,\
     \ fetchRelated:false, full render mode, document icon fallback for thumbnail mode"
-  status: pending
+  status: completed
   assigned_to:
   - ui-engineer-enhanced
   dependencies:
@@ -27,14 +27,14 @@ tasks:
 - id: P4B-002
   description: "Error tile + download fallback \u2014 catch renderAsync throws and\
     \ proxy non-200; no page-level crash"
-  status: pending
+  status: completed
   assigned_to:
   - ui-engineer-enhanced
   dependencies:
   - P4B-001
 - id: P4B-003
   description: "task-completion-validator gate \u2014 all P4b exit criteria"
-  status: pending
+  status: completed
   assigned_to:
   - task-completion-validator
   dependencies:

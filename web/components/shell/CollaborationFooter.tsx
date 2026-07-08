@@ -108,9 +108,13 @@ export function CollaborationFooter({
         </span>
       )}
 
-      {/* Agent activity */}
+      {/* Agent activity — pulsing dot indicates an agent is actively querying (P3-6) */}
       {agentActivity && (
-        <span className="flex items-center gap-1 text-purple-600">
+        <span className="flex items-center gap-1.5 text-purple-600">
+          <span
+            aria-hidden
+            className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse-subtle shrink-0"
+          />
           <Zap className="w-3 h-3 shrink-0" aria-hidden />
           <span>{agentActivity}</span>
         </span>

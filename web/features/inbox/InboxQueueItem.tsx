@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SensitivityBadge } from "@/components/ui/SensitivityBadge";
+import { TagChip } from "@/components/ui/TagChip";
 import type { InboxItem } from "@/lib/types";
 
 // ============================================================
@@ -28,6 +29,41 @@ function SourceIcon({ mimeType }: { mimeType?: string | null }) {
   if (mimeType.includes("url") || mimeType.includes("html"))
     return <Link2 aria-hidden className="w-4 h-4 text-purple-500" />;
   return <File aria-hidden className="w-4 h-4 text-gray-400" />;
+}
+
+// ============================================================
+// Suggested-type label (P2-7)
+// Prefers the API-supplied `suggested_artifact_type_id`; falls back to a
+// coarse guess from mime_type/source_kind when the API hasn't classified
+// the item yet (no backend changes — frontend-only heuristic).
+// ============================================================
+
+function humanizeArtifactTypeId(id: string): string {
+  return id
+    .replace(/^artifact_type_/, "")
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function fallbackSuggestedType(item: InboxItem): string | null {
+  const mime = item.mime_type ?? "";
+  if (mime.startsWith("image/")) return "Image";
+  if (mime.startsWith("video/")) return "Video";
+  if (mime.startsWith("audio/")) return "Audio";
+  if (mime.includes("markdown")) return "Document";
+  if (mime.startsWith("text/")) return "Text";
+  if (mime.includes("pdf")) return "Document";
+  if (item.source_kind === "url") return "Link";
+  return null;
+}
+
+function suggestedTypeLabel(item: InboxItem): string | null {
+  if (item.suggested_artifact_type_id) {
+    return humanizeArtifactTypeId(item.suggested_artifact_type_id);
+  }
+  return fallbackSuggestedType(item);
 }
 
 function relativeTime(iso: string): string {
@@ -61,6 +97,9 @@ export function InboxQueueItem({
   onToggleMultiSelect,
   isDragging = false,
 }: InboxQueueItemProps) {
+  const typeLabel = suggestedTypeLabel(item);
+  const isApiSuggested = Boolean(item.suggested_artifact_type_id);
+
   const handleClick = (e: React.MouseEvent) => {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
       onToggleMultiSelect(item.id);
@@ -131,6 +170,13 @@ export function InboxQueueItem({
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           <StatusBadge status={item.status} size="xs" showDot />
           <SensitivityBadge sensitivity={item.sensitivity} size="xs" />
+          {typeLabel && (
+            <TagChip
+              label={isApiSuggested ? `Suggested: ${typeLabel}` : typeLabel}
+              size="xs"
+              color={isApiSuggested ? "blue" : "default"}
+            />
+          )}
           <span className="flex items-center gap-0.5 text-[10px] text-[var(--ink-faint)]">
             <Clock aria-hidden className="w-2.5 h-2.5" />
             {relativeTime(item.captured_at)}
