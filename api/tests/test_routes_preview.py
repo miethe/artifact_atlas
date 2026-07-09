@@ -237,6 +237,45 @@ class TestConvertPptx:
         assert body["cached"] is False
         assert body["pdfUrl"].startswith("/api/preview/cache/")
 
+    def test_uploaded_extensionless_blob_accepted(
+        self,
+        tmp_registry: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Uploaded PPTX lands in the content-addressed store at an
+        EXTENSIONLESS blob path; convert validation must consult the asset's
+        logical URI (``deck.pptx``) for the extension check. Regression: this
+        previously 415'd for every uploaded deck ('File extension "" is not
+        ".pptx"'), so the UI could not render any uploaded PPTX preview."""
+        monkeypatch.setattr(
+            PptxConverter, "soffice_available", staticmethod(lambda: True)
+        )
+
+        def _mock_convert(
+            self: PptxConverter, asset_id: str, source_path: Path
+        ) -> ConversionResult:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            pdf = self._cache_dir / f"{asset_id}.pdf"
+            pdf.write_bytes(b"%PDF-1.4 fake")
+            return ConversionResult(pdf_path=pdf, page_count=3, cached=False)
+
+        monkeypatch.setattr(PptxConverter, "convert", _mock_convert)
+
+        upload = client.post(
+            "/api/projects/p-pptx-upload/inbox/upload",
+            files=[("files", ("deck.pptx", _PPTX_MAGIC + b"\x14\x00" + b"\x00" * 100, _PPTX_MIME))],
+            data={"sensitivity": "personal", "agent_access": "read_allowed"},
+        )
+        assert upload.status_code == 202, upload.text
+        asset_id = upload.json()["asset_ids"][0]
+
+        resp = client.post("/api/preview/convert/pptx", json={"assetId": asset_id})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "ready"
+        assert body["pageCount"] == 3
+        assert body["pdfUrl"].startswith("/api/preview/cache/")
+
     def test_happy_path_cache_hit(
         self,
         tmp_registry: Path,

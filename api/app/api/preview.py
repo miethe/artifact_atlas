@@ -421,7 +421,10 @@ def convert_pptx(body: PptxConvertRequest) -> JSONResponse:
     # 4. Size check → 413
     try:
         asset_mime: str | None = getattr(asset, "mime_type", None)
-        converter.validate_pptx(source_path, asset_mime=asset_mime)
+        logical_uri: str | None = getattr(asset, "uri", None)
+        converter.validate_pptx(
+            source_path, asset_mime=asset_mime, logical_uri=logical_uri
+        )
     except MagicBytesError as exc:
         return _error_json(415, "unsupported_media_type", str(exc))
     except SizeLimitExceededError as exc:

@@ -149,6 +149,7 @@ class PptxConverter:
         self,
         source_path: Path,
         asset_mime: str | None = None,
+        logical_uri: str | None = None,
     ) -> None:
         """Validate that *source_path* is a well-formed PPTX file.
 
@@ -157,6 +158,12 @@ class PptxConverter:
         2. Extension: must be ``.pptx``                  → MagicBytesError
         3. MIME (if provided): must match PPTX MIME type → MagicBytesError
         4. Size: must not exceed ``_MAX_SIZE_BYTES``      → SizeLimitExceededError
+
+        Managed content-addressed blobs resolve to an **extensionless** path
+        (``<store>/<hash[:2]>/<hash>``), so the extension check also consults
+        *logical_uri* (the asset's logical ``uri``, e.g. ``file://deck.pptx``)
+        when the physical path carries no ``.pptx`` suffix — mirroring the HTML
+        route's blob-aware suffix handling (D-015). Magic-bytes + MIME still gate.
 
         Raises:
             MagicBytesError: on magic/extension/MIME mismatch (→ HTTP 415).
@@ -175,8 +182,14 @@ class PptxConverter:
                 f"(got {header!r}, expected {_PPTX_MAGIC!r})"
             )
 
-        # 2. Extension check
-        if source_path.suffix.lower() != _PPTX_EXTENSION:
+        # 2. Extension check — accept the physical suffix OR the logical uri's
+        # suffix (content-addressed blobs are extensionless; the logical uri
+        # preserves the original ``.pptx`` name).
+        suffixes = {source_path.suffix.lower()}
+        if logical_uri:
+            logical_tail = logical_uri.rsplit("/", 1)[-1]
+            suffixes.add(Path(logical_tail).suffix.lower())
+        if _PPTX_EXTENSION not in suffixes:
             raise MagicBytesError(
                 f"File extension '{source_path.suffix}' is not '{_PPTX_EXTENSION}'"
             )
