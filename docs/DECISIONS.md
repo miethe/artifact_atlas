@@ -744,3 +744,42 @@ and HTML assets could not be hosted/previewed live because the content proxy del
 - `api/app/api/preview.py` (`get_asset_html`), `deploy/Dockerfile.api`, `shared/openapi.yaml`
 - Builds on D-012 (ADR-4 viewer + R6 proxy posture) and D-014 (Range streaming) without modifying
   their guards.
+
+---
+
+## D-016 — Persist the managed content store on its own named volume
+
+**Status**: Accepted
+**Date**: 2026-07-09
+**Phase**: Hotfix (preview 404 regression)
+**Deciders**: debug (fix:debug)
+
+### Context
+
+After the D-015 redeploy to the nuc, every content-addressed asset failed preview with
+`404 "source file not found"`. Root cause: the managed content store (`settings.content_store_dir`)
+resolves to `/app/assets/content` — inside the **image filesystem**, not the persistent `atlas-data`
+volume. The entrypoint (`deploy/api-entrypoint.sh`) redirects registry/exports to `/data` via
+`ATLAS_*` env, but the content store was never included. Any image rebuild + `--force-recreate`
+resets `/app`, wiping every runtime-uploaded blob, while the registry on `/data` keeps pointing at
+the now-missing blobs. Latent since V1-011; exposed by the first rebuild carrying uploaded content.
+
+### Decision
+
+Mount a dedicated named volume `atlas-assets:/app/assets` in `deploy/docker-compose.yml`, persisting
+the content store (and preview/thumbnail/pptx caches) exactly as `atlas-data:/data` persists the
+registry. `workspace_root` stays `/app`, so the preview proxy's LFI/SSRF containment guard
+(`_resolve_within_workspace`, D-012/F-002) is unchanged — no code and no security-surface change.
+
+Rejected alternative: redirect `ATLAS_CONTENT_STORE_DIR` to `/data/assets/content`. Cleaner w.r.t.
+the "mutable state → /data" convention but requires widening the containment guard's trusted root
+(a security-sensitive change). Deferred as a possible follow-up; the volume mount is the minimal,
+guard-neutral fix.
+
+### Consequences
+
+- Uploaded blobs now survive image rebuilds. Preview/thumbnail caches also persist (regenerable, but
+  no longer wiped on redeploy).
+- Blobs lost in the D-015 rebuild are recovered out-of-band by re-uploading originals to the existing
+  asset ids via `PUT /api/assets/{id}/content` (idempotent, content-addressed).
+- Follow-up: e2e/deploy smoke should assert an uploaded asset's `/content` survives a `--force-recreate`.

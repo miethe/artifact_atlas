@@ -28,6 +28,13 @@ services:
       ATLAS_CORS_ORIGINS: ${ATLAS_CORS_ORIGINS:-http://localhost:3040}
     volumes:
       - atlas-data:/data
+      # Managed content-addressed blob store + preview/thumbnail caches live under
+      # /app/assets (workspace_root == /app, so the preview proxy's LFI/SSRF guard
+      # serves them). This tree is written at runtime (asset uploads) but is baked
+      # into the image, so WITHOUT this volume every image rebuild + --force-recreate
+      # wipes all uploaded blobs while the registry on /data keeps pointing at them
+      # → preview 404s. Persist it exactly as /data is persisted.
+      - atlas-assets:/app/assets
     ports:
       - "${ATLAS_BIND_HOST:-127.0.0.1}:${ATLAS_API_PORT:-8042}:8042"
     healthcheck:
@@ -54,3 +61,4 @@ services:
 
 volumes:
   atlas-data:
+  atlas-assets:
