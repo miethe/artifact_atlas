@@ -309,6 +309,7 @@ Aligned with spec §22.1. Epic E6 (Template Builder) is elevated to its own epic
 | UI-P5 | Facelift | P0 a11y/correctness fixes; P1 high-impact visual improvements; dark mode deferred | ✓ Complete | ADR-5 (D-012) |
 | UI-P6 | Hardening | Upstream/local component split finalized; @miethe/ui gap contributions; integration QA and regression tests | In Progress | ADR-6 (D-012) |
 | WS-3 | AssetViewer Format Promotion | CSV/TSV renderer (hand-rolled parser + TanStack Table, row-capped), AudioRenderer/VideoRenderer (native `<audio>`/`<video>`), HTTP Range streaming on the content proxy (206/416, `Accept-Ranges`) | ✓ Complete | D-014 |
+| WS-4 | Full-Surface Preview Rendering | AssetViewer mounted in modal/detail/drawer (replaces legacy AssetPreview); PdfRenderer multi-page scroll + bottom-right page nav; PPTX conversion default-on + `soffice` in API image; sandboxed inline HTML route + HtmlRenderer with open-in-new-tab | ✓ Complete | D-015 |
 
 #### UI Polish Pass — Deferred Items
 

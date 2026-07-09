@@ -16,7 +16,7 @@ import { TagChip } from "@/components/ui/TagChip";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { Asset } from "@/lib/types";
-import { AssetPreview } from "./AssetPreview";
+import { AssetViewer } from "./AssetViewer";
 import { PolicyBadge } from "./PolicyBadge";
 import { ProvenancePanel } from "./ProvenancePanel";
 
@@ -84,9 +84,10 @@ export function AssetDrawerContent({
 
   return (
     <div className="flex flex-col gap-0">
-      {/* Preview */}
+      {/* Preview — real content via AssetViewer. Constrained to a compact
+          drawer-friendly height so multi-page docs scroll internally. */}
       <div className="p-3 border-b border-[var(--border)]">
-        <AssetPreview asset={asset} size="md" />
+        <AssetViewer asset={asset} mode="full" className="max-h-[45vh]" />
       </div>
 
       {/* Title + status */}

@@ -44,6 +44,25 @@ export function assetContentUrl(assetId: string): string {
   return `${API_BASE}/api/preview/asset/${assetId}/content`;
 }
 
+/** Absolute URL to the sandboxed HTML preview (GET /api/preview/asset/{id}/html). */
+export function assetHtmlUrl(assetId: string): string {
+  return `${API_BASE}/api/preview/asset/${assetId}/html`;
+}
+
+/** Absolute URL to the PPTX→PDF convert endpoint (POST /api/preview/convert/pptx). */
+export function pptxConvertUrl(): string {
+  return `${API_BASE}/api/preview/convert/pptx`;
+}
+
+/**
+ * Resolve an API-relative path (e.g. the `pdfUrl` returned by the PPTX convert
+ * endpoint) against the API origin. The web app and API are deployed on
+ * different origins, so relative paths must not be fetched as-is.
+ */
+export function apiAbsoluteUrl(path: string): string {
+  return new URL(path, API_BASE).toString();
+}
+
 // ============================================================
 // Error types
 // ============================================================

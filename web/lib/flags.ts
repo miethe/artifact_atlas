@@ -41,6 +41,10 @@ const FLAG_DEFAULTS: Record<string, boolean> = {
   // ContentPane/MarkdownEditor would stay light while the rest of the shell
   // went dark. Flip on only for local/AA-only smoke testing until DM-2 lands.
   "dark-mode": false,
+
+  // Server-side PPTX→PDF conversion. Default-on now that the API image ships
+  // the LibreOffice-based converter and /api/preview/convert/pptx is live.
+  "pptx-server-conversion": true,
 };
 
 function parseFlagList(raw: string | undefined): Set<string> {
@@ -64,8 +68,7 @@ const enabledFlags = parseFlagList(process.env.NEXT_PUBLIC_FLAGS);
  *      environment) — known default-on flags are on by default (ADR-7).
  *   3. Otherwise off.
  *
- * Note: flags not in FLAG_DEFAULTS (e.g. `pptx-server-conversion`, which needs
- * a LibreOffice/Gotenberg backend) stay off until named in NEXT_PUBLIC_FLAGS.
+ * Note: flags not in FLAG_DEFAULTS stay off until named in NEXT_PUBLIC_FLAGS.
  */
 export function isFlagEnabled(name: string): boolean {
   if (enabledFlags.has(name)) return true;

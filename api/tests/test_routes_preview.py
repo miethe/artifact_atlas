@@ -43,14 +43,19 @@ def _create_project() -> str:
     return resp.json()["id"]
 
 
-def _create_pptx_asset(project_id: str, uri: str, mime: str | None = None) -> dict:
+def _create_pptx_asset(
+    project_id: str,
+    uri: str,
+    mime: str | None = None,
+    agent_access: str = "preview_allowed",
+) -> dict:
     payload: dict = {
         "title": "Test PPTX",
         "source_kind": "local",
         "uri": uri,
         "status": "inbox",
         "sensitivity": "personal",
-        "agent_access": "metadata_only",
+        "agent_access": agent_access,
     }
     if mime is not None:
         payload["mime_type"] = mime
@@ -93,6 +98,26 @@ class TestConvertPptx:
         resp = client.post("/api/preview/convert/pptx", json={"assetId": ""})
         assert resp.status_code == 400, resp.text
         assert resp.json()["error"]["code"] == "bad_request"
+
+    def test_denied_agent_access_returns_403(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """metadata_only assets must not reach the converter (policy gate,
+        same bar as /content and /cache): 403 before any file access."""
+        pptx_file = tmp_path / "deck.pptx"
+        _write_pptx_bytes(pptx_file)
+
+        pid = _create_project()
+        asset = _create_pptx_asset(
+            pid, f"file://{pptx_file}", mime=_PPTX_MIME, agent_access="metadata_only"
+        )
+
+        resp = client.post(
+            "/api/preview/convert/pptx",
+            json={"assetId": asset["id"]},
+        )
+        assert resp.status_code == 403, resp.text
+        assert resp.json()["error"]["code"] == "policy_denied"
 
     def test_magic_bytes_rejection_returns_415(
         self, tmp_registry: Path, tmp_path: Path
@@ -787,6 +812,136 @@ class TestContentDispositionHardening:
 # (MAJOR(downgraded) finding 4: Starlette's bare PlainTextResponse(400)
 # broke the API's JSON error-envelope contract)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# GET /api/preview/asset/{assetId}/html — inline HTML preview (CSP-sandboxed)
+# ---------------------------------------------------------------------------
+
+
+def _create_html_asset(
+    project_id: str,
+    tmp_path: Path,
+    agent_access: str,
+    mime: str = "text/html",
+    filename: str = "page.html",
+) -> str:
+    html_file = tmp_path / filename
+    html_file.write_text("<html><body>hello</body></html>", encoding="utf-8")
+    payload: dict = {
+        "title": "Test HTML",
+        "source_kind": "local",
+        "uri": f"file://{html_file}",
+        "mime_type": mime,
+        "status": "inbox",
+        "sensitivity": "personal",
+        "agent_access": agent_access,
+    }
+    resp = client.post(f"/api/projects/{project_id}/assets", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+class TestGetAssetHtml:
+    """Tests for GET /api/preview/asset/{assetId}/html."""
+
+    def test_200_html_asset_preview_allowed(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """HTML asset with preview_allowed: text/html response, inline, CSP sandbox."""
+        pid = _create_project()
+        asset_id = _create_html_asset(pid, tmp_path, "preview_allowed")
+
+        resp = client.get(f"/api/preview/asset/{asset_id}/html")
+        assert resp.status_code == 200, resp.text
+
+        # Content-type must be text/html (inline)
+        assert resp.headers["content-type"].startswith("text/html")
+
+        # Must NOT have Content-Disposition: attachment
+        assert "content-disposition" not in resp.headers
+
+        # Security headers required by the route contract
+        csp = resp.headers.get("content-security-policy", "")
+        assert "sandbox" in csp, f"Expected 'sandbox' in CSP, got: {csp!r}"
+        assert resp.headers.get("x-content-type-options") == "nosniff"
+
+    def test_403_metadata_only(self, tmp_registry: Path, tmp_path: Path) -> None:
+        """agent_access=metadata_only → 403 policy_denied."""
+        pid = _create_project()
+        asset_id = _create_html_asset(pid, tmp_path, "metadata_only")
+
+        resp = client.get(f"/api/preview/asset/{asset_id}/html")
+        assert resp.status_code == 403, resp.text
+        assert resp.json()["error"]["code"] == "policy_denied"
+
+    def test_403_none(self, tmp_registry: Path, tmp_path: Path) -> None:
+        """agent_access=none → 403 policy_denied."""
+        pid = _create_project()
+        asset_id = _create_html_asset(pid, tmp_path, "none")
+
+        resp = client.get(f"/api/preview/asset/{asset_id}/html")
+        assert resp.status_code == 403, resp.text
+        assert resp.json()["error"]["code"] == "policy_denied"
+
+    def test_415_non_html_asset(self, tmp_registry: Path, tmp_path: Path) -> None:
+        """Non-HTML MIME (e.g. PDF) returns 415 unsupported_media_type."""
+        pdf_file = tmp_path / "doc.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 content")
+        pid = _create_project()
+        payload: dict = {
+            "title": "PDF",
+            "source_kind": "local",
+            "uri": f"file://{pdf_file}",
+            "mime_type": "application/pdf",
+            "status": "inbox",
+            "sensitivity": "personal",
+            "agent_access": "preview_allowed",
+        }
+        resp = client.post(f"/api/projects/{pid}/assets", json=payload)
+        assert resp.status_code == 201, resp.text
+        asset_id = resp.json()["id"]
+
+        resp = client.get(f"/api/preview/asset/{asset_id}/html")
+        assert resp.status_code == 415, resp.text
+        assert resp.json()["error"]["code"] == "unsupported_media_type"
+
+    def test_404_unknown_asset(self, tmp_registry: Path) -> None:
+        """Unknown asset ID returns 404."""
+        resp = client.get("/api/preview/asset/asset_doesnotexist/html")
+        assert resp.status_code == 404, resp.text
+
+    def test_uploaded_extensionless_blob_with_html_name_accepted(
+        self, tmp_registry: Path
+    ) -> None:
+        """Uploaded content lands in the content-addressed store at an
+        extensionless blob path; HTML eligibility must consult the asset's
+        logical URI (``report.html``) when the MIME is generic ``text/*``."""
+        resp = client.post(
+            "/api/projects/p-html-upload/inbox/upload",
+            files=[("files", ("report.html", b"<html><body>up</body></html>", "text/plain"))],
+            data={"sensitivity": "personal", "agent_access": "preview_allowed"},
+        )
+        assert resp.status_code == 202, resp.text
+        asset_id = resp.json()["asset_ids"][0]
+
+        html = client.get(f"/api/preview/asset/{asset_id}/html")
+        assert html.status_code == 200, html.text
+        assert html.headers["content-type"].startswith("text/html")
+        assert "sandbox" in html.headers.get("content-security-policy", "")
+
+    def test_htm_extension_with_text_mime_accepted(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """An .htm file with a generic text/plain MIME is accepted as HTML."""
+        pid = _create_project()
+        asset_id = _create_html_asset(
+            pid, tmp_path, "preview_allowed", mime="text/plain", filename="page.htm"
+        )
+
+        resp = client.get(f"/api/preview/asset/{asset_id}/html")
+        assert resp.status_code == 200, resp.text
+        assert "sandbox" in resp.headers.get("content-security-policy", "")
 
 
 class TestMalformedRangeHeader:

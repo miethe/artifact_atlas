@@ -22,11 +22,12 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { clsx } from "clsx";
 import type { Asset } from "@/lib/types";
-import { assetContentUrl } from "@/lib/api";
+import { assetContentUrl, assetHtmlUrl } from "@/lib/api";
 import { AccessRestrictedPlaceholder } from "./AccessRestrictedPlaceholder";
 import { ImageRenderer } from "./ImageRenderer";
 import { AudioRenderer } from "./AudioRenderer";
 import { VideoRenderer } from "./VideoRenderer";
+import { HtmlRenderer } from "./HtmlRenderer";
 import { ErrorTile } from "./ErrorTile";
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,10 @@ function isVideoMime(mime: string | null | undefined): boolean {
   return !!mime && mime.startsWith("video/");
 }
 
+function isHtmlMime(mime: string | null | undefined): boolean {
+  return mime === "text/html" || mime === "application/xhtml+xml";
+}
+
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".weba"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v", ".ogv"]);
 
@@ -180,6 +185,7 @@ type RendererKind =
   | "csv"
   | "audio"
   | "video"
+  | "html"
   | "content"
   | "unknown";
 
@@ -217,6 +223,10 @@ function resolveRenderer(asset: Asset): RendererKind {
   // Video (native <video controls>; streamed via the Range-enabled preview proxy)
   if (isVideoMime(mime) || VIDEO_EXTENSIONS.has(ext)) return "video";
 
+  // HTML — sandboxed iframe against the backend HTML preview endpoint (not the
+  // text-content branch below, which would just show the raw markup).
+  if (isHtmlMime(mime) || ext === ".html" || ext === ".htm") return "html";
+
   // Text / code
   const TEXT_MIME_PREFIXES = ["text/"];
   const TEXT_MIME_EXACT = [
@@ -228,10 +238,11 @@ function resolveRenderer(asset: Asset): RendererKind {
     "application/javascript",
     "application/typescript",
   ];
+  // NOTE: .html/.htm intentionally excluded — routed to HtmlRenderer above.
   const CONTENT_EXTENSIONS = new Set([
     ".md", ".txt", ".ts", ".tsx", ".js", ".jsx", ".py",
     ".json", ".yml", ".yaml", ".toml", ".xml", ".css",
-    ".scss", ".sass", ".html", ".htm", ".sh", ".bash",
+    ".scss", ".sass", ".sh", ".bash",
     ".zsh", ".fish", ".rb", ".go", ".rs", ".java", ".c",
     ".cpp", ".h", ".hpp", ".cs", ".php", ".swift", ".kt",
     ".sql", ".graphql", ".gql", ".env", ".ini", ".cfg",
@@ -364,6 +375,17 @@ export function AssetViewer({ asset, mode, editable = false, className }: AssetV
           src={contentUrl}
           filename={asset.title}
           originalUrl={originalUrl}
+          mode={mode}
+          className={className}
+        />
+      );
+
+    case "html":
+      return (
+        <HtmlRenderer
+          src={assetHtmlUrl(asset.id)}
+          originalUrl={originalUrl}
+          title={asset.title}
           mode={mode}
           className={className}
         />

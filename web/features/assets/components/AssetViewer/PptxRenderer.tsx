@@ -30,6 +30,7 @@ import * as React from "react";
 import { clsx } from "clsx";
 import { Presentation } from "lucide-react";
 import { isFlagEnabled } from "@/lib/flags";
+import { apiAbsoluteUrl, pptxConvertUrl } from "@/lib/api";
 import { PdfRenderer } from "./PdfRenderer";
 import { ErrorTile } from "./ErrorTile";
 
@@ -69,7 +70,6 @@ export interface PptxRendererProps {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const CONVERT_ENDPOINT = "/api/preview/convert/pptx";
 const POLL_INTERVAL_MS = 2_000;
 const MAX_POLL_MS = 30_000;
 
@@ -78,7 +78,7 @@ const MAX_POLL_MS = 30_000;
 // ---------------------------------------------------------------------------
 async function callConvertEndpoint(assetId: string): Promise<ConvertResponse | null> {
   try {
-    const response = await fetch(CONVERT_ENDPOINT, {
+    const response = await fetch(pptxConvertUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ assetId }),
@@ -173,7 +173,9 @@ function PptxConversionView({
         }
 
         if (result.status === "ready") {
-          setViewState({ phase: "ready", pdfUrl: result.pdfUrl });
+          // pdfUrl comes back API-relative; resolve it against the API origin
+          // (web and API are served from different origins in deployment).
+          setViewState({ phase: "ready", pdfUrl: apiAbsoluteUrl(result.pdfUrl) });
           return;
         }
 

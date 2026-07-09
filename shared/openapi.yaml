@@ -1949,6 +1949,61 @@ paths:
                 type: string
                 example: "*/10240"
 
+  /api/preview/asset/{assetId}/html:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getAssetHtml
+      tags: [preview]
+      summary: Serve HTML asset inline with a CSP sandbox for iframe hosting
+      description: >
+        Delivers an HTML asset inline (no Content-Disposition: attachment) so
+        the web app can host it in a sandboxed iframe or open it in a new tab.
+        The response carries ``Content-Security-Policy: sandbox allow-scripts``
+        which forces the browser to assign the document a unique, opaque origin
+        — scripts run but the document has no same-origin access to the app's
+        cookies, localStorage, or APIs. Enforces the same agent_access policy
+        gate and file:// + workspace-containment guards as the content proxy
+        (P4C-002). Only assets whose MIME is ``text/html`` — or a generic
+        ``text/*`` type with an ``.html``/``.htm`` filename — are eligible;
+        all other types return 415.
+      responses:
+        "200":
+          description: HTML asset content with CSP sandbox header
+          headers:
+            Content-Security-Policy:
+              schema:
+                type: string
+                example: sandbox allow-scripts
+            X-Content-Type-Options:
+              schema:
+                type: string
+                example: nosniff
+            Referrer-Policy:
+              schema:
+                type: string
+                example: no-referrer
+        "400":
+          description: Asset has no resolvable local file path (remote URI rejected)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          description: Asset MIME type is not eligible for inline HTML preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
 # =============================================================================
 # Components
 # =============================================================================

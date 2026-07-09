@@ -4,6 +4,7 @@ Routes:
   POST /api/preview/convert/pptx         — P4C-001: convert PPTX asset to PDF
   GET  /api/preview/cache/{assetId}      — P4C-001: serve cached converted PDF
   GET  /api/preview/asset/{assetId}/content — P4C-002: safe asset-content proxy
+  GET  /api/preview/asset/{assetId}/html    — inline HTML preview (CSP-sandboxed)
 
 Security invariants (P4C-002):
   - Only local file:// URIs are proxied (no SSRF — remote URIs are rejected).
@@ -39,7 +40,7 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -363,6 +364,7 @@ def convert_pptx(body: PptxConvertRequest) -> JSONResponse:
 
     Validation order (seam contract §3):
     1. Resolve asset by ID              → 404 if not found
+    1b. agent_access policy gate        → 403 (same bar as /content and /cache)
     2. Resolve local source path        → 404 if path not resolvable / file missing
     3. Magic-bytes + extension + MIME   → 415 on mismatch
     4. File size (≤ 50 MB)              → 413 on exceed
@@ -381,6 +383,13 @@ def convert_pptx(body: PptxConvertRequest) -> JSONResponse:
     asset = svc.get_asset(asset_id)
     if asset is None:
         return not_found(f"Asset '{asset_id}' not found.")  # type: ignore[return-value]
+
+    # 1b. Policy gate — same agent_access bar as /content, /cache, and /html.
+    # Without this, a metadata_only/none asset could still be pushed through
+    # LibreOffice (cache write + page-count disclosure) via a direct POST.
+    denied = _check_preview_access(asset)
+    if denied is not None:
+        return denied  # type: ignore[return-value]
 
     converter = _get_converter()
 
@@ -605,5 +614,130 @@ def get_asset_content(assetId: str, request: Request) -> FileResponse:
     return FileResponse(
         path=str(source_path),
         media_type=mime,
+        headers=headers,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Inline HTML preview — CSP-sandboxed
+# ---------------------------------------------------------------------------
+
+
+#: HTML file extensions accepted when the recorded MIME is a generic text/* type.
+_HTML_EXTENSIONS: frozenset[str] = frozenset({".html", ".htm"})
+
+
+@router.get(
+    "/asset/{assetId}/html",
+    summary="Serve HTML asset inline with a CSP sandbox for iframe hosting",
+)
+def get_asset_html(assetId: str) -> FileResponse:
+    """Serve an HTML asset inline so the web app can host it in a sandboxed iframe.
+
+    This exists as a separate route from the content proxy (``/content``)
+    because that proxy deliberately forces ``Content-Disposition: attachment``
+    on ``text/html`` (R6 XSS hardening — see ``_INLINE_SAFE_MIMES`` above).
+    Inline rendering of user-supplied HTML from the same origin as the app
+    would let a hostile document read cookies / localStorage / call the API
+    with the user's credentials, so plain inline delivery is unsafe.
+
+    This route replaces that guard with a stronger one: the CSP directive
+    ``sandbox allow-scripts`` forces the browser to treat the response as if
+    it were loaded into a sandboxed iframe with a **unique, opaque origin**.
+    Scripts still run (so previews of interactive HTML work), but the
+    document has no same-origin access — it cannot read the app's cookies,
+    localStorage, or IndexedDB, and cannot fetch app APIs as the user. It
+    is safe to drop into an ``<iframe>`` or open in a new tab.
+
+    Additional invariants:
+      - Same ``_check_preview_access`` policy gate as the content proxy
+        (403 for ``agent_access`` in {none, metadata_only}).
+      - Same ``file://``-only + workspace-containment guards (no SSRF/LFI).
+      - Only asset records whose MIME is ``text/html`` /
+        ``application/xhtml+xml`` — or generic ``text/*`` with an
+        ``.html``/``.htm`` filename (resolved path or logical asset URI,
+        since content-addressed blobs are extensionless) — are eligible;
+        anything else returns 415.
+      - ``X-Content-Type-Options: nosniff`` still emitted so the browser
+        does not silently reinterpret the response as another type.
+      - ``Referrer-Policy: no-referrer`` so navigations out of the
+        sandboxed document do not leak the API URL.
+    """
+    # 1. Resolve asset
+    svc = get_asset_service()
+    asset = svc.get_asset(assetId)
+    if asset is None:
+        return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
+
+    # 2. Policy gate — identical semantics to the content proxy
+    denied = _check_preview_access(asset)
+    if denied is not None:
+        return denied  # type: ignore[return-value]
+
+    # 3. Resolve source path — local only (SSRF guard)
+    source_path = PptxConverter.resolve_source_path(asset)
+    if source_path is None:
+        return _error_json(  # type: ignore[return-value]
+            400,
+            "bad_request",
+            "Asset does not have a resolvable local file path. Remote URIs are not proxied.",
+        )
+    safe_path = _resolve_within_workspace(source_path)
+    if safe_path is None:
+        return _error_json(  # type: ignore[return-value]
+            400,
+            "bad_request",
+            "Asset path resolves outside the permitted workspace.",
+        )
+    source_path = safe_path
+    if not source_path.exists():
+        return _error_json(  # type: ignore[return-value]
+            404,
+            "not_found",
+            f"Asset '{assetId}' source file not found.",
+        )
+
+    # 4. HTML eligibility check — text/html (or XHTML), or a text/* MIME on an
+    # .html/.htm file. Content-addressed blobs resolve to extensionless paths,
+    # so the asset's *logical* URIs are consulted alongside the resolved path
+    # (mirrors the frontend dispatcher, which routes on `asset.uri` extension).
+    raw_mime: str | None = getattr(asset, "mime_type", None)
+    if raw_mime:
+        mime = raw_mime.split(";")[0].strip().lower()
+    else:
+        guessed, _ = mimetypes.guess_type(str(source_path))
+        mime = (guessed or "application/octet-stream").lower()
+
+    suffixes = {source_path.suffix.lower()}
+    for logical_uri in (getattr(asset, "uri", None), getattr(asset, "original_uri", None)):
+        if logical_uri:
+            # `file://report.html` parses the bare name as netloc, not path.
+            parsed = urlparse(str(logical_uri))
+            tail = parsed.path or parsed.netloc
+            suffixes.add(Path(tail).suffix.lower())
+    is_html = mime in ("text/html", "application/xhtml+xml") or (
+        mime.startswith("text/") and bool(suffixes & _HTML_EXTENSIONS)
+    )
+    if not is_html:
+        return _error_json(  # type: ignore[return-value]
+            415,
+            "unsupported_media_type",
+            f"MIME type '{mime}' is not eligible for inline HTML preview.",
+        )
+
+    # 5. Inline delivery with sandbox CSP as the XSS hardening (in place of the
+    # content proxy's attachment guard). ``sandbox allow-scripts`` forces a
+    # unique-origin execution context, so scripts run without same-origin
+    # access to the app's cookies/storage/API credentials.
+    headers: dict[str, str] = {
+        "Content-Security-Policy": "sandbox allow-scripts",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+        "Referrer-Policy": "no-referrer",
+    }
+
+    return FileResponse(
+        path=str(source_path),
+        media_type="text/html",
         headers=headers,
     )

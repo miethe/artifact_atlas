@@ -11,7 +11,7 @@ import { useAsset } from "@/lib/hooks/useAssets";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SensitivityBadge } from "@/components/ui/SensitivityBadge";
 import { PolicyBadge } from "../PolicyBadge";
-import { AssetPreview } from "../AssetPreview";
+import { AssetViewer } from "../AssetViewer";
 import { PanelSkeleton } from "@/features/ui/components/EntityModal";
 import type { TabPanelProps } from "@/features/ui/components/EntityModal";
 
@@ -33,8 +33,9 @@ export default function AssetPreviewTabPanel({
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* Visual preview */}
-      <AssetPreview asset={asset} size="lg" />
+      {/* Visual preview — real content via AssetViewer, capped so the tab
+          panel scrolls internally instead of blowing out the modal height. */}
+      <AssetViewer asset={asset} mode="full" className="max-h-[65vh]" />
 
       {/* Title + badges */}
       <div className="flex flex-col gap-1.5">

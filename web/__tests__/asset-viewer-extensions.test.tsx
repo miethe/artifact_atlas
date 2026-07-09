@@ -1,23 +1,19 @@
 /**
- * Smoke tests for the CSV/TSV, Audio, and Video AssetViewer renderers.
- *
- * Covers:
- * - CsvRenderer: parses quoted CSV (commas/newlines inside quoted fields),
- *   renders a table, and shows a truncation notice past MAX_RENDERED_ROWS.
- * - AudioRenderer: renders a native <audio> element in full mode, a compact
- *   icon+filename tile in thumbnail mode, and falls back to ErrorTile on
- *   playback error.
- * - VideoRenderer: renders a native <video> element in full mode, a static
- *   icon tile in thumbnail mode (no <video> mounted), and falls back to
- *   ErrorTile on playback error.
+ * Smoke tests for the CSV/TSV, Audio, and Video AssetViewer renderers, plus
+ * dispatcher routing coverage for the new HtmlRenderer and end-to-end coverage
+ * that AssetPreviewTabPanel + AssetDetail mount AssetViewer (not the legacy
+ * icon-only AssetPreview placeholder).
  */
 import * as React from "react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { CsvRenderer } from "@/features/assets/components/AssetViewer/CsvRenderer";
 import { AudioRenderer } from "@/features/assets/components/AssetViewer/AudioRenderer";
 import { VideoRenderer } from "@/features/assets/components/AssetViewer/VideoRenderer";
+import { AssetViewer } from "@/features/assets/components/AssetViewer";
+import type { Asset } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // CsvRenderer test helper — CsvRenderer now fetches via arrayBuffer() (a
@@ -280,5 +276,139 @@ describe("VideoRenderer", () => {
     expect(
       screen.getByRole("status", { name: /video format not supported/i }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AssetViewer HTML routing
+// ---------------------------------------------------------------------------
+function makeHtmlAsset(overrides: Partial<Asset> = {}): Asset {
+  return {
+    id: "asset_html_1",
+    title: "Sample doc",
+    source_kind: "local",
+    uri: "https://example.com/sample.html",
+    status: "canonical",
+    sensitivity: "public",
+    agent_access: "preview_allowed",
+    mime_type: "text/html",
+    captured_at: "2026-07-09T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("AssetViewer HTML routing", () => {
+  it("routes text/html mime to a sandboxed iframe (allow-scripts, open-in-new-tab)", () => {
+    render(<AssetViewer asset={makeHtmlAsset()} mode="full" />);
+
+    const iframe = screen.getByTitle(/html preview of sample doc/i) as HTMLIFrameElement;
+    expect(iframe.tagName).toBe("IFRAME");
+    // MUST NOT include allow-same-origin.
+    expect(iframe.getAttribute("sandbox")).toBe("allow-scripts");
+
+    const openLink = screen.getByRole("link", { name: /open in new tab/i });
+    expect(openLink).toHaveAttribute("target", "_blank");
+    expect(openLink).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("routes .html extension when mime_type is absent", () => {
+    render(
+      <AssetViewer
+        asset={makeHtmlAsset({ mime_type: null, uri: "file:///tmp/report.html" })}
+        mode="full"
+      />,
+    );
+    expect(screen.getByTitle(/html preview of/i)).toBeInTheDocument();
+  });
+
+  it("thumbnail mode: iframe is inert (sandbox=\"\", pointer-events-none, tabIndex=-1)", () => {
+    const { container } = render(<AssetViewer asset={makeHtmlAsset()} mode="thumbnail" />);
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+    expect(iframe!.getAttribute("sandbox")).toBe("");
+    expect(iframe!.getAttribute("tabindex")).toBe("-1");
+    expect(iframe!.className).toContain("pointer-events-none");
+  });
+
+  it("restricted access still short-circuits before the html renderer", () => {
+    render(
+      <AssetViewer
+        asset={makeHtmlAsset({ agent_access: "metadata_only" })}
+        mode="full"
+      />,
+    );
+    expect(screen.getByRole("status", { name: /content access restricted/i })).toBeInTheDocument();
+    expect(screen.queryByTitle(/html preview of/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AssetPreviewTabPanel + AssetDetail — verify they mount AssetViewer, not the
+// legacy icon-only AssetPreview placeholder. An audio asset is the cleanest
+// signal: AssetViewer → real <audio> element; AssetPreview → icon only.
+// ---------------------------------------------------------------------------
+const AUDIO_ASSET: Asset = {
+  id: "asset_audio_mount_1",
+  title: "track.mp3",
+  source_kind: "local",
+  uri: "file:///tmp/track.mp3",
+  original_uri: "https://example.com/track.mp3",
+  mime_type: "audio/mpeg",
+  status: "canonical",
+  sensitivity: "public",
+  agent_access: "preview_allowed",
+  captured_at: "2026-07-09T00:00:00Z",
+};
+
+function makeQC() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+}
+
+function Wrapper({ children }: { children: React.ReactNode }) {
+  const [qc] = React.useState(() => makeQC());
+  return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+}
+
+vi.mock("@/lib/hooks/useAssets", () => ({
+  useAsset: () => ({ data: AUDIO_ASSET, isLoading: false, isError: false }),
+  usePromoteAsset: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateAsset: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// @miethe/ui's dist has broken subpath imports under vitest (missing ./dist/
+// primitives/Badge, content-viewer/FileTree). Mock the subpath barrels so
+// transitive dependencies resolve.
+vi.mock("@miethe/ui/primitives", () => ({ Badge: () => null }));
+vi.mock("@miethe/ui/content-viewer", () => ({
+  ContentPane: ({ children }: { children?: React.ReactNode }) => <div data-testid="content-pane">{children}</div>,
+}));
+
+describe("AssetPreviewTabPanel mounts AssetViewer", () => {
+  it("renders the AssetViewer dispatcher (native <audio>) for an audio asset", async () => {
+    const { default: AssetPreviewTabPanel } = await import(
+      "@/features/assets/components/EntityModal/AssetPreviewTabPanel"
+    );
+    render(
+      <Wrapper>
+        <AssetPreviewTabPanel entityType="asset" entityId={AUDIO_ASSET.id} projectId="proj_1" />
+      </Wrapper>,
+    );
+    // AssetViewer → AudioRenderer → labelled <audio> element. AssetPreview
+    // would have rendered a FileAudio icon and no <audio> node.
+    expect(screen.getByLabelText(/audio player for track\.mp3/i).tagName).toBe("AUDIO");
+  });
+});
+
+describe("AssetDetail mounts AssetViewer", () => {
+  it("renders the AssetViewer dispatcher (native <audio>) for an audio asset", async () => {
+    const { AssetDetail } = await import("@/features/assets/AssetDetail");
+    render(
+      <Wrapper>
+        <AssetDetail assetId={AUDIO_ASSET.id} projectId="proj_1" />
+      </Wrapper>,
+    );
+    expect(screen.getByLabelText(/audio player for track\.mp3/i).tagName).toBe("AUDIO");
   });
 });

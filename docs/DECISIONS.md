@@ -690,3 +690,57 @@ audio, and video turn out not to need a third-party rendering library at all —
 - `shared/openapi.yaml` (`/api/preview/asset/{assetId}/content`: `Range` request header,
   `206`/`416` responses, `Accept-Ranges`/`Content-Range` response headers)
 - Builds on D-012 (P4C-002 proxy security invariants) without modifying its SSRF/LFI guards.
+
+## D-015 — Full-Surface Preview Rendering: AssetViewer Everywhere, Scrollable PDF, PPTX Default-On, Sandboxed Inline HTML Route
+
+**Status:** Accepted — 2026-07-09 (WS-4)
+
+### Context
+
+After seeding the deployed instance with real multi-format assets, library cards rendered true
+previews but the preview modal, both detail routes, and the drawer still showed filetype icons:
+those surfaces predated the AssetViewer dispatcher (D-012 ADR-4) and still mounted the legacy
+`AssetPreview` placeholder, which never fetches content. PPTX rendered nowhere (the
+`pptx-server-conversion` flag was off and `soffice` was intentionally absent from the API image),
+and HTML assets could not be hosted/previewed live because the content proxy deliberately serves
+`text/html` with `Content-Disposition: attachment` (D-012 R6 XSS hardening).
+
+### Decision
+
+1. **AssetViewer is the single preview surface.** `AssetPreviewTabPanel` (modal + full-page detail
+   via the shared tab registry), `AssetDetail`, and `AssetDrawerContent` mount
+   `<AssetViewer mode="full">`; the legacy `AssetPreview` is no longer used on those surfaces.
+2. **PdfRenderer full mode is a continuous multi-page scroll.** All pages stack in one scrollable
+   container (mouse-wheel paging), lazily rendered via IntersectionObserver; a floating
+   bottom-right pill provides prev/next arrows and a `n / m` page indicator. The converted-PPTX
+   path inherits the same experience. Thumbnail mode stays first-page-only.
+3. **PPTX server conversion is default-on.** `pptx-server-conversion` joins `FLAG_DEFAULTS`;
+   `deploy/Dockerfile.api` now installs `libreoffice-impress` (+ fonts, PyMuPDF) so the existing
+   converter seam (D-012) is live in deployment rather than 503-unavailable.
+4. **Inline HTML gets its own hardened route, not a weakened proxy.** New
+   `GET /api/preview/asset/{assetId}/html` serves `text/html` inline gated by the same
+   `_check_preview_access` policy and file://-containment guards, hardened with
+   `Content-Security-Policy: sandbox allow-scripts` (unique origin — scripts run without
+   same-origin credentials/storage), `nosniff`, `no-store`, `no-referrer`. The shared content
+   proxy keeps its attachment guard for HTML unchanged. The new `HtmlRenderer` embeds this URL in
+   an `<iframe sandbox="allow-scripts">` (never `allow-same-origin`) with an open-in-new-tab
+   button; thumbnails use a fully inert iframe (`sandbox=""`, `pointer-events-none`).
+
+### Consequences
+
+- Every format the dispatcher supports now renders identically on card, modal, detail, and drawer;
+  the per-surface gap matrix collapses to renderer capability only.
+- The API image grows by the LibreOffice layer — accepted cost for PPTX being a first-class
+  preview format; converter 503 fallback still exists if `soffice` is ever absent.
+- HTML assets are effectively app-hosted single pages under the preview policy model; anything
+  beyond single-file pages (multi-asset sites) remains out of scope.
+- Tests: `web/__tests__/asset-viewer-extensions.test.tsx` (HTML routing, surface mount coverage);
+  `api/tests/test_routes_preview.py::TestGetAssetHtml` (inline disposition, CSP header, 403/415/404).
+
+### References
+
+- `web/features/assets/components/AssetViewer/{index,PdfRenderer,HtmlRenderer}.tsx`
+- `web/features/assets/components/EntityModal/AssetPreviewTabPanel.tsx`, `web/features/assets/AssetDetail.tsx`
+- `api/app/api/preview.py` (`get_asset_html`), `deploy/Dockerfile.api`, `shared/openapi.yaml`
+- Builds on D-012 (ADR-4 viewer + R6 proxy posture) and D-014 (Range streaming) without modifying
+  their guards.

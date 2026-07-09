@@ -35,7 +35,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { TagChip } from "@/components/ui/TagChip";
 import { useAsset, usePromoteAsset, useUpdateAsset } from "@/lib/hooks/useAssets";
 import type { AssetStatus } from "@/lib/types";
-import { AssetPreview } from "./components/AssetPreview";
+import { AssetViewer } from "./components/AssetViewer";
 import { ProvenancePanel } from "./components/ProvenancePanel";
 import { PolicyPanel } from "./components/PolicyBadge";
 import { MetadataEditForm } from "./components/MetadataEditForm";
@@ -268,9 +268,10 @@ export function AssetDetail({ assetId, projectId }: AssetDetailProps) {
           </div>
         </div>
 
-        {/* Large preview */}
+        {/* Large preview — real content via AssetViewer. Bounded so the
+            renderer scrolls internally rather than stretching the page. */}
         <section aria-label="Asset preview">
-          <AssetPreview asset={asset} size="lg" className="w-full" />
+          <AssetViewer asset={asset} mode="full" className="w-full max-h-[70vh]" />
           {asset.uri.startsWith("http") && (
             <a
               href={asset.uri}
