@@ -19,3 +19,25 @@ export type { RequestAssetPayload } from "./hooks/useBomSlot";
 
 export { useBomCoverageExtended } from "./hooks/useBomCoverage";
 export type { ExtendedCoverage, DomainCoverage } from "./hooks/useBomCoverage";
+
+// WS-5: BOM tab mockup-fidelity components
+export { BomStatCards } from "./components/BomStatCards";
+export type { BomStatCardsProps } from "./components/BomStatCards";
+
+export { DomainSection } from "./components/DomainSection";
+export type { DomainSectionProps } from "./components/DomainSection";
+
+export { MissingSlotCard } from "./components/MissingSlotCard";
+export type { MissingSlotCardProps } from "./components/MissingSlotCard";
+
+export { AssetPickerDialog } from "./components/AssetPickerDialog";
+export type { AssetPickerDialogProps } from "./components/AssetPickerDialog";
+
+export { ApplyTemplateDialog } from "./components/ApplyTemplateDialog";
+export type { ApplyTemplateDialogProps } from "./components/ApplyTemplateDialog";
+
+export { BomRightRail } from "./components/BomRightRail";
+export type { BomRightRailProps, TemplateSourceInfo } from "./components/BomRightRail";
+
+export { FullscreenPane } from "./components/FullscreenPane";
+export type { FullscreenPaneProps } from "./components/FullscreenPane";

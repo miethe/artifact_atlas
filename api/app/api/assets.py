@@ -7,6 +7,8 @@ Routes:
   PATCH  /api/assets/{assetId}
   DELETE /api/assets/{assetId}
   POST   /api/assets/{assetId}/link
+  GET    /api/assets/{assetId}/links
+  GET    /api/assets/{assetId}/relationships
   POST   /api/assets/{assetId}/promote
   POST   /api/assets/{assetId}/summarize
   POST   /api/assets/{assetId}/assign-slot
@@ -15,6 +17,7 @@ Routes:
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile
@@ -52,6 +55,13 @@ from app.settings import get_settings
 router = APIRouter(prefix="/api", tags=["assets"])
 
 
+def _utc_ts(dt: datetime) -> float:
+    """Normalize naive/aware datetimes to a UTC timestamp for comparison."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
 # ---------------------------------------------------------------------------
 # Project-scoped asset list + create
 # ---------------------------------------------------------------------------
@@ -68,6 +78,9 @@ def list_project_assets(
     agent_access: Annotated[AgentAccess | None, Query()] = None,
     artifact_type_id: Annotated[str | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
+    captured_after: Annotated[datetime | None, Query()] = None,
+    captured_before: Annotated[datetime | None, Query()] = None,
+    starred: Annotated[bool | None, Query()] = None,
 ) -> dict:
     """List assets for a project with optional filters."""
     svc = get_asset_service()
@@ -93,6 +106,27 @@ def list_project_assets(
         assets = [a for a in assets if (
             a.agent_access.value if hasattr(a.agent_access, "value") else str(a.agent_access)
         ) == av]
+
+    # Date-range filter on captured_at (additive, WS-3)
+    if captured_after is not None:
+        after_ts = _utc_ts(captured_after)
+        assets = [
+            a for a in assets
+            if a.captured_at is not None and _utc_ts(a.captured_at) >= after_ts
+        ]
+    if captured_before is not None:
+        before_ts = _utc_ts(captured_before)
+        assets = [
+            a for a in assets
+            if a.captured_at is not None and _utc_ts(a.captured_at) <= before_ts
+        ]
+
+    # Starred filter on metadata.starred (additive, WS-3)
+    if starred is not None:
+        assets = [
+            a for a in assets
+            if bool((a.metadata or {}).get("starred")) is starred
+        ]
 
     return apply_cursor_page(assets, cursor=cursor, limit=limit)
 
@@ -161,6 +195,37 @@ def link_asset(assetId: str, data: AssetLinkCreate) -> AssetLink:
     if asset is None:
         return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
     return svc.create_link(assetId, data)
+
+
+@router.get("/assets/{assetId}/links")
+def list_asset_links(
+    assetId: str,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> dict:
+    """List all links for an asset (IntentTree nodes, topics, slots, …)."""
+    svc = get_asset_service()
+    asset = svc.get_asset(assetId)
+    if asset is None:
+        return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
+    links = svc.list_links(assetId)
+    return apply_cursor_page(links, cursor=cursor, limit=limit)
+
+
+@router.get("/assets/{assetId}/relationships")
+def list_asset_relationships(
+    assetId: str,
+    direction: Annotated[str, Query(pattern="^(source|target|both)$")] = "both",
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> dict:
+    """List typed asset-to-asset relationships involving an asset."""
+    svc = get_asset_service()
+    asset = svc.get_asset(assetId)
+    if asset is None:
+        return not_found(f"Asset '{assetId}' not found.")  # type: ignore[return-value]
+    rels = svc.list_relationships(assetId, direction=direction)
+    return apply_cursor_page(rels, cursor=cursor, limit=limit)
 
 
 # ---------------------------------------------------------------------------

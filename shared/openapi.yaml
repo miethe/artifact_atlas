@@ -217,6 +217,23 @@ paths:
           description: Keyword search over title and description
           schema:
             type: string
+        - name: captured_after
+          in: query
+          description: Only assets captured at or after this instant
+          schema:
+            type: string
+            format: date-time
+        - name: captured_before
+          in: query
+          description: Only assets captured at or before this instant
+          schema:
+            type: string
+            format: date-time
+        - name: starred
+          in: query
+          description: Filter by metadata.starred flag
+          schema:
+            type: boolean
       responses:
         "200":
           description: Paginated asset list
@@ -346,6 +363,72 @@ paths:
                 $ref: "#/components/schemas/AssetLink"
         "422":
           $ref: "#/components/responses/ValidationError"
+
+  /api/assets/{assetId}/links:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    get:
+      operationId: listAssetLinks
+      tags: [assets]
+      summary: List links for an asset
+      description: >
+        Returns all asset_link records for an asset (IntentTree nodes,
+        topics, features, BOM slots, context packs, …) as a cursor page.
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200":
+          description: Page of asset links
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AssetLink"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/assets/{assetId}/relationships:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    get:
+      operationId: listAssetRelationships
+      tags: [assets]
+      summary: List typed asset-to-asset relationships for an asset
+      description: >
+        Returns asset_relationship records (variant_of, derived_from,
+        supersedes, …) where the asset is the source, the target, or either.
+      parameters:
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum: [source, target, both]
+            default: both
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200":
+          description: Page of asset relationships
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CursorPage"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AssetRelationship"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/assets/{assetId}/promote:
     parameters:
@@ -2361,6 +2444,20 @@ components:
           nullable: true
         status:
           $ref: "#/components/schemas/ProjectStatus"
+        tags:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Free-form organizational tag labels
+        starred:
+          type: boolean
+          default: false
+          description: Whether the project is starred/favorited
+        asset_count:
+          type: integer
+          nullable: true
+          description: Live asset count (computed enrichment on list responses)
         meatywiki_page_ref:
           type: string
           nullable: true
@@ -2395,6 +2492,14 @@ components:
         status:
           $ref: "#/components/schemas/ProjectStatus"
           default: active
+        tags:
+          type: array
+          items:
+            type: string
+          default: []
+        starred:
+          type: boolean
+          default: false
         meatywiki_page_ref:
           type: string
           nullable: true
@@ -2416,6 +2521,12 @@ components:
           nullable: true
         status:
           $ref: "#/components/schemas/ProjectStatus"
+        tags:
+          type: array
+          items:
+            type: string
+        starred:
+          type: boolean
         meatywiki_page_ref:
           type: string
           nullable: true
@@ -2619,6 +2730,28 @@ components:
           type: string
         relationship:
           $ref: "#/components/schemas/AssetLinkRelationship"
+
+    AssetRelationship:
+      type: object
+      required: [id, source_asset_id, target_asset_id, relationship_type]
+      description: Typed relationship between two assets
+      properties:
+        id:
+          type: string
+        source_asset_id:
+          type: string
+        target_asset_id:
+          type: string
+        relationship_type:
+          $ref: "#/components/schemas/AssetRelationshipType"
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
 
     # ---- Inbox ----
 
@@ -2854,6 +2987,96 @@ components:
         rule_config:
           type: object
           nullable: true
+        accepted_file_types:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Accepted file extensions/MIME hints for assets filling this slot (BOM Builder).
+        max_file_size_mb:
+          type: integer
+          nullable: true
+        naming_convention:
+          type: string
+          nullable: true
+          description: "Filename pattern for assets, e.g. architecture_diagram_{domain}_{date}."
+        guidance:
+          type: string
+          nullable: true
+          description: Guidance/instructions for filling this slot.
+
+    TemplateSlotInput:
+      type: object
+      description: >
+        Slot payload inside a domain when creating/updating a template via the
+        BOM Builder. Provide either artifact_type_id (slug ID) or artifact_type
+        (human label, slugified on persist).
+      properties:
+        artifact_type_id:
+          type: string
+          nullable: true
+        artifact_type:
+          type: string
+          nullable: true
+        phase:
+          $ref: "#/components/schemas/SlotPhase"
+        required:
+          type: boolean
+          default: true
+        min_assets:
+          type: integer
+          default: 1
+        max_assets:
+          type: integer
+          nullable: true
+        staleness_days:
+          type: integer
+          nullable: true
+        linked_intenttree_node_pattern:
+          type: string
+          nullable: true
+        display_order:
+          type: integer
+          nullable: true
+        rule_config:
+          type: object
+          nullable: true
+        accepted_file_types:
+          type: array
+          items:
+            type: string
+          nullable: true
+        max_file_size_mb:
+          type: integer
+          nullable: true
+        naming_convention:
+          type: string
+          nullable: true
+        guidance:
+          type: string
+          nullable: true
+
+    TemplateDomainInput:
+      type: object
+      required: [name]
+      description: Domain payload when creating/updating a template via the BOM Builder.
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        display_order:
+          type: integer
+          nullable: true
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateSlotInput"
+          nullable: true
 
     TemplateCreate:
       type: object
@@ -2878,6 +3101,12 @@ components:
         metadata:
           type: object
           nullable: true
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateDomainInput"
+          nullable: true
+          description: Optional embedded domain/slot structure (BOM Builder persistence).
 
     TemplateUpdate:
       type: object
@@ -2894,6 +3123,12 @@ components:
         metadata:
           type: object
           nullable: true
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateDomainInput"
+          nullable: true
+          description: Replaces the embedded domain/slot structure when provided.
 
     TemplatePreview:
       type: object

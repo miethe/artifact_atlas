@@ -2,8 +2,11 @@
 
 /**
  * AssetDrawerContent — content rendered inside the shell RightDrawer
- * for quick-inspect of a selected asset.
- * Shows: preview, description, details, tags, node links, sensitivity, quick actions.
+ * for quick-inspect of a selected asset (mockup right-panel fidelity pass).
+ *
+ * Sections: preview, title + source row, status chip, Description (Show more),
+ * Details rows (Source, Type, Size, Uploaded, Updated, Created by), Tags,
+ * Sensitivity, Provenance, Quick Actions.
  */
 
 import * as React from "react";
@@ -19,6 +22,16 @@ import type { Asset } from "@/lib/types";
 import { AssetViewer } from "./AssetViewer";
 import { PolicyBadge } from "./PolicyBadge";
 import { ProvenancePanel } from "./ProvenancePanel";
+import {
+  assetTags,
+  formatBytes,
+  formatDate,
+  relativeTime,
+  sourceLabel,
+  SourceIcon,
+  typeLabel,
+  updatedAt,
+} from "./assetDisplay";
 
 // ============================================================
 // AssetDrawerContent
@@ -34,13 +47,37 @@ export interface AssetDrawerContentProps {
   className?: string;
 }
 
-function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide">
-        {label}
+    <div className="flex items-start justify-between gap-3">
+      <p className="text-[11px] text-[var(--ink-muted)] shrink-0 w-20">{label}</p>
+      <div className="text-xs text-[var(--ink)] text-right min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+const DESCRIPTION_CLAMP = 160;
+
+function Description({ text }: { text: string }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const needsClamp = text.length > DESCRIPTION_CLAMP;
+  const shown = expanded || !needsClamp ? text : `${text.slice(0, DESCRIPTION_CLAMP).trimEnd()}…`;
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide mb-1">
+        Description
       </p>
-      <div className="text-xs text-[var(--ink)]">{children}</div>
+      <p className="text-xs text-[var(--ink-muted)] leading-relaxed">{shown}</p>
+      {needsClamp && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
     </div>
   );
 }
@@ -75,12 +112,14 @@ export function AssetDrawerContent({
     );
   }
 
-  const tags = asset.metadata
-    ? Object.entries(asset.metadata)
-        .filter(([, v]) => typeof v === "string")
-        .map(([k]) => k)
-        .slice(0, 5)
-    : [];
+  const tags = assetTags(asset);
+  const updated = updatedAt(asset);
+  const originalHref =
+    asset.original_uri && /^https?:\/\//.test(asset.original_uri)
+      ? asset.original_uri
+      : /^https?:\/\//.test(asset.uri)
+        ? asset.uri
+        : null;
 
   return (
     <div className="flex flex-col gap-0">
@@ -90,47 +129,58 @@ export function AssetDrawerContent({
         <AssetViewer asset={asset} mode="full" className="max-h-[45vh]" />
       </div>
 
-      {/* Title + status */}
+      {/* Title + source row + status */}
       <div className="p-3 border-b border-[var(--border)] space-y-1.5">
         <h3 className="text-sm font-semibold text-[var(--ink)] leading-snug">
           {asset.title}
         </h3>
+        <p className="flex items-center gap-1 text-[11px] text-[var(--ink-muted)]">
+          <SourceIcon kind={asset.source_kind} className="w-3 h-3" />
+          {sourceLabel(asset.source_kind)}
+          <span aria-hidden>·</span>
+          {relativeTime(asset.captured_at)}
+        </p>
         <div className="flex flex-wrap gap-1.5">
           <StatusBadge status={asset.status} size="xs" />
-          <SensitivityBadge sensitivity={asset.sensitivity} size="xs" showIcon={false} />
           <PolicyBadge agentAccess={asset.agent_access} size="xs" />
         </div>
       </div>
 
-      {/* Description */}
+      {/* Description with Show more */}
       {asset.description && (
         <div className="px-3 py-2.5 border-b border-[var(--border)]">
-          <p className="text-xs text-[var(--ink-muted)] leading-relaxed">
-            {asset.description}
-          </p>
+          <Description text={asset.description} />
         </div>
       )}
 
       {/* Details */}
-      <div className="px-3 py-2.5 border-b border-[var(--border)] space-y-2">
-        <FieldRow label="Source">{asset.source_kind}</FieldRow>
-        <FieldRow label="MIME">
-          <span className="font-mono text-[11px]">{asset.mime_type ?? "—"}</span>
-        </FieldRow>
-        {asset.size_bytes && (
-          <FieldRow label="Size">
-            {asset.size_bytes < 1024 * 1024
-              ? `${(asset.size_bytes / 1024).toFixed(0)} KB`
-              : `${(asset.size_bytes / (1024 * 1024)).toFixed(1)} MB`}
-          </FieldRow>
-        )}
-        <FieldRow label="Captured">
-          {new Intl.DateTimeFormat("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          }).format(new Date(asset.captured_at))}
-        </FieldRow>
+      <div className="px-3 py-2.5 border-b border-[var(--border)]">
+        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide mb-2">
+          Details
+        </p>
+        <div className="space-y-1.5">
+          <DetailRow label="Source">
+            <span className="inline-flex items-center gap-1">
+              <SourceIcon kind={asset.source_kind} className="w-3 h-3" />
+              {sourceLabel(asset.source_kind)}
+            </span>
+          </DetailRow>
+          <DetailRow label="Type">
+            <span className="font-mono text-[11px]" title={asset.mime_type ?? undefined}>
+              {typeLabel(asset)}
+            </span>
+          </DetailRow>
+          {asset.size_bytes ? (
+            <DetailRow label="Size">{formatBytes(asset.size_bytes)}</DetailRow>
+          ) : null}
+          <DetailRow label="Uploaded">{formatDate(asset.captured_at)}</DetailRow>
+          <DetailRow label="Updated">
+            {updated ? formatDate(updated) : "—"}
+          </DetailRow>
+          <DetailRow label="Created by">
+            {asset.created_by ?? (asset.generated_by ? `${asset.generated_by} (generated)` : "—")}
+          </DetailRow>
+        </div>
       </div>
 
       {/* Tags */}
@@ -147,6 +197,14 @@ export function AssetDrawerContent({
         </div>
       )}
 
+      {/* Sensitivity */}
+      <div className="px-3 py-2.5 border-b border-[var(--border)] flex items-center justify-between">
+        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide">
+          Sensitivity
+        </p>
+        <SensitivityBadge sensitivity={asset.sensitivity} size="xs" />
+      </div>
+
       {/* Provenance (collapsed by default in drawer) */}
       <div className="px-3 py-2.5 border-b border-[var(--border)]">
         <ProvenancePanel asset={asset} collapsed />
@@ -154,6 +212,9 @@ export function AssetDrawerContent({
 
       {/* Quick actions */}
       <div className="p-3 space-y-2">
+        <p className="text-[10px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide">
+          Quick Actions
+        </p>
         <Link
           href={`/projects/${projectId}/assets/${asset.id}`}
           className={clsx(
@@ -165,6 +226,22 @@ export function AssetDrawerContent({
           <ExternalLink aria-hidden className="w-3.5 h-3.5 shrink-0" />
           Open full detail
         </Link>
+
+        {originalHref && (
+          <a
+            href={originalHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={clsx(
+              "flex items-center gap-2 w-full h-8 px-3 rounded text-xs font-medium",
+              "border border-[var(--border)] text-[var(--ink)] hover:bg-[var(--surface-sunken)] transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+            )}
+          >
+            <SourceIcon kind={asset.source_kind} className="w-3.5 h-3.5 shrink-0" />
+            Open in {sourceLabel(asset.source_kind)}
+          </a>
+        )}
 
         <div className="flex gap-1.5">
           {onEdit && (

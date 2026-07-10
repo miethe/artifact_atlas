@@ -374,7 +374,18 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 vi.mock("@/lib/hooks/useAssets", () => ({
   useAsset: () => ({ data: AUDIO_ASSET, isLoading: false, isError: false }),
   usePromoteAsset: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateAsset: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateAsset: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+  useLinkAsset: () => ({ mutate: vi.fn(), isPending: false }),
+  assetKeys: {
+    all: ["assets"],
+    lists: () => ["assets", "list"],
+    detail: (id: string) => ["assets", "detail", id],
+  },
 }));
 
 // @miethe/ui's dist has broken subpath imports under vitest (missing ./dist/

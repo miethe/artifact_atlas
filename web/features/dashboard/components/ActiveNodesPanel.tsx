@@ -1,65 +1,88 @@
 "use client";
 
 /**
- * ActiveNodesPanel — displays active IntentTree nodes for the project.
- * Uses fixture data (IntentTree API not yet implemented in Phase 1).
+ * ActiveNodesPanel — active IntentTree nodes for the project, per the
+ * command-center mockup: node-code chip + title/subtitle + task count +
+ * status chip, with an "IntentTree: N linked nodes / Open in IntentTree"
+ * footer. Uses the shared fixture module (IntentTree API not yet
+ * implemented in Phase 1).
  */
 
 import * as React from "react";
-import { GitBranch } from "lucide-react";
-import { EmptyState } from "@/components/ui";
-import { SkeletonRow } from "@/components/ui";
+import { ExternalLink, GitBranch } from "lucide-react";
+import { EmptyState, SkeletonRow } from "@/components/ui";
 import { PanelShell } from "./PanelShell";
-
-// ============================================================
-// Fixture — IntentTree nodes (Phase 1 doesn't expose a node list endpoint)
-// ============================================================
-
-interface IntentNode {
-  id: string;
-  title: string;
-  status: "active" | "blocked" | "pending" | "completed";
-  depth: number;
-  asset_count: number;
-}
-
-const FIXTURE_NODES: IntentNode[] = [
-  {
-    id: "node_phase2_ui",
-    title: "Phase 2: Web Shell & Asset Workflows",
-    status: "active",
-    depth: 1,
-    asset_count: 4,
-  },
-  {
-    id: "node_stage2a",
-    title: "Stage 2A — Project Command Center",
-    status: "active",
-    depth: 2,
-    asset_count: 2,
-  },
-  {
-    id: "node_api_contract",
-    title: "API Contract (Phase 0)",
-    status: "completed",
-    depth: 1,
-    asset_count: 1,
-  },
-];
+import {
+  activeIntentNodes,
+  FIXTURE_INTENT_NODES,
+  linkedIntentNodeCount,
+  type IntentNode,
+} from "../intentNodes";
 
 const STATUS_CLASSES: Record<IntentNode["status"], string> = {
   active: "bg-blue-100 text-blue-700",
   blocked: "bg-red-100 text-red-700",
   pending: "bg-amber-100 text-amber-700",
+  review: "bg-purple-100 text-purple-700",
+  planned: "bg-gray-100 text-gray-600",
   completed: "bg-green-100 text-green-700",
 };
 
 const STATUS_LABELS: Record<IntentNode["status"], string> = {
-  active: "Active",
+  active: "In Progress",
   blocked: "Blocked",
   pending: "Pending",
+  review: "Review",
+  planned: "Planned",
   completed: "Done",
 };
+
+// ============================================================
+// Node row / list
+// ============================================================
+
+function NodeRow({ node }: { node: IntentNode }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors">
+      {/* Node code chip */}
+      <span className="shrink-0 px-1.5 py-0.5 rounded bg-[var(--surface-sunken)] border border-[var(--border)] text-[10px] font-mono font-medium text-[var(--ink-muted)]">
+        {node.code}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-xs font-medium text-[var(--ink)] truncate leading-tight">
+          {node.title}
+        </span>
+        {node.subtitle && (
+          <span className="block text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px">
+            {node.subtitle}
+          </span>
+        )}
+      </span>
+      <span className="text-[10px] text-[var(--ink-faint)] shrink-0 tabular-nums">
+        {node.task_count} task{node.task_count !== 1 ? "s" : ""}
+      </span>
+      <span
+        role="status"
+        aria-label={`Status: ${STATUS_LABELS[node.status]}`}
+        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${STATUS_CLASSES[node.status]}`}
+      >
+        {STATUS_LABELS[node.status]}
+      </span>
+    </div>
+  );
+}
+
+function NodeList({ nodes }: { nodes: IntentNode[] }) {
+  return (
+    <ul role="list" className="divide-y divide-[var(--border)]">
+      {nodes.map((node) => (
+        <li key={node.id}>
+          <NodeRow node={node} />
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 // ============================================================
 // Component
@@ -68,21 +91,38 @@ const STATUS_LABELS: Record<IntentNode["status"], string> = {
 interface ActiveNodesPanelProps {
   projectId: string;
   isLoading?: boolean;
+  viewAllHref?: string;
 }
 
 export function ActiveNodesPanel({
   projectId: _projectId,
   isLoading = false,
+  viewAllHref,
 }: ActiveNodesPanelProps) {
-  // IntentTree node endpoint not in Phase 1 contract — use fixtures
-  const nodes = FIXTURE_NODES.filter((n) => n.status !== "completed");
+  const nodes = activeIntentNodes();
+  const linkedCount = linkedIntentNodeCount();
+
+  const footer = (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[10px] text-[var(--ink-faint)]">
+        IntentTree: {linkedCount} linked node{linkedCount !== 1 ? "s" : ""}
+      </span>
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600">
+        <ExternalLink aria-hidden className="w-2.5 h-2.5" />
+        Open in IntentTree
+      </span>
+    </div>
+  );
 
   return (
     <PanelShell
-      title="Active Intent Nodes"
+      title="Active IntentTree Nodes"
       subtitle="IntentTree"
       icon={<GitBranch className="w-3.5 h-3.5" />}
       ariaLabel="Active IntentTree nodes"
+      viewAllHref={viewAllHref}
+      footer={footer}
+      expandedContent={<NodeList nodes={FIXTURE_INTENT_NODES} />}
     >
       {isLoading ? (
         <div className="p-2 flex flex-col gap-0.5">
@@ -98,34 +138,7 @@ export function ActiveNodesPanel({
           icon={<GitBranch className="w-8 h-8" />}
         />
       ) : (
-        <ul role="list" className="divide-y divide-[var(--border)]">
-          {nodes.map((node) => (
-            <li key={node.id}>
-              <div
-                className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors"
-                style={{ paddingLeft: `${0.75 + node.depth * 0.5}rem` }}
-              >
-                <GitBranch
-                  aria-hidden
-                  className="w-3 h-3 text-[var(--ink-faint)] shrink-0"
-                />
-                <span className="flex-1 text-xs text-[var(--ink)] truncate">
-                  {node.title}
-                </span>
-                <span className="text-[10px] text-[var(--ink-faint)] shrink-0 tabular-nums">
-                  {node.asset_count} asset{node.asset_count !== 1 ? "s" : ""}
-                </span>
-                <span
-                  role="status"
-                  aria-label={`Status: ${STATUS_LABELS[node.status]}`}
-                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${STATUS_CLASSES[node.status]}`}
-                >
-                  {STATUS_LABELS[node.status]}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <NodeList nodes={nodes} />
       )}
     </PanelShell>
   );

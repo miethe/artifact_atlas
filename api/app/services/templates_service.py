@@ -250,6 +250,7 @@ class TemplateService:
             status=TemplateStatus.experimental,
             version=data.version,
             metadata=data.metadata,
+            domains=data.domains,
         )
         return self._repo.create(template_id, draft_data)
 
@@ -288,14 +289,32 @@ class TemplateService:
         new_name = name or f"Copy of {source.name}"
         new_slug = f"{source.slug}-copy-{new_id[-6:]}"
 
-        create_data = TemplateCreate(
-            name=new_name,
-            slug=new_slug,
-            description=source.description,
-            template_type=source.template_type,
-            status=TemplateStatus.experimental,
-            version=source.version,
-            metadata=source.metadata,
+        # Carry the domain/slot structure over so duplicates are editable in
+        # the BOM Builder even when the source structure lives in YAML.
+        domains = None
+        detail = self._repo.get_detail(template_id)
+        if detail is not None and detail.domains:
+            domains = [
+                d.model_dump(mode="json", exclude={"id", "template_id"})
+                for d in detail.domains
+            ]
+            for d in domains:
+                for s in d.get("slots") or []:
+                    s.pop("id", None)
+                    s.pop("template_id", None)
+                    s.pop("domain_id", None)
+
+        create_data = TemplateCreate.model_validate(
+            {
+                "name": new_name,
+                "slug": new_slug,
+                "description": source.description,
+                "template_type": source.template_type,
+                "status": TemplateStatus.experimental,
+                "version": source.version,
+                "metadata": source.metadata,
+                "domains": domains,
+            }
         )
         return self._repo.create(new_id, create_data)
 

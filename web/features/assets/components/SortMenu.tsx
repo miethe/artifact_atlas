@@ -89,6 +89,7 @@ export function SortMenu({ field, dir, onChange, className }: SortMenuProps) {
         )}
       >
         <ArrowUpDown aria-hidden className="w-3 h-3 text-[var(--ink-muted)]" />
+        <span className="text-[var(--ink-muted)] font-normal">Sort by</span>
         {currentOption.label}
         <ChevronDown aria-hidden className="w-3 h-3 text-[var(--ink-muted)]" />
       </button>

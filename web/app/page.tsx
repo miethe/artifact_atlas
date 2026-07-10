@@ -1,10 +1,19 @@
 /**
- * Root index — redirects to the default project command center.
- * The default project id is seeded as 'proj_artifact_atlas'.
+ * Root index — the Projects landing page.
+ * Every project as a card + "New Project" create flow (WS-4).
  */
 
-import { redirect } from "next/navigation";
+import { AppShell } from "@/components/shell/AppShell";
+import { ProjectsIndexView } from "@/features/projects/ProjectsIndexView";
+
+export const metadata = {
+  title: "Projects",
+};
 
 export default function RootPage() {
-  redirect("/projects/proj_artifact_atlas");
+  return (
+    <AppShell>
+      <ProjectsIndexView />
+    </AppShell>
+  );
 }

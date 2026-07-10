@@ -113,16 +113,22 @@ class TemplateRepository:
     def get_detail(self, template_id: str) -> TemplateDetail | None:
         """Return a TemplateDetail with embedded domains and slots.
 
-        Merges the JSONL header with the YAML domain/slot tree.
-        Falls back to a header-only TemplateDetail if no YAML is found.
+        Merges the JSONL header with the YAML domain/slot tree. Custom
+        (builder-created) templates persist their domain tree inline on the
+        JSONL record; that embedded tree is used when no YAML file exists.
+        Falls back to a header-only TemplateDetail otherwise.
         """
         header = self.get(template_id)
         if header is None:
             return None
 
+        data = header.model_dump(mode="python")
+        embedded = data.pop("domains", None)
         domains = self._load_yaml_domains(header.slug, template_id)
+        if not domains and embedded:
+            domains = _parse_yaml_domains({"domains": embedded}, template_id)
         return TemplateDetail(
-            **header.model_dump(mode="python"),
+            **data,
             domains=domains if domains else None,
         )
 
@@ -131,9 +137,13 @@ class TemplateRepository:
         header = self.get_by_slug(slug)
         if header is None:
             return None
+        data = header.model_dump(mode="python")
+        embedded = data.pop("domains", None)
         domains = self._load_yaml_domains(slug, header.id)
+        if not domains and embedded:
+            domains = _parse_yaml_domains({"domains": embedded}, header.id)
         return TemplateDetail(
-            **header.model_dump(mode="python"),
+            **data,
             domains=domains if domains else None,
         )
 
@@ -210,6 +220,8 @@ class TemplateRepository:
                     slot_record["linked_intenttree_node_pattern"] = (
                         slot.linked_intenttree_node_pattern
                     )
+                if slot.guidance is not None:
+                    slot_record["guidance"] = slot.guidance
                 slots.append(slot_record)
 
         return slots
@@ -252,15 +264,19 @@ def _parse_yaml_domains(
         if not isinstance(raw_domain, dict):
             continue
 
-        domain_name: str = raw_domain.get("name", f"domain_{d_idx}")
-        domain_slug: str = raw_domain.get(
-            "slug", domain_name.lower().replace(" ", "_")
+        domain_name: str = raw_domain.get("name") or f"domain_{d_idx}"
+        domain_slug: str = (
+            raw_domain.get("slug") or domain_name.lower().replace(" ", "_")
         )
         domain_id = f"dom_{uuid.uuid4().hex[:8]}"
         description: str | None = raw_domain.get("description")
-        display_order: int = raw_domain.get("display_order", d_idx)
+        display_order: int = (
+            raw_domain["display_order"]
+            if raw_domain.get("display_order") is not None
+            else d_idx
+        )
 
-        raw_slots: list[Any] = raw_domain.get("slots", [])
+        raw_slots: list[Any] = raw_domain.get("slots") or []
         slots: list[TemplateSlot] = []
 
         for s_idx, raw_slot in enumerate(raw_slots):
@@ -270,7 +286,7 @@ def _parse_yaml_domains(
             # The YAML uses 'artifact_type' (human label) as the type ID in MVP.
             artifact_type_id: str = (
                 raw_slot.get("artifact_type_id")
-                or _slugify(raw_slot.get("artifact_type", f"artifact_{s_idx}"))
+                or _slugify(raw_slot.get("artifact_type") or f"artifact_{s_idx}")
             )
             slot = TemplateSlot(
                 id=f"tslot_{uuid.uuid4().hex[:8]}",
@@ -285,8 +301,16 @@ def _parse_yaml_domains(
                 linked_intenttree_node_pattern=raw_slot.get(
                     "linked_intenttree_node_pattern"
                 ),
-                display_order=raw_slot.get("display_order", s_idx),
+                display_order=(
+                    raw_slot["display_order"]
+                    if raw_slot.get("display_order") is not None
+                    else s_idx
+                ),
                 rule_config=raw_slot.get("rule_config"),
+                accepted_file_types=raw_slot.get("accepted_file_types"),
+                max_file_size_mb=raw_slot.get("max_file_size_mb"),
+                naming_convention=raw_slot.get("naming_convention"),
+                guidance=raw_slot.get("guidance"),
             )
             slots.append(slot)
 

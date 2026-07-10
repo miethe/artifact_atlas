@@ -80,6 +80,67 @@ def test_list_assets_keyword_search(tmp_registry) -> None:
     assert "gamma" in items[0]["title"].lower()
 
 
+def test_list_assets_captured_date_range(tmp_registry) -> None:
+    """captured_after / captured_before filter on captured_at (WS-3 additive)."""
+    pid = _create_project("DateRangeFilter")
+    asset = _create_asset(pid, title="Dated Asset")
+    assert asset["captured_at"] is not None
+
+    # A window that includes now → asset returned
+    resp = client.get(
+        f"/api/projects/{pid}/assets",
+        params={"captured_after": "2000-01-01T00:00:00Z"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["items"]) == 1
+
+    # captured_after in the future → excluded
+    resp = client.get(
+        f"/api/projects/{pid}/assets",
+        params={"captured_after": "2100-01-01T00:00:00Z"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+    # captured_before in the past → excluded
+    resp = client.get(
+        f"/api/projects/{pid}/assets",
+        params={"captured_before": "2000-01-01T00:00:00Z"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+    # Naive datetime (no timezone) must not 500
+    resp = client.get(
+        f"/api/projects/{pid}/assets",
+        params={"captured_after": "2000-01-01T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["items"]) == 1
+
+
+def test_list_assets_starred_filter(tmp_registry) -> None:
+    """starred filters on metadata.starred (WS-3 additive)."""
+    pid = _create_project("StarredFilter")
+    _create_asset(pid, title="Starred one", metadata={"starred": True})
+    _create_asset(pid, title="Plain one")
+    _create_asset(pid, title="Unstarred explicit", metadata={"starred": False})
+
+    resp = client.get(f"/api/projects/{pid}/assets", params={"starred": "true"})
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert [i["title"] for i in items] == ["Starred one"]
+
+    resp = client.get(f"/api/projects/{pid}/assets", params={"starred": "false"})
+    assert resp.status_code == 200
+    titles = {i["title"] for i in resp.json()["items"]}
+    assert titles == {"Plain one", "Unstarred explicit"}
+
+    # No starred param → all three
+    resp = client.get(f"/api/projects/{pid}/assets")
+    assert len(resp.json()["items"]) == 3
+
+
 # ---------------------------------------------------------------------------
 # Create / get / update / delete
 # ---------------------------------------------------------------------------
@@ -189,6 +250,82 @@ def test_link_asset_not_found(tmp_registry) -> None:
         "/api/assets/nonexistent/link",
         json={"target_type": "intenttree_node", "target_id": "n1", "relationship": "reference"},
     )
+    assert resp.status_code == 404
+
+
+def test_list_asset_links(tmp_registry) -> None:
+    """GET /assets/{id}/links returns a cursor page of created links."""
+    pid = _create_project("ListLinksTest")
+    asset = _create_asset(pid)
+    aid = asset["id"]
+
+    # Empty before any links exist
+    resp = client.get(f"/api/assets/{aid}/links")
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+    client.post(
+        f"/api/assets/{aid}/link",
+        json={
+            "target_type": "intenttree_node",
+            "target_id": "node_xyz",
+            "relationship": "reference",
+        },
+    )
+    client.post(
+        f"/api/assets/{aid}/link",
+        json={"target_type": "topic", "target_id": "topic_1", "relationship": "evidence"},
+    )
+
+    resp = client.get(f"/api/assets/{aid}/links")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["has_more"] is False
+    assert len(body["items"]) == 2
+    target_ids = {item["target_id"] for item in body["items"]}
+    assert target_ids == {"node_xyz", "topic_1"}
+
+
+def test_list_asset_links_not_found(tmp_registry) -> None:
+    resp = client.get("/api/assets/nonexistent/links")
+    assert resp.status_code == 404
+
+
+def test_list_asset_relationships(tmp_registry) -> None:
+    """GET /assets/{id}/relationships returns relationships in both directions."""
+    pid = _create_project("ListRelsTest")
+    a1 = _create_asset(pid, title="v1")["id"]
+    a2 = _create_asset(pid, title="v2")["id"]
+
+    # Empty before any relationships exist
+    resp = client.get(f"/api/assets/{a1}/relationships")
+    assert resp.status_code == 200
+    assert resp.json()["items"] == []
+
+    # Create a relationship via the service layer (no POST route yet)
+    from app.api._deps import get_asset_service
+    from app.models.vocabulary import AssetRelationshipType
+
+    get_asset_service().create_relationship(a2, a1, AssetRelationshipType.supersedes)
+
+    for aid, direction in ((a1, "target"), (a2, "source"), (a1, "both")):
+        resp = client.get(
+            f"/api/assets/{aid}/relationships", params={"direction": direction}
+        )
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["relationship_type"] == "supersedes"
+        assert items[0]["source_asset_id"] == a2
+        assert items[0]["target_asset_id"] == a1
+
+    # Direction filter excludes the wrong side
+    resp = client.get(f"/api/assets/{a1}/relationships", params={"direction": "source"})
+    assert resp.json()["items"] == []
+
+
+def test_list_asset_relationships_not_found(tmp_registry) -> None:
+    resp = client.get("/api/assets/nonexistent/relationships")
     assert resp.status_code == 404
 
 

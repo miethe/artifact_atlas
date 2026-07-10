@@ -79,3 +79,98 @@ def test_create_project_slug_conflict(tmp_registry) -> None:
     assert resp1.status_code == 201
     resp2 = client.post("/api/projects", json=payload)
     assert resp2.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# WS-4 additive fields: tags, starred, asset_count
+# ---------------------------------------------------------------------------
+
+
+def test_create_project_with_tags_and_starred(tmp_registry) -> None:
+    """POST /api/projects accepts tags[] and starred and round-trips them."""
+    payload = {
+        "name": "Tagged Project",
+        "slug": "tagged-project",
+        "status": "active",
+        "tags": ["Strategic Initiative", "Platform"],
+        "starred": True,
+    }
+    resp = client.post("/api/projects", json=payload)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["tags"] == ["Strategic Initiative", "Platform"]
+    assert body["starred"] is True
+
+    # Persisted — GET returns the same values
+    resp = client.get(f"/api/projects/{body['id']}")
+    assert resp.status_code == 200
+    fetched = resp.json()
+    assert fetched["tags"] == ["Strategic Initiative", "Platform"]
+    assert fetched["starred"] is True
+
+
+def test_create_project_tags_default_empty(tmp_registry) -> None:
+    """Omitting tags/starred defaults to []/False (backward compatible)."""
+    resp = client.post(
+        "/api/projects",
+        json={"name": "Plain", "slug": "plain-project", "status": "active"},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["tags"] == []
+    assert body["starred"] is False
+
+
+def test_patch_project_tags_and_starred(tmp_registry) -> None:
+    """PATCH can update tags and toggle starred (including back to False)."""
+    resp = client.post(
+        "/api/projects",
+        json={"name": "Star Me", "slug": "star-me", "status": "active"},
+    )
+    pid = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/projects/{pid}",
+        json={"tags": ["In Progress"], "starred": True},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tags"] == ["In Progress"]
+    assert body["starred"] is True
+
+    # Toggle starred back off — False must not be dropped by the patch
+    resp = client.patch(f"/api/projects/{pid}", json={"starred": False})
+    assert resp.status_code == 200
+    assert resp.json()["starred"] is False
+    # tags untouched by the second patch
+    assert resp.json()["tags"] == ["In Progress"]
+
+
+def test_list_projects_includes_asset_count(tmp_registry) -> None:
+    """GET /api/projects enriches each item with a live asset_count."""
+    resp = client.post(
+        "/api/projects",
+        json={"name": "Counted", "slug": "counted-project", "status": "active"},
+    )
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    # No assets yet
+    resp = client.get("/api/projects")
+    assert resp.status_code == 200
+    item = next(p for p in resp.json()["items"] if p["id"] == pid)
+    assert item["asset_count"] == 0
+
+    # Add an asset to the project
+    asset_payload = {
+        "title": "Doc",
+        "source_kind": "local",
+        "uri": "file:///tmp/doc.md",
+        "sensitivity": "public",
+    }
+    resp = client.post(f"/api/projects/{pid}/assets", json=asset_payload)
+    assert resp.status_code in (200, 201)
+
+    resp = client.get("/api/projects")
+    item = next(p for p in resp.json()["items"] if p["id"] == pid)
+    assert item["asset_count"] == 1

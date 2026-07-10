@@ -108,6 +108,8 @@ export interface TemplateCardProps {
   onApply?: (template: ArtifactTemplate) => void;
   /** Optional: called when "Preview" action is triggered. */
   onPreview?: (template: ArtifactTemplate) => void;
+  /** Optional: called when "Open in BOM Builder" action is triggered (WS-5). */
+  onOpenInBuilder?: (template: ArtifactTemplate) => void;
 }
 
 export function TemplateCard({
@@ -116,6 +118,7 @@ export function TemplateCard({
   onClick,
   onApply,
   onPreview,
+  onOpenInBuilder,
 }: TemplateCardProps) {
   // Defensive: the list endpoint may return header-only templates (no
   // domains); only the detail endpoint embeds domains/slots. Guard every
@@ -165,7 +168,7 @@ export function TemplateCard({
   );
 
   // ── ActionZone: Apply / Preview (optional) ───────────────────
-  const hasActions = !!(onApply || onPreview || onClick);
+  const hasActions = !!(onApply || onPreview || onClick || onOpenInBuilder);
   const actions = hasActions ? (
     <div className="flex items-center gap-1.5 w-full">
       {(onApply || onClick) && (
@@ -190,6 +193,26 @@ export function TemplateCard({
           )}
         >
           Apply
+        </button>
+      )}
+      {onOpenInBuilder && (
+        <button
+          type="button"
+          aria-label={`Open in BOM Builder: ${template.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenInBuilder(template);
+          }}
+          className={clsx(
+            "px-2 py-0.5 rounded text-[11px] font-medium",
+            "text-purple-700 hover:bg-purple-50 border border-transparent hover:border-purple-200",
+            "transition-colors duration-[100ms]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+            "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+            "focus-visible:opacity-100 transition-opacity",
+          )}
+        >
+          Builder
         </button>
       )}
       {onPreview && (

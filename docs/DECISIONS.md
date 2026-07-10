@@ -783,3 +783,51 @@ guard-neutral fix.
 - Blobs lost in the D-015 rebuild are recovered out-of-band by re-uploading originals to the existing
   asset ids via `PUT /api/assets/{id}/content` (idempotent, content-addressed).
 - Follow-up: e2e/deploy smoke should assert an uploaded asset's `/content` survives a `--force-recreate`.
+
+## D-017 — UI Wave 3: Projects Index, Command-Center Fidelity, BOM Builder, Library/Detail Mockup Alignment
+
+- **Date**: 2026-07-10
+- **Status**: Accepted
+- **Branch**: `autopilot/ui-wave3-projects-bom` (squash-merged to `main`)
+
+### Context
+
+The MVP surfaces existed functionally but diverged from the PRD mockups: PPTX previews rendered
+only in detail views (cards showed a static icon per AC P4C-D), the asset detail page exposed a
+fraction of the mockup's fields, the library lacked the expanded filter bar and Board/Timeline
+views, there was no Projects index (the root route hard-redirected to the seeded project), and
+the BOM view had neither missing-slot visualization nor a template/BOM builder.
+
+### Decision
+
+Five parallel workstreams brought the app to mockup fidelity with **additive-only** backend
+changes:
+
+1. **PPTX card previews** (supersedes AC P4C-D): thumbnail mode now reuses the D-015 server
+   conversion pipeline with per-asset in-flight dedupe, a session-level ready-cache, an 8s
+   thumbnail poll budget, and icon fallback on error/`policy_denied`.
+2. **Asset detail metadata conventions**: mockup fields with no first-class column (provenance,
+   annotations, associations, policy toggles, ai_summary, tags, starred) persist as structured
+   keys in the existing free-form asset `metadata` dict via `PATCH /api/assets/{id}` — no schema
+   migration. First-class data (links, relationships, audit activity) got additive read endpoints
+   (`GET /api/assets/{id}/links`, `/relationships`).
+3. **Library filters**: additive `captured_after`/`captured_before`/`starred` query params on the
+   list endpoint; mockup filters with no backing data (Topic/Feature/IntentTree Node) are omitted
+   rather than faked.
+4. **Projects**: `tags`/`starred` (persisted) and `asset_count` (computed enrichment, never
+   persisted) added to the Project model; root route is now a real Projects index with create
+   dialog. Command-center panels wrap in a shared `ExpandablePane` fullscreen primitive.
+5. **Templates/BOM**: fixed a real persistence gap — JSONL (builder-created) templates previously
+   dropped their domain structure (`create_draft` discarded it; `get_detail` read YAML only).
+   Domains now embed on the JSONL record; slots gain `accepted_file_types`, `max_file_size_mb`,
+   `naming_convention`, `guidance`. New three-panel BOM Builder route
+   (`/projects/{id}/templates/builder`) uses dnd-kit against the existing templates API.
+
+### Consequences
+
+- `shared/openapi.yaml` parity maintained for every additive change (parity test green).
+- Metadata-dict conventions are documented in `web/features/assets/detailApi.ts`; a future
+  first-class promotion (e.g. Postgres columns, V1-003) can migrate from these keys.
+- Client-side metadata merge (read-modify-write) has a small lost-update window between
+  concurrent editors; acceptable single-user, revisit with V1-001 multi-user.
+- Validation at merge: web tsc clean, vitest 106/106, api pytest 631 passed / 2 skipped.

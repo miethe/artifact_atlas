@@ -14,6 +14,20 @@ import type {
 } from "../types";
 
 // ============================================================
+// List filter superset (WS-3): additive backend list params.
+// Kept feature-local (here) instead of widening the shared AssetFilters type.
+// ============================================================
+
+export interface AssetListFilters extends AssetFilters {
+  /** ISO timestamp — only assets captured at/after this instant. */
+  captured_after?: string;
+  /** ISO timestamp — only assets captured at/before this instant. */
+  captured_before?: string;
+  /** Filter by metadata.starred flag. */
+  starred?: boolean;
+}
+
+// ============================================================
 // Query Keys
 // ============================================================
 
@@ -31,7 +45,7 @@ export const assetKeys = {
 
 export function useAssets(
   projectId: string | null | undefined,
-  filters?: AssetFilters,
+  filters?: AssetListFilters,
 ) {
   return useQuery({
     queryKey: assetKeys.list(projectId ?? "", filters),

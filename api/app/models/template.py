@@ -27,6 +27,11 @@ class TemplateSlot(BaseModel):
     linked_intenttree_node_pattern: str | None = None
     display_order: int
     rule_config: dict[str, Any] | None = None
+    # BOM Builder canvas fields (additive, WS-5)
+    accepted_file_types: list[str] | None = None
+    max_file_size_mb: int | None = None
+    naming_convention: str | None = None
+    guidance: str | None = None
 
 
 class TemplateDomain(BaseModel):
@@ -79,6 +84,44 @@ class TemplatePreview(BaseModel):
     required_slots: int | None = None
 
 
+class TemplateSlotInput(BaseModel):
+    """Slot payload inside a domain when creating/updating a template.
+
+    Accepts either ``artifact_type_id`` (slug-style ID) or the human-readable
+    ``artifact_type`` label (slugified on persist), matching the YAML template
+    format.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    artifact_type_id: str | None = None
+    artifact_type: str | None = None
+    phase: SlotPhase | None = None
+    required: bool = True
+    min_assets: int = 1
+    max_assets: int | None = None
+    staleness_days: int | None = None
+    linked_intenttree_node_pattern: str | None = None
+    display_order: int | None = None
+    rule_config: dict[str, Any] | None = None
+    accepted_file_types: list[str] | None = None
+    max_file_size_mb: int | None = None
+    naming_convention: str | None = None
+    guidance: str | None = None
+
+
+class TemplateDomainInput(BaseModel):
+    """Domain payload when creating/updating a template."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    slug: str | None = None
+    description: str | None = None
+    display_order: int | None = None
+    slots: list[TemplateSlotInput] | None = None
+
+
 class TemplateCreate(BaseModel):
     """Request body for POST /api/templates."""
 
@@ -91,6 +134,7 @@ class TemplateCreate(BaseModel):
     status: TemplateStatus = TemplateStatus.experimental
     version: str = "1.0.0"
     metadata: dict[str, Any] | None = None
+    domains: list[TemplateDomainInput] | None = None
 
 
 class TemplateUpdate(BaseModel):
@@ -103,3 +147,4 @@ class TemplateUpdate(BaseModel):
     status: TemplateStatus | None = None
     version: str | None = None
     metadata: dict[str, Any] | None = None
+    domains: list[TemplateDomainInput] | None = None

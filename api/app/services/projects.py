@@ -100,6 +100,19 @@ class ProjectService:
         pid = project_id or f"proj_{uuid.uuid4().hex[:16]}"
         return self._projects.create(pid, data)
 
+    def get_asset_counts_by_project(self) -> dict[str, int]:
+        """Return a mapping of project_id -> live asset count.
+
+        Single in-memory scan of the asset registry (local-first, no DB) —
+        used to cheaply enrich project list responses.
+        """
+        counts: dict[str, int] = {}
+        for asset in self._assets.list():
+            pid = asset.project_id
+            if pid:
+                counts[pid] = counts.get(pid, 0) + 1
+        return counts
+
     def update_project(self, project_id: str, data: ProjectUpdate) -> Project | None:
         """Partially update a project. Returns None if not found."""
         return self._projects.update(project_id, data)

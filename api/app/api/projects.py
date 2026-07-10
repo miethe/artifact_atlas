@@ -32,6 +32,12 @@ def list_projects(
         sv = status.value
         projects = [p for p in projects if p.status.value == sv]
 
+    # Enrich with live asset counts (single registry scan — cheap, local-first).
+    counts = svc.get_asset_counts_by_project()
+    projects = [
+        p.model_copy(update={"asset_count": counts.get(p.id, 0)}) for p in projects
+    ]
+
     return apply_cursor_page(projects, cursor=cursor, limit=limit)
 
 

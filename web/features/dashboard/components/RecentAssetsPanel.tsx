@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * RecentAssetsPanel — displays most recently captured/updated assets.
- * Data comes from useAssets hook (sorted by captured_at desc).
+ * RecentAssetsPanel — thumbnail grid of the most recently captured assets,
+ * per the command-center mockup. Data from useAssets (sorted captured_at
+ * desc). Preview shows 6; the expanded (fullscreen) view shows all.
  */
 
 import * as React from "react";
+import { clsx } from "clsx";
 import { Clock, FileText } from "lucide-react";
-import { StatusBadge, EmptyState } from "@/components/ui";
-import { SkeletonRow } from "@/components/ui";
+import { StatusBadge, EmptyState, SkeletonRow } from "@/components/ui";
 import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
@@ -30,18 +31,76 @@ function relativeTime(isoDate: string): string {
 }
 
 // ============================================================
-// MIME type icon fallback label
+// Thumbnail card + grid
 // ============================================================
 
-function mimeShortLabel(mime: string | null | undefined): string {
-  if (!mime) return "FILE";
-  if (mime.startsWith("image/")) return "IMG";
-  if (mime === "text/markdown") return "MD";
-  if (mime === "text/yaml" || mime === "application/yaml") return "YAML";
-  if (mime === "application/json") return "JSON";
-  if (mime === "application/pdf") return "PDF";
-  if (mime.startsWith("text/")) return "TXT";
-  return "FILE";
+function AssetCardTile({
+  asset,
+  onOpenAsset,
+}: {
+  asset: Asset;
+  onOpenAsset?: (id: string) => void;
+}) {
+  const body = (
+    <>
+      {/* Wide thumbnail */}
+      <AssetThumbnail
+        asset={asset}
+        size="lg"
+        className="!w-full !h-20 rounded-b-none border-0 border-b border-[var(--border)]"
+      />
+      <span className="flex flex-col gap-0.5 px-2 py-1.5 min-w-0 text-left">
+        <span className="block text-[11px] font-medium text-[var(--ink)] truncate leading-tight">
+          {asset.title}
+        </span>
+        <span className="flex items-center justify-between gap-1">
+          <span className="text-[10px] text-[var(--ink-faint)] truncate leading-tight">
+            {asset.source_kind} · {relativeTime(asset.captured_at)}
+          </span>
+          <StatusBadge status={asset.status} size="xs" />
+        </span>
+      </span>
+    </>
+  );
+
+  const tileClasses = clsx(
+    "flex flex-col w-full overflow-hidden rounded-md border border-[var(--border)] bg-white",
+    "hover:border-blue-300 hover:shadow-card-hover transition-all duration-[150ms]",
+  );
+
+  if (onOpenAsset) {
+    return (
+      <AssetLink
+        assetId={asset.id}
+        onOpen={onOpenAsset}
+        aria-label={`Open ${asset.title}`}
+        className={tileClasses}
+      >
+        {body}
+      </AssetLink>
+    );
+  }
+  return <div className={tileClasses}>{body}</div>;
+}
+
+function AssetGrid({
+  assets,
+  onOpenAsset,
+  columns = "grid-cols-2 lg:grid-cols-3",
+}: {
+  assets: Asset[];
+  onOpenAsset?: (id: string) => void;
+  columns?: string;
+}) {
+  return (
+    <ul role="list" className={clsx("grid gap-2 p-2", columns)}>
+      {assets.map((asset) => (
+        <li key={asset.id} className="min-w-0">
+          <AssetCardTile asset={asset} onOpenAsset={onOpenAsset} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 // ============================================================
@@ -63,25 +122,36 @@ export function RecentAssetsPanel({
   viewAllHref,
   onOpenAsset,
 }: RecentAssetsPanelProps) {
-  // Sort by captured_at descending and take top 8
+  // Sort by captured_at descending
   const sorted = React.useMemo(() => {
     if (!assets) return [];
-    return [...assets]
-      .sort(
-        (a, b) =>
-          new Date(b.captured_at).getTime() -
-          new Date(a.captured_at).getTime(),
-      )
-      .slice(0, 8);
+    return [...assets].sort(
+      (a, b) =>
+        new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime(),
+    );
   }, [assets]);
+
+  const preview = sorted.slice(0, 6);
 
   return (
     <PanelShell
       title="Recent Assets"
-      subtitle={sorted.length > 0 ? `${sorted.length} shown` : undefined}
+      subtitle={
+        sorted.length > 0
+          ? `Showing ${preview.length} of ${sorted.length}`
+          : undefined
+      }
       icon={<Clock className="w-3.5 h-3.5" />}
       ariaLabel="Recently captured assets"
       viewAllHref={viewAllHref}
+      viewAllLabel="Browse all"
+      expandedContent={
+        <AssetGrid
+          assets={sorted}
+          onOpenAsset={onOpenAsset}
+          columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+        />
+      }
     >
       {isLoading && !assets ? (
         <div className="flex flex-col gap-0">
@@ -89,7 +159,7 @@ export function RecentAssetsPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
-      ) : sorted.length === 0 ? (
+      ) : preview.length === 0 ? (
         <EmptyState
           size="sm"
           title="No assets yet"
@@ -97,62 +167,7 @@ export function RecentAssetsPanel({
           icon={<FileText className="w-8 h-8" />}
         />
       ) : (
-        <ul role="list" className="divide-y divide-[var(--border)]">
-          {sorted.map((asset) => (
-            <li key={asset.id}>
-              {onOpenAsset ? (
-                <AssetLink
-                  assetId={asset.id}
-                  onOpen={onOpenAsset}
-                  aria-label={`Open ${asset.title}`}
-                  className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors focus-within:bg-[var(--surface-sunken)] group"
-                >
-                  {/* 24×24 asset thumbnail (P5-P1-004) */}
-                  <AssetThumbnail
-                    asset={asset}
-                    size="xs"
-                    className="!w-6 !h-6 shrink-0"
-                  />
-
-                  {/* Title + source */}
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-xs font-medium text-[var(--ink)] truncate leading-tight">
-                      {asset.title}
-                    </span>
-                    <span className="block text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px">
-                      {asset.source_kind} · {relativeTime(asset.captured_at)}
-                    </span>
-                  </span>
-
-                  {/* Status badge */}
-                  <StatusBadge status={asset.status} size="xs" showDot />
-                </AssetLink>
-              ) : (
-                <div className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--surface-sunken)] transition-colors group">
-                  {/* 24×24 asset thumbnail (P5-P1-004) */}
-                  <AssetThumbnail
-                    asset={asset}
-                    size="xs"
-                    className="!w-6 !h-6 shrink-0"
-                  />
-
-                  {/* Title + source */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
-                      {asset.title}
-                    </p>
-                    <p className="text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px">
-                      {asset.source_kind} · {relativeTime(asset.captured_at)}
-                    </p>
-                  </div>
-
-                  {/* Status badge */}
-                  <StatusBadge status={asset.status} size="xs" showDot />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        <AssetGrid assets={preview} onOpenAsset={onOpenAsset} />
       )}
     </PanelShell>
   );

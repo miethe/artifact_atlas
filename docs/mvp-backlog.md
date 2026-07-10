@@ -324,6 +324,14 @@ Items descoped during the UI Polish Pass sprint. Each has a design-spec stub for
 
 ---
 
+## Post-MVP Enhancement Waves
+
+| Wave | Date | Scope | Status |
+|---|---|---|---|
+| UI Wave 3 — Projects/BOM/Library/Detail mockup alignment | 2026-07-10 | PPTX card previews (supersedes P4C-D); asset detail rebuilt to mockup (provenance/versions/links/policy/annotations via metadata conventions + additive links/relationships endpoints); library filter-chip bar + Board/Timeline views + richer cards; Projects index with create dialog + command-center fidelity + ExpandablePane; BOM tab stat cards/missing slots/asset-picker + three-panel BOM Builder (fixes JSONL template domain persistence). See D-017; plan: `docs/project_plans/autopilot/ui-wave3-projects-bom.md`. | ✅ SHIPPED |
+
+---
+
 ## Phase 6 — v1 Expansion (Deferred)
 
 > Spec §21 Phase 5 (enterprise hardening) + v1 growth features. These items are out of scope for MVP.

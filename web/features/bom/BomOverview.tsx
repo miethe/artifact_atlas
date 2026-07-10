@@ -1,22 +1,19 @@
 "use client";
 
 /**
- * BomOverview — BOM-UI-003 + BOM-UI-004
+ * BomOverview — Artifact BOM tab (WS-5 mockup fidelity rebuild).
  *
- * Renders:
- * - KPI row: required coverage %, total slots, missing gaps, stale/blocked counts
- * - Domain tabs: filter slot grid by domain
- * - Slot grid: all UI states (see SlotCard)
- * - Template sources list
- * - Status legend
- * - Quick actions: Apply template, Export BOM
+ * Layout per artifact_bom_project_dashboard_interface.png:
+ * - Header actions: Apply Template, Add Domain Template, Export, Refresh.
+ * - Stat cards: Total Expected Types / Filled / Missing / Coverage % / Active Templates.
+ * - Domain tab chips (All Domains + per-domain), Group-by Domain|Phase,
+ *   grid/list toggle, expand-to-fullscreen (local FullscreenPane).
+ * - Per-domain sections: filled SlotCards + dashed MissingSlotCards
+ *   ("Drop asset here" → asset picker → POST /api/bom/slots/{slotId}/assign).
+ * - Right rail: Quick Actions, Template Sources, Insights, Legend.
  *
- * P2b: When flag:ui-tabbed-modal (or flag:ui-tabbed-modal-bom) is on, slot detail
- * uses EntityModal (tabbed, URL-driven). The bespoke inline SlotDetailPanel is removed
- * from the flagged path; the legacy fixed-panel is retained for fallback.
- *
- * All slot interactions route through API hooks (useBomSlot).
- * Audit-sensitive actions (unassign, N/A) confirm via Dialog.
+ * Slot detail: EntityModal when flag:ui-tabbed-modal(-bom) is on; legacy
+ * inline panel otherwise (unchanged behavior).
  */
 
 import * as React from "react";
@@ -25,142 +22,83 @@ import {
   LayoutTemplate,
   Download,
   RefreshCw,
-  TrendingUp,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Layers,
   Package,
+  Maximize2,
+  LayoutGrid,
+  List,
+  Plus,
 } from "lucide-react";
 import { useBom } from "@/lib/hooks/useBom";
 import { isFlagEnabled } from "@/lib/flags";
-import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { BomSlot } from "@/lib/types";
-import { SlotCard, SlotCardSkeleton } from "./components/SlotCard";
-import { SlotLegend } from "./components/SlotLegend";
-import { CoverageBar } from "./components/CoverageBar";
+import { useTemplates } from "@/features/templates/hooks";
+import { SlotCardSkeleton } from "./components/SlotCard";
 import { useBomCoverageExtended } from "./hooks/useBomCoverage";
 import { EntityModal, useEntityModalUrl } from "@/features/ui/components/EntityModal";
 import { SLOT_TAB_REGISTRY } from "./components/EntityModal/SlotTabRegistry";
+import { BomStatCards } from "./components/BomStatCards";
+import { DomainSection } from "./components/DomainSection";
+import { AssetPickerDialog } from "./components/AssetPickerDialog";
+import { ApplyTemplateDialog } from "./components/ApplyTemplateDialog";
+import { BomRightRail } from "./components/BomRightRail";
+import type { TemplateSourceInfo } from "./components/BomRightRail";
+import { FullscreenPane } from "./components/FullscreenPane";
+import { getDomainIcon, humanizeTypeId, slotDisplayName } from "./components/domainMeta";
 
 // ============================================================
-// Domain tab
+// Constants / helpers
 // ============================================================
 
 const ALL_DOMAIN = "__all__";
+const GAP_STATUSES = new Set(["missing", "partial", "stale", "blocked"]);
+const PHASE_ORDER = ["discovery", "design", "build", "launch", "operate", "review"];
 
 function getDomains(slots: BomSlot[]): string[] {
   const seen = new Set<string>();
-  for (const s of slots) {
-    seen.add(s.domain ?? "uncategorized");
-  }
+  for (const s of slots) seen.add(s.domain ?? "uncategorized");
   return Array.from(seen).sort();
 }
 
 // ============================================================
-// KPI row
+// Domain tab chips (pill style per mockup)
 // ============================================================
 
-interface KpiRowProps {
-  coveragePct: number;
-  required: number;
-  requiredComplete: number;
-  missing: number;
-  stale: number;
-  blocked: number;
-  partial: number;
-  total: number;
-}
-
-function KpiRow({
-  coveragePct,
-  required,
-  requiredComplete,
-  missing,
-  stale,
-  blocked,
-  partial,
-  total,
-}: KpiRowProps) {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <MetricCard
-        label="Required coverage"
-        value={`${coveragePct}%`}
-        accent={
-          coveragePct >= 80 ? "green" : coveragePct >= 50 ? "amber" : "red"
-        }
-        icon={<TrendingUp className="w-3.5 h-3.5" />}
-        sublabel={`${requiredComplete}/${required} slots`}
-        footer={
-          <CoverageBar
-            pct={coveragePct}
-            accent={coveragePct >= 80 ? "green" : coveragePct >= 50 ? "amber" : "green"}
-            size="xs"
-          />
-        }
-      />
-      <MetricCard
-        label="Total slots"
-        value={total}
-        icon={<Layers className="w-3.5 h-3.5" />}
-        sublabel="across all domains"
-      />
-      <MetricCard
-        label="Missing / gaps"
-        value={missing + partial}
-        accent={missing + partial > 0 ? "red" : "green"}
-        icon={<AlertCircle className="w-3.5 h-3.5" />}
-        sublabel={`${missing} missing, ${partial} partial`}
-      />
-      <MetricCard
-        label="Stale / blocked"
-        value={stale + blocked}
-        accent={stale + blocked > 0 ? "amber" : "green"}
-        icon={<Clock className="w-3.5 h-3.5" />}
-        sublabel={`${stale} stale, ${blocked} blocked`}
-      />
-    </div>
-  );
-}
-
-// ============================================================
-// Domain tabs
-// ============================================================
-
-interface DomainTabsProps {
+interface DomainChipsProps {
   domains: string[];
   active: string;
   onChange: (domain: string) => void;
   slotCounts: Record<string, number>;
 }
 
-function DomainTabs({ domains, active, onChange, slotCounts }: DomainTabsProps) {
+function DomainChips({ domains, active, onChange, slotCounts }: DomainChipsProps) {
+  const chipCls = (selected: boolean) =>
+    clsx(
+      "shrink-0 inline-flex items-center gap-1.5 px-3 h-7 rounded-full border text-xs font-medium",
+      "transition-colors duration-[100ms]",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+      selected
+        ? "border-blue-600 bg-blue-600 text-white"
+        : "border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)]",
+    );
+
   return (
     <nav
-      aria-label="Domain filter tabs"
-      className="flex items-center gap-0.5 border-b border-[var(--border)] overflow-x-auto"
+      aria-label="Domain filter"
+      className="flex items-center gap-1.5 overflow-x-auto pb-0.5"
     >
       <button
         type="button"
         role="tab"
         aria-selected={active === ALL_DOMAIN}
         onClick={() => onChange(ALL_DOMAIN)}
-        className={clsx(
-          "shrink-0 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors duration-[100ms]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset",
-          active === ALL_DOMAIN
-            ? "border-blue-600 text-blue-700"
-            : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-gray-300",
-        )}
+        className={chipCls(active === ALL_DOMAIN)}
       >
-        All
-        <span className="ml-1.5 text-[10px] text-[var(--ink-faint)]">
-          ({slotCounts[ALL_DOMAIN] ?? 0})
-        </span>
+        All Domains
+        <span className="text-[10px] opacity-70">({slotCounts[ALL_DOMAIN] ?? 0})</span>
       </button>
       {domains.map((d) => (
         <button
@@ -169,18 +107,11 @@ function DomainTabs({ domains, active, onChange, slotCounts }: DomainTabsProps) 
           role="tab"
           aria-selected={active === d}
           onClick={() => onChange(d)}
-          className={clsx(
-            "shrink-0 px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize transition-colors duration-[100ms]",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset",
-            active === d
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-gray-300",
-          )}
+          className={clsx(chipCls(active === d), "capitalize")}
         >
+          {getDomainIcon(d, "w-3 h-3")}
           {d}
-          <span className="ml-1.5 text-[10px] text-[var(--ink-faint)]">
-            ({slotCounts[d] ?? 0})
-          </span>
+          <span className="text-[10px] opacity-70">({slotCounts[d] ?? 0})</span>
         </button>
       ))}
     </nav>
@@ -188,90 +119,7 @@ function DomainTabs({ domains, active, onChange, slotCounts }: DomainTabsProps) 
 }
 
 // ============================================================
-// Template sources panel
-// ============================================================
-
-interface TemplateSourcesProps {
-  templateIds: string[];
-}
-
-function TemplateSources({ templateIds }: TemplateSourcesProps) {
-  if (templateIds.length === 0) return null;
-
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-sunken)] p-3">
-      <h3 className="text-[11px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide mb-2">
-        Template sources
-      </h3>
-      <div className="flex flex-wrap gap-1.5">
-        {templateIds.map((id) => (
-          <span
-            key={id}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
-          >
-            <LayoutTemplate className="w-3 h-3" aria-hidden />
-            {id.replace(/^tmpl_/, "").replace(/_v\d+$/, "").replace(/_/g, " ")}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Quick actions bar
-// ============================================================
-
-interface QuickActionsProps {
-  onApplyTemplate: () => void;
-  onExport: () => void;
-  onRefresh: () => void;
-  isRefreshing: boolean;
-}
-
-function QuickActions({
-  onApplyTemplate,
-  onExport,
-  onRefresh,
-  isRefreshing,
-}: QuickActionsProps) {
-  return (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="primary"
-        size="sm"
-        iconLeft={<LayoutTemplate className="w-3.5 h-3.5" aria-hidden />}
-        onClick={onApplyTemplate}
-      >
-        Apply template
-      </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        iconLeft={<Download className="w-3.5 h-3.5" aria-hidden />}
-        onClick={onExport}
-      >
-        Export BOM
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        iconLeft={
-          <RefreshCw
-            className={clsx("w-3.5 h-3.5", isRefreshing && "animate-spin")}
-            aria-hidden
-          />
-        }
-        aria-label="Refresh BOM data"
-        loading={isRefreshing}
-        onClick={onRefresh}
-      />
-    </div>
-  );
-}
-
-// ============================================================
-// Slot detail drawer (inline panel for now)
+// Legacy slot detail panel (flag-off fallback, unchanged)
 // ============================================================
 
 interface SlotDetailPanelProps {
@@ -290,16 +138,15 @@ function SlotDetailPanel({ slot, onClose }: SlotDetailPanelProps) {
         "animate-slide-in-right",
       )}
       role="complementary"
-      aria-label={`Slot detail: ${slot.name}`}
+      aria-label={`Slot detail: ${slotDisplayName(slot)}`}
     >
-      {/* Header */}
       <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-[var(--border)]">
         <div className="min-w-0">
           <p className="text-[11px] font-medium text-blue-600 uppercase tracking-wide">
             BOM Slot
           </p>
           <h2 className="text-sm font-semibold text-[var(--ink)] leading-tight mt-0.5 truncate">
-            {slot.name}
+            {slotDisplayName(slot)}
           </h2>
         </div>
         <button
@@ -312,9 +159,7 @@ function SlotDetailPanel({ slot, onClose }: SlotDetailPanelProps) {
         </button>
       </div>
 
-      {/* Body */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {/* Meta */}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <dt className="text-[var(--ink-muted)] font-medium">ID</dt>
           <dd className="font-mono text-[var(--ink)] truncate">{slot.id}</dd>
@@ -353,21 +198,6 @@ function SlotDetailPanel({ slot, onClose }: SlotDetailPanelProps) {
             </p>
           </div>
         )}
-
-        {/* Coverage guidance */}
-        <div className="bg-[var(--surface-sunken)] rounded-lg p-3 border border-[var(--border)]">
-          <p className="text-[11px] font-semibold text-[var(--ink-muted)] uppercase tracking-wide mb-1.5">
-            Coverage rules
-          </p>
-          <ul className="text-xs text-[var(--ink-muted)] space-y-1 list-disc list-inside">
-            <li>missing: required slot, no accepted assignment</li>
-            <li>partial: suggested only or min-count unmet</li>
-            <li>in_progress: accepted asset in raw/candidate state</li>
-            <li>complete: canonical asset + review satisfied</li>
-            <li>stale: past staleness threshold or superseded</li>
-            <li>blocked: missing dependency or explicit blocker</li>
-          </ul>
-        </div>
       </div>
     </div>
   );
@@ -383,15 +213,24 @@ export interface BomOverviewProps {
 
 export function BomOverview({ projectId }: BomOverviewProps) {
   const { data: bom, isLoading, error, refetch, isFetching } = useBom(projectId);
-  const slots = bom?.slots ?? [];
+  const slots = React.useMemo(() => bom?.slots ?? [], [bom]);
 
   const { data: coverage } = useBomCoverageExtended(bom?.id, slots);
+  const { data: templates } = useTemplates();
 
   // Feature flag: use EntityModal (P2b) vs legacy inline panel.
   const useEntityModalFlag =
     isFlagEnabled("ui-tabbed-modal") || isFlagEnabled("ui-tabbed-modal-bom");
 
+  // View state
   const [activeDomain, setActiveDomain] = React.useState<string>(ALL_DOMAIN);
+  const [groupBy, setGroupBy] = React.useState<"domain" | "phase">("domain");
+  const [viewMode, setViewMode] = React.useState<"grid" | "list">("grid");
+  const [gapsOnly, setGapsOnly] = React.useState(false);
+  const [fullscreen, setFullscreen] = React.useState(false);
+  const [pickerSlot, setPickerSlot] = React.useState<BomSlot | null>(null);
+  const [applyOpen, setApplyOpen] = React.useState(false);
+
   // Legacy state (used when flag is off).
   const [selectedSlot, setSelectedSlot] = React.useState<BomSlot | null>(null);
 
@@ -417,35 +256,89 @@ export function BomOverview({ projectId }: BomOverviewProps) {
   const slotCounts = React.useMemo(() => {
     const counts: Record<string, number> = { [ALL_DOMAIN]: slots.length };
     for (const d of domains) {
-      counts[d] = slots.filter(
-        (s) => (s.domain ?? "uncategorized") === d,
-      ).length;
+      counts[d] = slots.filter((s) => (s.domain ?? "uncategorized") === d).length;
     }
     return counts;
   }, [slots, domains]);
 
-  const filteredSlots = React.useMemo(() => {
-    if (activeDomain === ALL_DOMAIN) return slots;
-    return slots.filter((s) => (s.domain ?? "uncategorized") === activeDomain);
-  }, [slots, activeDomain]);
+  const visibleSlots = React.useMemo(() => {
+    let out = slots;
+    if (activeDomain !== ALL_DOMAIN) {
+      out = out.filter((s) => (s.domain ?? "uncategorized") === activeDomain);
+    }
+    if (gapsOnly) {
+      out = out.filter((s) => GAP_STATUSES.has(s.status));
+    }
+    return out;
+  }, [slots, activeDomain, gapsOnly]);
+
+  /** Sections: [title, slots] grouped by domain or phase. */
+  const sections = React.useMemo((): Array<[string, BomSlot[]]> => {
+    if (groupBy === "phase") {
+      const map = new Map<string, BomSlot[]>();
+      for (const s of visibleSlots) {
+        const p = s.phase ?? "unphased";
+        if (!map.has(p)) map.set(p, []);
+        map.get(p)!.push(s);
+      }
+      return Array.from(map.entries()).sort(
+        (a, b) =>
+          (PHASE_ORDER.indexOf(a[0]) + 100 * Number(PHASE_ORDER.indexOf(a[0]) < 0)) -
+          (PHASE_ORDER.indexOf(b[0]) + 100 * Number(PHASE_ORDER.indexOf(b[0]) < 0)),
+      );
+    }
+    const map = new Map<string, BomSlot[]>();
+    for (const s of visibleSlots) {
+      const d = s.domain ?? "uncategorized";
+      if (!map.has(d)) map.set(d, []);
+      map.get(d)!.push(s);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [visibleSlots, groupBy]);
+
+  // Template sources (right rail): resolve applied template IDs to names + counts.
+  const templateSources = React.useMemo((): TemplateSourceInfo[] => {
+    const ids = bom?.source_templates ?? [];
+    return ids.map((id) => {
+      const t = (templates ?? []).find((tt) => tt.id === id);
+      const expected = t
+        ? t.domains.reduce((acc, d) => acc + d.slots.length, 0)
+        : null;
+      return {
+        id,
+        name:
+          t?.name ??
+          humanizeTypeId(id.replace(/^tmpl_/, "").replace(/_v\d+$/, "")),
+        expectedTypes: expected && expected > 0 ? expected : null,
+        active: true,
+      };
+    });
+  }, [bom, templates]);
+
+  const missingByDomain = React.useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const s of slots) {
+      if (s.status !== "missing") continue;
+      const d = s.domain ?? "uncategorized";
+      out[d] = (out[d] ?? 0) + 1;
+    }
+    return out;
+  }, [slots]);
 
   // ---- Loading state ----
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4 p-5">
-        {/* KPI skeletons */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
-        {/* Tab skeleton */}
         <div className="flex gap-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-6 w-20 rounded" />
+            <Skeleton key={i} className="h-7 w-24 rounded-full" />
           ))}
         </div>
-        {/* Grid skeletons */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {Array.from({ length: 10 }).map((_, i) => (
             <SlotCardSkeleton key={i} />
@@ -486,163 +379,238 @@ export function BomOverview({ projectId }: BomOverviewProps) {
               variant="primary"
               size="sm"
               iconLeft={<LayoutTemplate className="w-3.5 h-3.5" aria-hidden />}
+              onClick={() => setApplyOpen(true)}
             >
               Apply template
             </Button>
           }
+        />
+        <ApplyTemplateDialog
+          projectId={projectId}
+          open={applyOpen}
+          onClose={() => setApplyOpen(false)}
         />
       </div>
     );
   }
 
   const coveragePct = coverage?.coverage_pct ?? 0;
-  const requiredSlots = coverage?.required_slots ?? 0;
-  const requiredComplete = coverage?.required_complete ?? 0;
+  const filledSlots = coverage?.filled_slots ?? 0;
   const missingSlots = coverage?.missing_slots ?? 0;
-  const staleCount = coverage?.stale_count ?? 0;
-  const blockedCount = coverage?.blocked_count ?? 0;
-  const partialCount = coverage?.partial_count ?? 0;
 
-  return (
-    <>
-      <div className="flex flex-col gap-4 p-5 min-w-0">
-        {/* Header row: title + quick actions */}
+  const content = (
+    <div className="flex flex-col lg:flex-row items-start gap-5 p-5 min-w-0">
+      {/* Main column */}
+      <div className="flex-1 min-w-0 flex flex-col gap-4 w-full">
+        {/* Header row: bom name + actions */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2 min-w-0">
-            <CheckCircle2
-              className={clsx(
-                "w-4 h-4 shrink-0",
-                coveragePct >= 80
-                  ? "text-emerald-500"
-                  : coveragePct >= 50
-                    ? "text-amber-500"
-                    : "text-red-400",
-              )}
-              aria-hidden
-            />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--ink)] truncate">
-                {bom.name}
-              </p>
-              <p className="text-[11px] text-[var(--ink-muted)]">
-                {slots.length} slots &middot; {bom.status}
-              </p>
-            </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[var(--ink)] truncate">
+              {bom.name}
+            </p>
+            <p className="text-[11px] text-[var(--ink-muted)]">
+              Visually track required artifacts and coverage for this project
+              based on selected templates.
+            </p>
           </div>
-          <QuickActions
-            onApplyTemplate={() => {
-              /* navigate to template wizard */
-            }}
-            onExport={() => {
-              const blob = new Blob([JSON.stringify(bom, null, 2)], {
-                type: "application/json",
-              });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `bom-${projectId}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-            onRefresh={() => refetch()}
-            isRefreshing={isFetching}
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="primary"
+              size="sm"
+              iconLeft={<LayoutTemplate className="w-3.5 h-3.5" aria-hidden />}
+              onClick={() => setApplyOpen(true)}
+            >
+              Apply Template
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<Plus className="w-3.5 h-3.5" aria-hidden />}
+              onClick={() => setApplyOpen(true)}
+            >
+              Add Domain Template
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Export BOM as JSON"
+              iconLeft={<Download className="w-3.5 h-3.5" aria-hidden />}
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(bom, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `bom-${projectId}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              iconLeft={
+                <RefreshCw
+                  className={clsx("w-3.5 h-3.5", isFetching && "animate-spin")}
+                  aria-hidden
+                />
+              }
+              aria-label="Refresh BOM data"
+              loading={isFetching}
+              onClick={() => refetch()}
+            />
+          </div>
         </div>
 
-        {/* KPI row */}
-        <KpiRow
-          coveragePct={coveragePct}
-          required={requiredSlots}
-          requiredComplete={requiredComplete}
+        {/* Stat cards */}
+        <BomStatCards
+          totalExpected={slots.length}
+          domainCount={domains.length}
+          filled={filledSlots}
           missing={missingSlots}
-          stale={staleCount}
-          blocked={blockedCount}
-          partial={partialCount}
-          total={slots.length}
+          coveragePct={coveragePct}
+          activeTemplates={templateSources.length}
+          templateNames={templateSources.map((t) => t.name)}
         />
 
-        {/* Template sources */}
-        {bom.source_templates && bom.source_templates.length > 0 && (
-          <TemplateSources templateIds={bom.source_templates} />
-        )}
-
-        {/* Domain tabs */}
-        {domains.length > 1 && (
-          <DomainTabs
-            domains={domains}
-            active={activeDomain}
-            onChange={setActiveDomain}
-            slotCounts={slotCounts}
-          />
-        )}
-
-        {/* Domain coverage sub-scores */}
-        {coverage?.by_domain && coverage.by_domain.length > 1 && activeDomain === ALL_DOMAIN && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {coverage.by_domain.map((d) => (
-              <button
-                key={d.domain}
-                type="button"
-                onClick={() => setActiveDomain(d.domain)}
+        {/* Controls row: domain chips + group-by + view toggle + fullscreen */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <DomainChips
+              domains={domains}
+              active={activeDomain}
+              onChange={setActiveDomain}
+              slotCounts={slotCounts}
+            />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink-muted)]">
+              Group by:
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as "domain" | "phase")}
+                aria-label="Group slots by"
                 className={clsx(
-                  "text-left rounded-lg border border-[var(--border)] bg-white p-2.5",
-                  "hover:border-blue-300 hover:shadow-card-hover transition-all duration-[150ms]",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                  "h-7 px-2 text-xs rounded border border-[var(--border)]",
+                  "bg-[var(--surface)] text-[var(--ink)]",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500",
                 )}
-                aria-label={`Filter by ${d.domain} domain — ${d.coverage_pct}% coverage`}
               >
-                <p className="text-[11px] font-semibold text-[var(--ink)] capitalize truncate">
-                  {d.domain}
-                </p>
-                <CoverageBar
-                  pct={d.coverage_pct}
-                  showLabel
-                  size="xs"
-                  className="mt-1.5"
-                />
-                <p className="text-[10px] text-[var(--ink-faint)] mt-0.5">
-                  {d.filled}/{d.total} filled
-                </p>
-              </button>
+                <option value="domain">Domain</option>
+                <option value="phase">Phase</option>
+              </select>
+            </label>
+            <SegmentedControl
+              value={viewMode}
+              onChange={(v) => setViewMode(v)}
+              size="xs"
+              iconOnly
+              label="View mode"
+              options={[
+                {
+                  value: "grid",
+                  label: "Grid",
+                  ariaLabel: "Grid view",
+                  icon: <LayoutGrid className="w-3.5 h-3.5" aria-hidden />,
+                },
+                {
+                  value: "list",
+                  label: "List",
+                  ariaLabel: "List view",
+                  icon: <List className="w-3.5 h-3.5" aria-hidden />,
+                },
+              ]}
+            />
+            <button
+              type="button"
+              onClick={() => setFullscreen(true)}
+              aria-label="Expand to fullscreen"
+              className="flex items-center justify-center w-7 h-7 rounded border border-[var(--border)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--surface-sunken)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <Maximize2 className="w-3.5 h-3.5" aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        {/* Gaps-only banner */}
+        {gapsOnly && (
+          <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              Showing gap slots only (missing, partial, stale, blocked).
+            </p>
+            <button
+              type="button"
+              onClick={() => setGapsOnly(false)}
+              className="text-xs font-medium text-amber-800 dark:text-amber-200 underline"
+            >
+              Show all
+            </button>
+          </div>
+        )}
+
+        {/* Sections */}
+        {sections.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center">
+            <p className="text-sm text-[var(--ink-muted)]">
+              No slots match the current filters.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {sections.map(([title, sectionSlots]) => (
+              <DomainSection
+                key={title}
+                title={title}
+                slots={sectionSlots}
+                viewMode={viewMode}
+                onOpenSlot={handleSlotOpen}
+                onFillSlot={setPickerSlot}
+                isPhaseSection={groupBy === "phase"}
+                onViewDetails={
+                  groupBy === "domain" && activeDomain === ALL_DOMAIN
+                    ? () => setActiveDomain(title)
+                    : undefined
+                }
+              />
             ))}
           </div>
         )}
-
-        {/* Slot grid */}
-        <section aria-label="BOM slot grid">
-          {filteredSlots.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center">
-              <p className="text-sm text-[var(--ink-muted)]">
-                No slots in this domain.
-              </p>
-            </div>
-          ) : (
-            <div
-              className="grid gap-3"
-              style={{
-                gridTemplateColumns:
-                  "repeat(auto-fill, minmax(160px, 1fr))",
-              }}
-            >
-              {filteredSlots.map((slot) => (
-                <SlotCard
-                  key={slot.id}
-                  slot={slot}
-                  onOpen={handleSlotOpen}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Legend */}
-        <div className="flex items-center justify-between gap-4 pt-1">
-          <SlotLegend />
-          <p className="text-[10px] text-[var(--ink-faint)] shrink-0">
-            Required score = complete / active required
-          </p>
-        </div>
       </div>
+
+      {/* Right rail */}
+      <BomRightRail
+        projectId={projectId}
+        gapsOnly={gapsOnly}
+        onToggleGaps={() => setGapsOnly((v) => !v)}
+        templateSources={templateSources}
+        byDomain={coverage?.by_domain ?? []}
+        missingByDomain={missingByDomain}
+      />
+
+      {/*
+        Dialogs/overlays are rendered INSIDE the content passed to
+        FullscreenPane so that in fullscreen mode they travel with the portal
+        and paint within (above) the fixed z-50 overlay's stacking context.
+        In normal mode they are fixed-position, so DOM placement is
+        irrelevant. Do NOT move these out to siblings of FullscreenPane —
+        the fullscreen overlay would paint on top of them and make them
+        unreachable (Mode-E integration finding, WS-5).
+      */}
+
+      {/* Asset picker for missing slots */}
+      <AssetPickerDialog
+        projectId={projectId}
+        slot={pickerSlot}
+        onClose={() => setPickerSlot(null)}
+      />
+
+      {/* Apply template */}
+      <ApplyTemplateDialog
+        projectId={projectId}
+        open={applyOpen}
+        onClose={() => setApplyOpen(false)}
+      />
 
       {/* EntityModal — slot detail (P2b, flag:ui-tabbed-modal ON) */}
       {useEntityModalFlag && modalIsOpen && (
@@ -652,9 +620,7 @@ export function BomOverview({ projectId }: BomOverviewProps) {
           projectId={projectId}
           tabRegistry={SLOT_TAB_REGISTRY}
           onClose={modalClose}
-          title={
-            (bom?.slots ?? []).find((s) => s.id === modalItemId)?.name
-          }
+          title={(bom?.slots ?? []).find((s) => s.id === modalItemId)?.name}
         />
       )}
 
@@ -672,6 +638,16 @@ export function BomOverview({ projectId }: BomOverviewProps) {
           />
         </>
       )}
-    </>
+    </div>
+  );
+
+  return (
+    <FullscreenPane
+      expanded={fullscreen}
+      onExit={() => setFullscreen(false)}
+      title={`Artifact BOM — ${bom.name}`}
+    >
+      {content}
+    </FullscreenPane>
   );
 }

@@ -6,6 +6,10 @@ export type { TemplateLibraryProps } from "./TemplateLibrary";
 export { BomBuilder } from "./BomBuilder";
 export type { BomBuilderProps } from "./BomBuilder";
 
+// WS-5: route-based three-panel BOM Builder
+export { BomBuilderPage } from "./builder/BomBuilderPage";
+export type { BomBuilderPageProps } from "./builder/BomBuilderPage";
+
 export { ApplyWizard } from "./components/ApplyWizard";
 export type { ApplyWizardProps } from "./components/ApplyWizard";
 

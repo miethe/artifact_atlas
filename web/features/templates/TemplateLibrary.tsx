@@ -32,6 +32,8 @@ export interface TemplateLibraryProps {
   projectId: string;
   onApplyTemplate?: (template: ArtifactTemplate) => void;
   onOpenBuilder?: () => void;
+  /** WS-5: open a specific template in the BOM Builder route. */
+  onOpenInBuilder?: (template: ArtifactTemplate) => void;
   className?: string;
 }
 
@@ -100,6 +102,7 @@ export function TemplateLibrary({
   projectId,
   onApplyTemplate,
   onOpenBuilder,
+  onOpenInBuilder,
   className,
 }: TemplateLibraryProps) {
   const { data: templatesRaw, isLoading } = useTemplates();
@@ -333,6 +336,7 @@ export function TemplateLibrary({
                       setSelectedId(t.id);
                       if (useEntityModalFlag) modalOpen(t.id);
                     }}
+                    onOpenInBuilder={onOpenInBuilder}
                   />
                 ))}
               </div>
