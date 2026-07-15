@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/aos-writeback.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "ITT_NODE_ID": "node_01KXKEH3JV48E1M7EA2EFQWHT4"
+  }
+}

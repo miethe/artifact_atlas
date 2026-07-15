@@ -46,3 +46,14 @@ Use the spec-backed MVP architecture:
 - Update `docs/mvp-backlog.md` when adding or completing MVP work.
 - Keep API contracts in `shared/openapi.yaml` aligned with backend route stubs.
 - Run available tests before handoff and report any missing dependency blockers.
+
+## AOS operating doctrine (look-first / save-after)
+
+The launchpad's shared, token-tight doctrine index —
+[`../agentic_meta_dev/.claude/rules/aos-operating-rules.md`](../agentic_meta_dev/.claude/rules/aos-operating-rules.md)
+(sibling-repo relative path) — splits each AOS subsystem's **look-first** instruction from its
+**save-after** gate (or "advisory only"). Consult it before reaching for a subsystem.
+**Fallback:** if this repo is relocated or cloned standalone (the launchpad is not a sibling
+directory), re-vendor the file locally at `.claude/rules/aos-operating-rules.md`.
+
+> Installed via the `aos-native-by-default` initiative (IntentTree node `node_01KXKEH3JV48E1M7EA2EFQWHT4`).
