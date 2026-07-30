@@ -21,6 +21,21 @@ Execute a full Tier 2/3 implementation plan end-to-end.
 > running orchestrator mid-plan breaks resume. See
 > `.claude/specs/workflows/workflow-authoring-spec.md` §17.
 
+> **Git workflow — canonical protocol.** This command follows
+> [`.claude/skills/dev-execution/git-worktree-pr-protocol.md`](../../skills/dev-execution/git-worktree-pr-protocol.md):
+> set up a git **worktree** under `.claude/worktrees/<slug>` (not an in-place feature branch), record
+> the **parent branch** (HEAD at run start) as the PR base, commit per phase, open a PR to the
+> **parent branch**, and **squash-merge only on approval or an in-prompt override** ("auto-merge" /
+> "merge when done"). The per-wave worktree merge-back below operates one level under this (wave →
+> run branch); the run-branch → parent hop is the PR.
+>
+> **Model routing.** Subscription-side execution defaults to **Sonnet 5** (`claude-sonnet-5`), with
+> **Opus 5** for the spine (orchestration/architecture/adjudication) and **`xhigh`** effort for the
+> hardest coding/agentic work; offload bounded, contract-clear waves to **ICA Sonnet 5**
+> (`claude-sonnet-5[1m]`, free-to-us; 4.6[1m]/Haiku for cheap fan-out) behind the reviewer gate — never offload MUST-stay-primary /
+> Mode-D / Claude-Code-native work. Policy:
+> [`docs/agentic-operator/MODEL-ROUTING.md`](../../../docs/agentic-operator/MODEL-ROUTING.md).
+
 ---
 
 ## Workflow Path (Recommended)
@@ -40,12 +55,24 @@ This path replaces the manual Opus dispatch-and-poll wave loop with `.claude/wor
 
 The workflow script cannot read plan files directly (constraint 1 — no FS/shell in script). Opus must build the execution graph first:
 
-1. **Read frontmatter only** (~2–3K tokens):
+1. **Pre-Execution Artifact Provisioning (best-effort, ON BY DEFAULT)** — run this FIRST, before
+   parsing frontmatter or building the graph below. Resolves the plan's `required_artifacts` +
+   the project manifest (`.claude/aos-artifacts.yaml`) and deploys any in-catalog gap:
+   ```bash
+   PROVISION_PLAN_FILE="${PLAN_PATH}" PROVISION_SCOPE="plan:${PLAN_SLUG}" \
+       .claude/skills/dev-execution/hooks/provision-artifacts.sh
+   ```
+   On by default (disable with `AOS_ARTIFACT_PROVISION=0`); silent no-op with no manifest and no
+   `required_artifacts`; non-fatal on infra failure. **One exception**: a NEEDED+unsatisfiable
+   artifact is a real halt (engine exit 2) — stop before spending any graph-build or execution
+   budget. Gate + env resolution: `.claude/rules/artifact-provisioning.md`.
+
+2. **Read frontmatter only** (~2–3K tokens):
    ```bash
    head -n 80 ${PLAN_PATH} | sed -n '/^---$/,/^---$/p'
    ```
 
-2. **Build the `ExecutionGraph`** from `wave_plan` frontmatter:
+3. **Build the `ExecutionGraph`** from `wave_plan` frontmatter:
    - Map each `wave_plan.waves[]` entry to `Wave { id, phases[] }`.
    - Map each phase to `Phase { id, title, mode, review_intensity, isolation, phase_strategy, fix_agent, tasks[], batches[] }`.
    - Compute `batches[][]` per phase: group tasks by `files_affected` disjointness (tasks sharing a file run serially; disjoint tasks go in the same batch).
@@ -58,15 +85,39 @@ The workflow script cannot read plan files directly (constraint 1 — no FS/shel
      ls -d .claude/progress/${BASE_SLUG}*/ 2>/dev/null
      ```
 
-3. **Dry-run validation** (strongly recommended before first run):
+4. **Dry-run validation** (strongly recommended before first run):
    Pass `dry_run: true` in `args` — the script returns the parsed graph for inspection without spawning agents.
 
-4. **Record pre-run checkpoint**:
+5. **Record pre-run checkpoint**:
    ```bash
    git rev-parse HEAD
    ```
 
-5. **Invoke the workflow** with the serialized graph as `args`.
+6. **Invoke the workflow** with the serialized graph as `args`.
+
+### Delegation context bundle (assemble once at the plan gate)
+
+Before fan-out — exactly once per run, at the plan gate — assemble the four-part Delegation
+Context Bundle and thread its path to every delegated leg (AOS constraint 4: assemble once,
+never re-derive per leg):
+
+```bash
+BUNDLE=$(op context pack --budget 6000 \
+  --plan-ref ${PLAN_PATH} \
+  --prd-ref ${PRD_PATH:-} \
+  --project-root "$(git rev-parse --show-toplevel)" | head -1)
+```
+
+- Store `$BUNDLE` as `RoutingRecord.context_ref` for each delegatable leg. The router's
+  `finalizeRoutingRecord` forces `context_ref: null` for MUST-stay classes (orchestration,
+  verdict, mode-d, council-review, schema-recovery, cross-wave-merge, synthesis) and for bob —
+  never override that.
+- Every fan-out leg, in every wave, inherits the SAME `$BUNDLE` path. Do NOT call
+  `op context pack` again per wave or per phase (single assembly per run).
+- Per-transport injection (delegation-context.md v2): claude subagent → inline under
+  `<persona>` in the spawn prompt; ICA → `--append-system-prompt-file $BUNDLE`; codex →
+  `exec_task(context_ref=$BUNDLE)`.
+- No model call on the assembly path — `op context pack` is deterministic.
 
 ### During the workflow run
 
@@ -89,10 +140,20 @@ Opus is responsible **between and after** waves (never inside the script):
 ### Post-run
 
 When the workflow returns `status: 'complete'`:
-- Perform final `git commit` / push from the merged working tree.
+- Perform final `git commit` from the merged run branch, then **push the run branch and open a PR to the parent branch**; **squash-merge only on approval or an in-prompt override** (per the [git worktree + PR protocol](../../skills/dev-execution/git-worktree-pr-protocol.md) §5–6). Record the landing pointer (`merge_commit`, `merge_branch`) in plan frontmatter.
 - Run `manage-plan-status.py --status completed`.
-- Consume any `council_artifacts` paths from the ExecutionReport and update the plan-completion artifact.
-- Write `${PLAN_DIR}/plan-completion.md` (see §"Plan-Level Completion Report" in the manual loop section for required content).
+- Consume any `council_artifacts` paths from the ExecutionReport and attach them to the reviewer verdict record on the PR.
+- **Plan-level completion record.** The reviewer verdict + `commit_refs` on the PR are the record of plan completion; the `${PLAN_DIR}/plan-completion.md` write retired per `.claude/skills/dev-execution/references/execution-doctrine.md` §Bookkeeping demotions.
+- **Recommended — produce a `program` delivery-report** for a shareable, evidence-backed
+  "where did this whole plan land" snapshot (every open/deferred item carries a copyable agent
+  handoff). Recommended, **not blocking** — skip for a low-visibility internal plan. Invoke
+  `Skill("delivery-report")`, pick route `program`, subject = the plan slug; record the rendered HTML
+  path on the PR / in plan frontmatter (the standalone `plan-completion.md` retired per
+  `.claude/skills/dev-execution/references/execution-doctrine.md` §Bookkeeping demotions).
+  Lifecycle/route map: `.claude/skills/dev-execution/SKILL.md` § "Forward-Looking Status Reports".
+- **Close with the Next Actions table** ([.claude/skills/dev-execution/references/next-actions-table.md]):
+  deferred items, follow-ups, Mode-D escalations, and the recommended next effort as rows — front-and-center
+  callout when the `program` report was produced, with the report path listed as an artifact.
 
 ### Dry-run flag (`--dry-run`)
 
@@ -176,7 +237,13 @@ ls -d .claude/progress/${BASE_SLUG}*/ 2>/dev/null
 
 Extract `wave_plan.waves` from frontmatter. Each wave entry must provide `phases: [N, M, ...]`, optional `isolation: worktree|none`, and optional `owner_skills: [...]`.
 
-Additionally, extract `wave_plan.phases[]` entries — each phase entry may carry optional `model` and `effort` fields that serve as the dispatch defaults for all implementer `Task()` calls within that phase. Build a lookup map `PHASE_DEFAULTS[phase_id] → {model, effort}` (both fields may be absent if not specified in the plan). Refer to [.claude/skills/planning/references/wave-plan-guidance.md] for the full `phases[]` schema and effort vocabulary.
+Additionally, extract `wave_plan.phases[]` entries — legacy plans may carry optional `model` and `effort` fields that serve as the dispatch defaults for all implementer `Task()` calls within that phase. Build `PHASE_DEFAULTS[phase_id] → {model, effort}` (both fields may be absent).
+
+> **DEPRECATED — legacy plans only.** `phases[].model`, `.provider`, `.profile`, and per-task agent/model pins in `wave_plan.phases[]` are honored so in-flight plans keep executing, but **NEW Tier 2/3 plans do NOT carry plan-time model or agent pins** (per `.claude/skills/planning/references/plan-doctrine.md`). For new plans, routing is resolved at dispatch time via `delegation-router` from the plan's routing CONSTRAINTS (which classes stay claude-primary, offload-eligibility, capability bar per milestone) — never from a plan-time model id.
+>
+> The `wave_plan.orchestrator_model` frontmatter (plan-level default + per-phase overrides) is **deleted** per `.claude/skills/dev-execution/references/execution-doctrine.md` §Bookkeeping demotions — it was advisory, never actually read, and the orchestration loop cannot switch its own main-loop model mid-run. Silently ignore the field on any plan that still carries it.
+
+Refer to [.claude/skills/planning/references/wave-plan-guidance.md] for the full `phases[]` schema and effort vocabulary.
 
 **Fallback** when `wave_plan.waves` is absent: build sequential `[[P1], [P2], ..., [PN]]` from the `phases:` array (one phase per wave, no isolation).
 
@@ -197,7 +264,7 @@ No Task() dispatches. No progress writes.
 
 For each wave (in order), launch all phase-owners in **a single message with multiple `Task()` calls** (parallel within wave). Per phase:
 
-Resolve `PHASE_MODEL` and `PHASE_EFFORT` from `PHASE_DEFAULTS[N]` before each dispatch. Both may be absent.
+Resolve `PHASE_MODEL` and `PHASE_EFFORT` from `PHASE_DEFAULTS[N]` before each dispatch. Both may be absent (and MUST be absent on new plans — see the DEPRECATED note in §2 above).
 
 ```text
 Task(
@@ -205,7 +272,9 @@ Task(
   name="P${N}-owner",
   description="Execute Phase ${N} per ${PLAN_PATH}",
   # Pass model= only when the phase has a model set in wave_plan.phases[].
-  # Omit entirely when absent — lets phase-owner's frontmatter default (sonnet) apply.
+  # Omit entirely when absent — lets phase-owner's frontmatter default
+  # (subscription Sonnet 5, claude-sonnet-5) apply; Opus 5 for spine, xhigh for the
+  # hardest coding. Policy: docs/agentic-operator/MODEL-ROUTING.md.
   model=${PHASE_MODEL},           # OMIT this line when PHASE_MODEL is absent
   prompt="""
     Mode: C — Autonomous Phase Sprint (orchestration only; no direct implementation)
@@ -242,8 +311,8 @@ Task(
     File-ownership slots (from wave_plan): ${SLOTS}
     Progress file: ${PLAN_DIR}/phase-${N}-progress.md
     Isolation: ${ISOLATION}  # 'worktree' or 'none'
-    Phase model default: ${PHASE_MODEL}    # OMIT this line when PHASE_MODEL is absent
-    Phase effort default: ${PHASE_EFFORT}  # OMIT this line when PHASE_EFFORT is absent
+    Phase model default: ${PHASE_MODEL}    # DEPRECATED (legacy plans only). OMIT when PHASE_MODEL is absent — the norm for new plans.
+    Phase effort default: ${PHASE_EFFORT}  # DEPRECATED (legacy plans only). OMIT when PHASE_EFFORT is absent — the norm for new plans.
 
     Follow .claude/skills/dev-execution/modes/plan-execution.md §Phase-Owner Delegation Pattern.
     Write Completion Note to .claude/progress/${PLAN_SLUG}/phase-${PHASE_NUM}-completion.md before signaling done. Caller derives the path deterministically; no return value needed.
@@ -304,14 +373,15 @@ After the final wave completes, dispatch the tier-appropriate reviewer (tier fro
 
 Both reviewers run in `plan` permissionMode. Verdict: `APPROVED` or `CHANGES_REQUESTED`.
 
-#### 9. Plan-Level Completion Report
+#### 9. Plan-Level Completion Record
 
-Write `${PLAN_DIR}/plan-completion.md` with:
+The plan-level completion record is the reviewer verdict from §8 plus the `commit_refs` on the PR — the standalone `${PLAN_DIR}/plan-completion.md` write **retired** per `.claude/skills/dev-execution/references/execution-doctrine.md` §Bookkeeping demotions. Attach any `council_artifacts` from the reviewer verdict to the PR record; record Mode-D escalations and scope deviations in plan frontmatter alongside `merge_commit` / `merge_branch`. (The phase-owner **Completion Note** and the Tier 1 contract-appended **Completion Report** are unrelated artifacts and both remain in effect.)
 
-- Per-wave summary (phases, duration, isolation used, validator verdict if interim).
-- Total wall-clock from first dispatch to final reviewer verdict.
-- Reviewer verdict + recommended follow-ups.
-- Any Mode D escalations or scope deviations encountered.
+**Recommended — produce a `program` delivery-report** for a shareable, evidence-backed snapshot (same
+posture as the Workflow-path Post-run step above): `Skill("delivery-report")`, route `program`,
+subject = plan slug. Recommended, **not blocking**. Record the rendered HTML path on the PR / in plan frontmatter.
+
+Close the response with the **Next Actions table** — spec: [.claude/skills/dev-execution/references/next-actions-table.md]. Emit one row per deferred item (DOC-006 spec task), reviewer-recommended follow-up, and Mode-D escalation (`human decision`), plus the recommended next plan/execute effort. When a `program` delivery-report was produced, keep the table front-and-center in the response with the report path listed as an artifact. Empty state only when nothing was deferred and no follow-ups remain.
 
 Update plan frontmatter status:
 
@@ -326,9 +396,11 @@ python .claude/skills/artifact-tracking/scripts/manage-plan-status.py \
 - [ ] Tests, typecheck, and lint pass after final wave
 - [ ] Per-wave checkpoints recorded under `${PLAN_DIR}/.wave-*-checkpoint`
 - [ ] Worktree merges complete or cleanly discarded (no orphan branches)
-- [ ] Feature-level reviewer gate returned `APPROVED`
-- [ ] Plan-level Completion Report written to `${PLAN_DIR}/plan-completion.md`
+- [ ] PR opened to the parent branch; run-branch squash-merge gated on approval/override (no unreviewed self-merge)
+- [ ] Feature-level reviewer gate returned `APPROVED` (verdict + PR `commit_refs` = the plan-level completion record; standalone `plan-completion.md` retired per execution-doctrine §Bookkeeping demotions)
 - [ ] Plan frontmatter `status` updated to `completed`
+- [ ] Next Actions table emitted (deferred items + follow-ups + recommended next effort, or empty state)
+- [ ] *(Recommended, non-blocking)* `program` delivery-report produced + HTML path recorded, when a shareable status snapshot is wanted
 
 ## Skill References
 
