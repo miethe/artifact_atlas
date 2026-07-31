@@ -11,6 +11,12 @@ risk_level: medium
 context_class: C3   # M2 (scope-attribution correctness) is C3; M1/M3 are C2, M4 is C1.
 created: 2026-07-31
 prd_ref: docs/project_plans/prds/features/delivery-report-hosting-v1.md
+# IntentTree binding (captured 2026-07-31): feature node + 4 milestone nodes (M1-M4) with
+# depends_on edges (M2/M3/M4 -> M1) live in the new artifact_atlas tree; sibling PF-2/PF-3
+# relationships are external-links on M1/M3/feature (siblings not yet registered in itt).
+intenttree_workspace: ws_01KV8VMWX9EJ6VDQKEBMYQZRXG   # Agentic OS (slug: agentic-os)
+intenttree_tree: tree_01KYWGV76XTEM7B11GYWD7Q93Y      # artifact-atlas (new per-repo tree)
+intenttree_node: node_01KYWGWKHF5BWAQYACK46NC1TC      # PF-1 feature work_package
 spike_ref: ../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/spikes/atlas-spike.md
 adr_refs:
   - ../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/delivery-report-hosting-and-linking-proposed-adr.md
