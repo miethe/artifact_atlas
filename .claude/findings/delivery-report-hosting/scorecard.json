@@ -1,0 +1,47 @@
+{
+  "run_id": "20260802-m1",
+  "target": "phase-taskout / M1 — Report-aware ingest returns a servable preview URL",
+  "generated_at": "2026-08-02T01:45:49Z",
+  "scores": [
+    {
+      "dimension": "correctness",
+      "score": 3.5,
+      "rationale": "One accepted medium-severity bug (ADJ-01: duplicate-hash short-circuit can skip delivery_report classification and preview_allowed access, directly threatening the pinned M1 AC) and one accepted low-severity reporting-accuracy gap (ADJ-02: stated 17 tests vs actual 13). No accepted finding reaches high/critical severity."
+    },
+    {
+      "dimension": "concurrency",
+      "score": 3.0,
+      "rationale": "ADJ-01's duplicate-hash check is a confirmed check-then-act (TOCTOU) race under concurrent writers, independently corroborated by the concurrency lens. No dedicated locking/versioning was found around _find_by_hash."
+    },
+    {
+      "dimension": "test_coverage",
+      "score": 3.0,
+      "rationale": "13/13 tests pass (verified by independent re-run), but the suite has zero coverage of the true-duplicate-hit path through import_report — it explicitly routes around it via on_duplicate='create_new' for unrelated tests, leaving ADJ-01's degraded path unguarded by any regression test."
+    },
+    {
+      "dimension": "reporting_accuracy",
+      "score": 3.0,
+      "rationale": "Completion report claimed 17 tests where 13 exist; the progress file's own verified_by note contradicts the completion narrative (ADJ-02)."
+    },
+    {
+      "dimension": "input_integrity",
+      "score": 1.0,
+      "rationale": "9 of the 12 findings referenced by the adjudication summary (rejected=3, disputed=1, watchlist=5) plus the tail of ADJ-03 were never transmitted to this decision-record-writer step. This is a pipeline gap in how the run was handed off, not a defect in the M1 code, but it materially limits how much confidence this record can carry — this run's decision_record.md and risk_register.yaml only cover the 3 findings actually received (2 complete + 1 truncated) plus a meta-finding documenting the gap."
+    }
+  ],
+  "overall": 72,
+  "by_lens": {
+    "correctness": 70,
+    "concurrency": 60,
+    "adversarial_trace": 75,
+    "observability": 60,
+    "input_integrity": 20
+  },
+  "blocking_count": 0,
+  "total_findings": 12,
+  "findings_received_in_full": 2,
+  "findings_received_partial": 1,
+  "findings_not_received": 9,
+  "summary": "M1 (report-aware ingest -> servable preview URL) has no accepted blocking (severity>=high) findings. The one accepted medium-severity issue (ADJ-01) is a real correctness/concurrency gap in the duplicate-hash short-circuit that can silently skip delivery_report classification and preview_allowed access on a hash match, threatening the pinned AC under a specific (untested) re-ingest/collision scenario; it should be fixed or explicitly risk-accepted before treating M1 as durably closed. ADJ-02 is a low-severity reporting-accuracy correction to the completion report's test count. Separately, this run's decision-record inputs were incomplete: the adjudication summary counted 12 total findings (3 accepted, 3 rejected, 1 disputed, 5 watchlist) but only 2 full findings plus a truncated 3rd were actually transmitted to this writer step — the 9 remaining findings (all rejected/disputed/watchlist content) are undocumented here and must be reconciled from the original adjudicator output, not reconstructed from this record.",
+  "recommendation": "proceed_with_conditions"
+}

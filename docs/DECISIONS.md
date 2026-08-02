@@ -798,80 +798,6 @@ fraction of the mockup's fields, the library lacked the expanded filter bar and 
 views, there was no Projects index (the root route hard-redirected to the seeded project), and
 the BOM view had neither missing-slot visualization nor a template/BOM builder.
 
----
-
-## D-018 — Delivery-Report Hosting: artifact_atlas Host + Scope Linking
-
-**Status**: Accepted  
-**Date**: 2026-07-31  
-**Phase**: PF-1 (Tier-2 feature: delivery-report-hosting)  
-**Deciders**: lead-architect
-
-### Context
-
-Rendered `/delivery-report` HTML (output from the launchpad's `delivery_report.py` skill, routes: `feature` / `dossier` / `program` / `phase` / `readiness`) lands as loose files under `.claude/reports/…` with no index, no hosting, and no linkage to the feature/epic/project that produced it. The `dev-execution` phase-close hook bundles these reports but has no way to surface them durably or link them back to work-tracking systems.
-
-Two sibling features depend on this decision:
-- **PF-2** (intenttree-link-and-ui): Needs a stable servable preview URL from Atlas to store as an `ExternalLink` 
-- **PF-3** (agentic_meta_dev wiring): Implements the delivery-report export & ingest orchestration, blocks on PF-1 M1 + OQ-3
-
-An upstream `/plan:explore` run (`delivery-report-hosting-and-linking-charter.md`, completed 2026-07-30) tested whether hosting AND linking both require building substantially new infrastructure and refuted the deal-killer: both artifact_atlas and IntentTree already ship suitable primitives (Atlas's sandboxed HTML capsule route + HtmlRenderer, IntentTree's existing ExternalLink model for precedent `RF`-grounding links).
-
-### Decision
-
-**artifact_atlas is the first-class HOST and browsable index for rendered delivery-report HTML.** Rendered reports are ingested as first-class Atlas assets with:
-
-- **Metadata**: `artifact_type_id=delivery_report`, `source_kind=local`, `generated_by=agent`, `mime_type=text/html`
-- **Envelope-driven ingest**: A report-aware ingest path (CLI `atlas report ingest --envelope <writeback.json>` or create+link composition) reads the PF-3 writeback envelope and calls `ImportService.import_content` + `AssetService.create_link` with:
-  - The report blob hashed and stored in the managed content store (`assets/content/<hash[:2]>/<hash>`)
-  - Metadata from envelope fields: `route`, `revision`, `truth_status`, `subject` (primary scope)
-  - **Load-bearing**: `agent_access=preview_allowed` set at ingest — the preview capsule route defaults to `metadata_only` which 403s HTML (Atlas GAP-3)
-- **Servable URL**: Existing `GET /api/preview/asset/{id}/html` route returns 200 with `Content-Security-Policy: sandbox allow-scripts`, never a raw filesystem path
-- **Scope linking**: Multi-attach from envelope's `subject` + `tracker_links[]` creates `AssetLink` rows to feature/project/intenttree_node (uses existing `AssetService.create_link` and `AssetLinkTargetType` vocabulary — no schema change)
-- **Dossier revisioning**: Re-ingesting the same dossier slug updates the **stable asset** via `PUT /content` keyed by envelope identity (route + subject/revision), leaving links intact — not a new asset per phase (OQ-3 decision, unblocks PF-3 M2/M3)
-
-**Files stay canonical; Atlas holds derived views only.** The local `.claude/reports/…` files remain the canonical artifacts. Atlas never deletes, moves, or repoints them — it holds a read-only index and pointer layer only (guardrail R1/R8 from PF-1 PRD).
-
-**No new storage, render, or link-model code.** This is pure composition over shipped primitives:
-- The sandboxed HTML capsule + HtmlRenderer already exist (`api/app/api/preview.py:633-746`, `web/features/assets/components/AssetViewer/HtmlRenderer.tsx`)
-- The link vocabulary + AssetService methods exist (`AssetLinkTargetType`, `api/app/models/vocabulary.py:262-273`)
-- The content-addressed blob store exists (`ImportService.import_content`, D-013)
-- The `PUT /content` revisioning path exists (`api/app/api/assets.py:283`)
-
-**Reconciliation with prior ADR:** An earlier, never-accepted ADR (2026-06-12, `artifact-atlas-agentic-catalog-proposed-adr.md`) proposed MeatyWiki as the catalog host and Atlas as a static adapter. Since then, artifact_atlas shipped its own JSONL registry, content-addressed store, and preview proxy — the actual architecture diverged. This decision recognizes that Atlas is now a real first-class host. **The prior ADR's still-valid principles are retained**: HTML pages are first-class assets; hosting stays local-first and non-public by default (report assets default to non-public `sensitivity`); agents use a controlled API, not broad filesystem access; no LLM on render/browse (C4: the preview route is pure `FileResponse`, no model calls).
-
-### Deferred Items (Stated, Not Silently Dropped)
-
-The following items are explicitly **out of scope for PF-1 v1**, captured as `DI-` rows in the deferred backlog:
-
-- **DI-G4**: Cross-scope Reports lens (bespoke `/reports` route with route/revision/truth_status columns and epic→features→reports rollup) — a Tier-2 follow-on; today a per-project saved filter is viable, but cross-scope aggregation needs query capabilities the API lacks
-- **DI-G6**: First-class `epic` as an `AssetLinkTargetType` alias — optional enhancement; `intenttree_node` already covers it via the `meta.role="epic"` convention; deferred if a first-class label is later wanted
-- **DI-R7 (backfill)**: Fleet-wide backfill of pre-existing scattered `.claude/reports/…` HTML — never a v1 blocker; a future `op fleet`-style sweep for historical reports
-- **DI-sensitivity**: Report-asset sensitivity defaulting posture — currently inherits the workspace default (`personal` per D-009). Confirm/set a non-public baseline at ingest if needed (LAN-bound reports carry commit hashes, internal paths, model-routing); tracked as a deferred item pending confirmation that the default is appropriate
-
-### Reconciliation of Stale Scattered-HTML Posture Notes
-
-Prior documentation (including pre-hosting planning docs and design specs) references the "scattered `.claude/reports/…`" model as the canonical arrangement. **As of D-018, the posture is**: scatter remains the canonical *file* location (never repointed); Atlas holds a derived *browsable index + servable URL layer* on top. Any doc claiming reports should be moved into Atlas or that Atlas is the canonical store is outdated — clarify that files stay canonical and Atlas is the index/pointer layer.
-
-### Consequences
-
-- Delivery reports become discoverable from the task graph (via ExternalLink in IntentTree) and browsable in one cross-scope home (Atlas asset list + per-project view)
-- The two half-built writeback envelopes (delivery-report's `export --target intenttree`, html-capsules' `export-writeback`) become actuated instead of decaying inert
-- Ingest is pure composition over existing services — no new persistence layer, no new render code, no new link model
-- Dossier revisioning (OQ-3) is explicit and stable: re-ingest converges on one asset id, updates blob content, preserves links
-- Report assets are correctly scoped and attributed; a wrong/absent link target fails loudly, never silently (mirrors PF-2 R1 correctness guardrail)
-- No constraints violated: no LLM on render/browse (C4 ✓), files canonical (C2 ✓), loopback bind default (C3 ✓)
-
-### References
-
-- **Upstream proposed ADR**: `../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/delivery-report-hosting-and-linking-proposed-adr.md` (status: proposed; accepts/supersedes the 2026-06-12 catalog ADR)
-- **PF-1 PRD**: `docs/project_plans/prds/features/delivery-report-hosting-v1.md` (full requirements, gates, and success metrics)
-- **PF-1 implementation plan**: `docs/project_plans/implementation_plans/features/delivery-report-hosting-v1.md` (milestone breakdown M1–M4)
-- **Design spec**: `../agentic_meta_dev/docs/project_plans/design-specs/delivery-report-hosting-and-linking-v1.md` (section 2.A composites, section 6 end-to-end flow)
-- **Atlas spike findings**: `../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/spikes/atlas-spike.md` (gap analysis: G2 store/tag, G3 preview_allowed, G5 revisioning)
-- **Feasibility brief**: `../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/delivery-report-hosting-and-linking-feasibility-brief.md` (verdict: GO, atlas leg 0.82 confidence)
-- **Superseded**: `../agentic_meta_dev/docs/project_plans/exploration/artifact-atlas-agentic-catalog/artifact-atlas-agentic-catalog-proposed-adr.md` (2026-06-12, status: proposed; reconciled by D-018)
-
 ### Decision
 
 Five parallel workstreams brought the app to mockup fidelity with **additive-only** backend
@@ -905,3 +831,145 @@ changes:
 - Client-side metadata merge (read-modify-write) has a small lost-update window between
   concurrent editors; acceptable single-user, revisit with V1-001 multi-user.
 - Validation at merge: web tsc clean, vitest 106/106, api pytest 631 passed / 2 skipped.
+
+---
+
+## D-018 — Delivery-Report Hosting: Asset Ownership + Catalog Principles (PF-1 host decision)
+
+**Status**: Accepted  
+**Date**: 2026-08-01  
+**Phase**: PF-1 M4  
+**Deciders**: nick (PF-1 lead)
+
+### Context
+
+Rendered `/delivery-report` HTML (output from the launchpad's `delivery_report.py` skill, routes `feature` / `dossier` / `program` / `phase` / `readiness`) lands as loose files under `.claude/reports/…` with no index, no hosting, and no linkage to the feature/epic/project that produced it. The `dev-execution` phase-close hook bundles these reports but has no way to surface them durably or link them back to work-tracking systems.
+
+Two sibling features depend on this decision:
+
+- **PF-2** (intenttree link + UI) — needs a stable servable preview URL from Atlas to store as an `ExternalLink`. **Shipped** (`merge_commit 5bf3f1b`, PR #9) and it hard-rejects any report URL not starting `http(s)://`, which makes the origin-qualified URL a real contract rather than a preference.
+- **PF-3** (agentic_meta_dev wiring) — implements delivery-report export + ingest orchestration; blocks on PF-1 M1 and OQ-3. **Status `not_started`**, so no upstream `atlas` export target exists yet and PF-1 defines the ingest contract.
+
+An upstream `/plan:explore` run (`delivery-report-hosting-and-linking-charter.md`, completed 2026-07-30) tested whether hosting AND linking both require substantially new infrastructure, and refuted that deal-killer: both artifact_atlas and IntentTree already ship suitable primitives (Atlas's sandboxed HTML capsule route + HtmlRenderer; IntentTree's existing `ExternalLink` model, with RF-grounding links as precedent).
+
+The open decision is whether this hosting model aligns with the upstream artifact-atlas-agentic-catalog ADR principles, and how to reconcile the scattered existing HTML posture.
+
+### Decision
+
+Delivery-report hosting adopts the Artifact Atlas Catalog Ownership model from the 2026-06-12 proposed ADR (see `../agentic_meta_dev/docs/project_plans/exploration/artifact-atlas-agentic-catalog/artifact-atlas-agentic-catalog-proposed-adr.md`), with the following implementation invariants:
+
+1. **HTML pages are first-class asset types.** Delivery reports are stored as `delivery_report` artifacts with `mime_type: text/html`, joining images, documents, and other content in the Atlas asset graph.
+
+2. **Local-first, non-public by default.** Report assets take an explicit `--sensitivity` when given, otherwise the workspace default (`ATLAS_DEFAULT_SENSITIVITY` / policy config, baseline `personal` per D-009) — with one report-specific rule: the result is **floored at non-public**, so a workspace defaulting to `public` still yields a non-public report. Reports embed commit hashes, internal paths and model-routing detail, so publishing one by default would be a leak. `agent_access` is the one field ingest sets deliberately: `preview_allowed`, which is the serve contract for the sandboxed capsule route, **not** a public/external grant. Nothing else is auto-elevated without explicit human action.
+
+   *Correction (post-review):* an earlier revision of this entry claimed reports "inherit the workspace's default sensitivity (`personal`)". The shipped code at the time did not — it hardcoded `sensitivity or "personal"`, which is always truthy and so never consulted the workspace default, silently **downgrading** a `client_sensitive` workspace to `personal`. The code was fixed to defer to the default and floor only `public` (`ImportService._report_sensitivity`), and this entry now describes actual behavior. Pinned by two regression tests in `api/tests/test_report_ingest.py`.
+
+3. **Controlled API only; no broad filesystem access.** Agents retrieve reports through `GET /api/preview/asset/{id}/html` (policy-gated) and asset search/link APIs, never by scanning `.claude/reports/…` directories directly. The asset index (JSONL) is the source of truth; filesystem paths are implementation detail.
+
+4. **IntentTree/project ties are explicit links.** Report ownership (feature/project/intenttree_node scope) is captured as `AssetLink` rows with well-defined `target_type`, never inferred from path or naming convention. Multi-attach on write is supported — a report linking multiple nodes is correct and common (RF precedent).
+
+5. **No LLM on render/browse.** Stored, previewed, and served reports are deterministic; no model calls during hosting, rendering, or asset retrieval. Future semantic search or summarization is optional and deferred.
+
+6. **Catalog stays derived.** Atlas is not the system of record for generated artifact content. The canonical `.claude/reports/…` files remain authoritative; Atlas indexing and serving are derived views. Ingest never deletes or moves canonical files (R1/R8 guardrail).
+
+These principles are a direct carry-forward of the 2026-06-12 catalog ADR, reconciling it with the delivery-report-hosting scope boundary (OQ-1/OQ-3/OQ-4 resolved in the PF-1 plan).
+
+### Reconciliation of stale scattered-HTML posture notes
+
+Prior documentation (pre-hosting planning docs and design specs) references the "scattered `.claude/reports/…`" model as the canonical arrangement. **As of D-018 the posture is:** scatter remains the canonical *file* location and is never repointed; Atlas holds a derived *browsable index + servable URL layer* on top. Any doc claiming reports should be moved into Atlas, or that Atlas is the canonical store, is outdated — files stay canonical, Atlas is the index/pointer layer. The PF-1 plan's own problem statement carries an inline resolved-marker to this effect.
+
+### Consequences
+
+- Reports hosted by Artifact Atlas are accessible to agents through policy-gated APIs, not broad filesystem access — aligns with AOS agent-writing doctrine and system sovereignty.
+- The preview capsule (`GET /api/preview/asset/{id}/html` with sandboxed `text/html` inline route) serves as the hosting infrastructure; no new render/proxy/security code is needed.
+- Re-ingest of the same dossier slug updates the blob in-place via `PUT /content` (stable asset id), leaving project/feature/node links intact (OQ-3 decision, PF-1 M3).
+- Scattered existing HTML reports in `.claude/reports/…` remain in-place unless explicitly migrated. No fleet-wide backfill is performed by PF-1 (R7, deferred to Tier-2).
+- The decision record chain (D-012 ADR-4 viewer, D-015 full-surface HTML route, D-018 hosting model) unifies HTML as first-class throughout the system: authored via skills, stored as assets, served via capsule, linked to intent.
+
+### References
+
+- Upstream proposed ADR: `../agentic_meta_dev/docs/project_plans/exploration/artifact-atlas-agentic-catalog/artifact-atlas-agentic-catalog-proposed-adr.md` (2026-06-12)
+- PF-1 plan: `docs/project_plans/implementation_plans/features/delivery-report-hosting-v1.md` (decisions: OQ-1, OQ-3, OQ-4)
+- PF-1 PRD: `docs/project_plans/prds/features/delivery-report-hosting-v1.md` (requirements, gates, success metrics)
+- PF-1 implementation plan: `docs/project_plans/implementation_plans/features/delivery-report-hosting-v1.md` (milestones M1–M4)
+- Design spec: `../agentic_meta_dev/docs/project_plans/design-specs/delivery-report-hosting-and-linking-v1.md` (§2.A composites, §6 end-to-end flow)
+- Atlas spike findings: `../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/spikes/atlas-spike.md` (gap analysis: G2 store/tag, G3 preview_allowed, G5 revisioning)
+- Feasibility brief: `../agentic_meta_dev/docs/project_plans/exploration/delivery-report-hosting-and-linking/delivery-report-hosting-and-linking-feasibility-brief.md` (verdict GO; atlas leg 0.82 confidence)
+- Sibling PF-3 plan: `../agentic_meta_dev/docs/project_plans/implementation_plans/delivery-report-hosting-and-linking-v1.md` (note: no `infrastructure/` subdir; status `not_started`)
+- Superseded: `../agentic_meta_dev/docs/project_plans/exploration/artifact-atlas-agentic-catalog/artifact-atlas-agentic-catalog-proposed-adr.md` (2026-06-12, status proposed; reconciled by D-018)
+- Execution ledger (verified envelope + PF-2 contracts, deviations, post-review fixes): `.claude/worknotes/delivery-report-hosting/implementation-notes.md`
+- M1 council-review artifacts: `.claude/findings/delivery-report-hosting/`
+- Related D-012 (viewer dispatch + XSS hardening), D-015 (full-surface HTML route), D-016 (content store persistence)
+
+---
+
+## Deferred Items (DI) — Delivery-Report Hosting and Catalog
+
+The following scope items are explicitly deferred and tracked as discovery tickets for Tier-2 or future phases. Deferral is by design (not dropped); each row includes rationale and suggested handling.
+
+### DI-G4 — Reports lens / cross-scope dashboard (OQ-2, Tier-2 follow-on)
+
+**Description**: A UI surface showing all `delivery_report` assets across a workspace, with filtering by route (feature/dossier/program/phase/readiness), date, subject/project, truth_status, and linked node. The design spec calls this the "cross-scope Reports lens" in section 14.1. Current MVP surfaces (library, project detail) show all asset types; a reports-only aggregation is not yet available.
+
+**Why deferred**: Deferred in the PF-1 plan (OQ-2) as non-blocking; library filtering and project-scoped views cover the immediate workflow. Tier-2 follow-on can add a dedicated Reports lens without changing the ingest or storage contracts.
+
+**Suggested handling**: File as a feature in Tier-2 planning. Acceptance criteria: saved filter for `artifact_type_id=delivery_report` OR a new `/reports` route with route/subject/status facets and result pinning. Blocks: none (additive UI only).
+
+---
+
+### DI-G6 — Epic link alias / AssetLinkTargetType expansion (future)
+
+**Description**: The current `AssetLinkTargetType` enum has `feature`, `project`, `intenttree_node`. A sibling PF-2 (intenttree link+UI) references "epic" as a link target in its contract, but delivery-report hosting does not yet emit epic links. The enum should be extended if epics become first-class in IntentTree's domain model.
+
+**Why deferred**: PF-2 does not require an `epic` enum value for PF-1 M1–M3 acceptance (it uses `intenttree_node` for all tree-based targets). IntentTree's formal epic model is not yet stable. Deferred to IntentTree's domain model clarity.
+
+**Suggested handling**: Coordinate with PF-2 and IntentTree on whether `epic` is a distinct target type or a node-type attribute. If distinct, add to `AssetLinkTargetType` in `api/app/models/vocabulary.py` and update link creation/retrieval tests. Blocks: none (links via `intenttree_node` work today).
+
+---
+
+### DI-Backfill — Fleet backfill of scattered `.claude/reports/` HTML (R7, non-goal)
+
+**Description**: Existing projects have HTML reports scattered across `.claude/reports/…` directories, created before the hosting service existed. These files could be bulk-ingested as assets to provide a searchable index. The design spec (R7) explicitly marks this as a non-goal for MVP.
+
+**Why deferred**: Scope boundary R7 excludes fleet backfill. Automating a discovery/ingest across all projects in a fleet introduces migration complexity and cross-project policy decisions (sensitivity defaults per project vs. workspace-wide). MVP focuses on new ingest paths; legacy migration is Tier-2.
+
+**Suggested handling**: Create a documented backfill script (not automated) that accepts a project path and directory pattern, listing candidate HTML files with preview (no auto-ingest). Users can manually select files to ingest. Suggested Tier-2 timeline: post-pilot feedback.
+
+---
+
+### DI-Sensitivity — Report-asset sensitivity defaulting policy (M3 observation)
+
+**Description**: Report assets are ingested with `sensitivity=personal` (workspace default) and `agent_access=preview_allowed` (to enable the capsule route). This is correct for generated summaries/overviews, but some reports may carry sensitive content (client names, internal metrics, model routing). The ingest verb does not re-evaluate sensitivity on subsequent ingests (it preserves the original setting), which is intentional (avoid silent policy changes). However, the workspace-level default and any per-report override mechanism are not yet documented.
+
+**Why deferred**: Policy defaulting is covered by D-009 (baseline policy), but report-specific sensitivity guidance (e.g., "reports carrying client names should default to `client_sensitive`") is a policy-and-docs item that follows from pilot usage patterns. Deferred to Phase 2 (post-pilot).
+
+**Suggested handling**: After pilot, document report-asset policy defaults in `docs/user-workflows.md` or a new `docs/policy-guide.md`. Include a checkbox in the ingest CLI (`atlas report ingest --sensitivity work_sensitive …`) for explicit override if needed. Suggested Tier-2 timeline: after pilot feedback on sensitivity UX.
+
+---
+
+### DI-LinkTarget — Tracker/subject link-target existence validation gap (M2 observation, deferred)
+
+**Description**: The ingest verb validates the **shape** of `tracker_links[].tracker` and `subject` (e.g., does `tracker` look like `node_<id>`?) and checks whether `subject` resolves to an Atlas project. It does **not** verify that a well-formed `node_<id>` or `tree_<id>` actually exists in IntentTree, or that a `feature` subject refers to a real feature in upstream systems. A well-formed but nonexistent target (e.g. `node_DOESNOTEXIST`) creates a link silently.
+
+**Why deferred**: Building an IntentTree client just to validate link targets is outside the PF-1 composition scope (reuse shipped primitives, no new subsystem clients). The risk — silent misattribution to a nonexistent node — is real and **currently unmitigated at write time**. The only present-day surface is the CLI's post-hoc link printout (`atlas report ingest` prints each created link, `api/app/cli/atlas.py`), which an operator can eyeball *after* the fact. There is no pre-publish link-preview UI; an earlier revision of this row cited one as a mitigation, which was wrong — it does not exist.
+
+**Suggested handling**: Document the limitation in `docs/agent-handoff.md` (section "Link Target Validation") and the CLI help text for `atlas report ingest`. After pilot, add an optional `--verify-targets` flag that does an existence check via the IntentTree API (requires a policy review to grant Atlas an IntentTree client). Blocks: none for PF-1 — shape validation does catch malformed ids, and the failure mode is a dangling link rather than a link to the *wrong* real node.
+
+---
+
+### DI-SubjectCollapse — `(route, subject)` identity collapses non-dossier reports (upstream DI-283 / PF-3 OQ-5)
+
+**Description**: M3's stable asset id is keyed on `(route, subject)` per the plan's accepted OQ-3 decision. But `subject` is a feature/project **slug**, not a per-instance key — it is emitted as `report.subject or report.project` (`delivery-report/scripts/delivery_report.py:1391`). That is exactly right for `dossier` and `feature` (the intended "one living record" model), but it **collapses** `phase`, `program`, and `readiness` reports for the same project onto a single asset: ingesting a phase-2 report and then a phase-3 report for one project overwrites the first's blob. Confirmed by a dedicated regression test (`TestReportRevisionSubjectCollapseLimitation`, `api/tests/test_report_revision.py`) that asserts the collapse rather than a fix, and documented in the `atlas report ingest` help text.
+
+**Why deferred — with an important distinction.** Two separable things are at play, and only the first is genuinely upstream:
+
+1. *The inability to **separate instances*** is upstream. There is no discriminator in the envelope; `subject = report.subject or report.project` and nothing identifies which phase/run a report came from. Atlas cannot mint an authoritative per-instance key for a field it does not own — deriving one from `generated_at` or `revision` would fabricate an upstream contract and then diverge once PF-3 OQ-5 settles it. Correctly deferred.
+2. *The **silent overwrite** is a local choice*, not an upstream constraint. Gating the stable-id lookup on `route in {feature, dossier}` — the plan's own stated "one living record" intent — would turn silent data loss into new-asset-per-ingest, using only data Atlas already owns and inventing nothing. That option was available and was **not** taken in PF-1.
+
+An earlier revision of this row described the whole item as upstream. That under-described it: point 2 is a local decision that PF-1 made by applying OQ-3 uniformly across all five routes, where OQ-3's *rationale* ("matches the dossier one-living-record model") only argues for two of them. Not taken unilaterally here because OQ-3 is a human-accepted decision recorded in plan frontmatter whose letter says "NOT a supersedes-chain of new assets"; narrowing it for 3 of 5 routes is a decision to make deliberately, not a fix to slip in during close-out.
+
+**Suggested handling**: Preferred and available now — route-gate the stable-id path to `{feature, dossier}` so a non-dossier re-ingest cannot silently destroy a prior report, and flip the collapse regression test (`api/tests/test_report_revision.py`, `TestReportRevisionSubjectCollapseLimitation`) to assert separation. This needs an explicit amendment to OQ-3, not a silent behavior change. Independently, once PF-3 OQ-5 settles the discriminator, extend the identity key to `(route, subject, <discriminator>)`. Until either lands, callers wanting separate non-dossier assets must supply a distinct subject. Blocks: nothing in PF-1; **does** shape PF-3's phase-close hook, which re-ingests per phase and is therefore the first real consumer to hit this.
+
+---
+
+Deferred items are reviewed at each phase boundary. None of these block PF-1 acceptance (all are explicitly out-of-scope per the plan). See the PF-1 exit criteria (plan M4 section) for acceptance gates.

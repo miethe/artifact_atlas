@@ -7,6 +7,7 @@ Implements:
 
 Environment variables (all optional, override workspace.yaml values):
   ATLAS_REGISTRY_DIR          – override storage.registry_dir
+  ATLAS_PUBLIC_BASE_URL       – origin for absolute preview URLs (default http://localhost:8042)
   ATLAS_EXPORTS_DIR           – override exports.context_packs_dir
   ATLAS_REPORTS_DIR           – override exports.reports_dir
   ATLAS_CCDASH_EVENTS_PATH    – override exports.ccdash_events_path (absolute path to file)
@@ -139,6 +140,19 @@ class Settings:
 
         intenttree_link_dir_raw = exports_cfg.get("intenttree_link_dir", "exports/intenttree")
         self.intenttree_link_dir: Path = _make_absolute(intenttree_link_dir_raw, _REPO_ROOT)
+
+        # -- Public base URL (PF-1 M1): the origin this API is reachable at.
+        # Report ingest must hand downstream consumers an ORIGIN-QUALIFIED
+        # ABSOLUTE preview URL. The intenttree consumer (PF-2, shipped) hard-
+        # rejects anything not starting http(s):// -- `itt link report` raises
+        # BadParameter, and its UI read surfaces gate the anchor on the same
+        # regex, so a relative path is both unstorable and non-clickable.
+        # Trailing slashes are stripped so callers can always join with "/...".
+        self.public_base_url: str = (
+            os.environ.get("ATLAS_PUBLIC_BASE_URL")
+            or cfg.get("server", {}).get("public_base_url")
+            or "http://localhost:8042"
+        ).rstrip("/")
 
         # -- Policy defaults (D-009)
         self.default_sensitivity: str = (

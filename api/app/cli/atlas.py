@@ -12,6 +12,7 @@ Subcommands:
     inbox list              List inbox assets.
     asset classify <id>     Set sensitivity/agent_access on an asset.
     asset link <id>         Link an asset to a target.
+    report ingest <html>    Ingest a delivery-report HTML + writeback envelope (PF-1 M1).
     bom status <project>    Show BOM coverage summary for a project.
     bom gaps <project>      List BOM gap recommendations.
     bom assign <slot> <asset>  Assign asset to BOM slot.
@@ -246,6 +247,99 @@ def cmd_asset_link(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     )
     result = asset_svc.create_link(link, actor_id="cli")
     print(f"Linked asset {args.id} -> {args.target_type}:{args.target_id} ({result.relationship.value if hasattr(result.relationship, 'value') else result.relationship})")
+    return 0
+
+
+def cmd_report_ingest(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
+    """Ingest a rendered delivery-report HTML file + its writeback envelope.
+
+    PF-1 M1 — composes ``ImportService.import_report`` (which itself composes
+    ``import_content``, no new storage code). PF-1 M2 — the same call also
+    creates ``AssetLink`` rows to the envelope's ``subject`` and every
+    ``tracker_links[]`` target, idempotently. Fails loud (nonzero exit, no
+    partial asset) on a missing HTML file, a missing/unparsable envelope, a
+    malformed envelope shape, or a ``tracker_links[]`` entry naming a
+    wrong/absent/unresolvable target.
+
+    ``subject`` is checked against Atlas's own project registry (by slug),
+    but ``tracker_links[]`` targets are validated for *shape* only (does the
+    id look like a node/tree id) — not for *existence* against IntentTree,
+    the upstream system of record (Atlas has no IntentTree client). See
+    ``implementation-notes.md``.
+    """
+    from app.services.import_index import ImportError as ReportIngestError
+
+    html_path = Path(args.html)
+    if not html_path.exists():
+        print(f"ERROR: report HTML file does not exist: {html_path}", file=sys.stderr)
+        return 1
+
+    envelope_path = Path(args.envelope)
+    if not envelope_path.exists():
+        print(f"ERROR: envelope file does not exist: {envelope_path}", file=sys.stderr)
+        return 1
+
+    try:
+        raw = envelope_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"ERROR: could not read envelope file: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        envelope = json.loads(raw)
+    except ValueError as exc:
+        print(f"ERROR: envelope is not valid JSON: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(envelope, dict):
+        print("ERROR: envelope JSON must be an object.", file=sys.stderr)
+        return 1
+
+    import_svc = svcs["import_svc"]
+    try:
+        result = import_svc.import_report(
+            html_path,
+            envelope,
+            project_id=args.project or None,
+            sensitivity=args.sensitivity or None,
+            actor_id="cli",
+        )
+    except ReportIngestError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    asset = result.asset
+    if result.is_duplicate:
+        verb = "duplicate of"
+    elif result.duplicate_of:
+        # M3: same stable asset id, blob revised in place (not a fresh ingest).
+        verb = "revised"
+    else:
+        verb = "ingested"
+    meta = asset.metadata or {}
+    print(f"Report {verb}: {asset.id}")
+    print(f"  Title:        {asset.title}")
+    print(f"  Route:        {meta.get('route')}")
+    print(f"  Subject:      {meta.get('subject')}")
+    print(f"  Type:         {asset.artifact_type_id}")
+    print(f"  Sensitivity:  {asset.sensitivity.value if hasattr(asset.sensitivity, 'value') else asset.sensitivity}")
+    print(f"  Agent access: {asset.agent_access.value if hasattr(asset.agent_access, 'value') else asset.agent_access}")
+    # Origin-qualified ABSOLUTE url, not a relative path: the intenttree
+    # consumer (PF-2, shipped) rejects any report url that does not start
+    # http(s):// -- `itt link report` raises BadParameter and its UI gates the
+    # anchor on the same regex. Override the origin with ATLAS_PUBLIC_BASE_URL.
+    from app.settings import get_settings
+
+    # rstrip here as well as in Settings.__init__: the value can also arrive
+    # from a directly-assigned settings object (e.g. test fixtures), which never
+    # runs __init__'s normalisation.
+    base = (get_settings().public_base_url or "").rstrip("/")
+    print(f"  Preview URL:  {base}/api/preview/asset/{asset.id}/html")
+
+    links = svcs["assets"].list_links(asset.id)
+    print(f"  Links ({len(links)}):")
+    for link in links:
+        target_type = link.target_type.value if hasattr(link.target_type, "value") else link.target_type
+        print(f"    - {target_type}:{link.target_id}")
     return 0
 
 
@@ -487,6 +581,46 @@ def build_parser() -> argparse.ArgumentParser:
     p_link.add_argument("--target-id", dest="target_id", required=True, help="Target ID.")
     p_link.add_argument("--relationship", help="Relationship type (default: related).")
 
+    # report
+    p_report = sub.add_parser("report", help="Delivery-report ingest.")
+    report_sub = p_report.add_subparsers(dest="report_cmd")
+
+    p_report_ingest = report_sub.add_parser(
+        "ingest",
+        help=(
+            "Ingest a delivery-report HTML file + writeback envelope. "
+            "Re-ingesting the same (route, subject) revises the SAME asset "
+            "id in place (PUT /content; links preserved) rather than "
+            "minting a new one -- see 'Dossier revisioning' below. "
+            "Note: subject/tracker_links[] link targets are shape-validated "
+            "only (id format), not existence-validated against the "
+            "upstream system of record."
+        ),
+        description=(
+            "Ingest a rendered delivery-report HTML file + its writeback "
+            "envelope as a delivery_report Asset.\n\n"
+            "Dossier revisioning (PF-1 M3): identity is (route, subject) as "
+            "emitted by the envelope. Re-ingesting the same identity updates "
+            "the existing asset's blob in place -- one living record per "
+            "subject, its AssetLinks untouched -- instead of creating a new "
+            "asset per re-ingest. Known limitation (DI-283): for "
+            "route in {program, phase, readiness}, the envelope carries no "
+            "per-instance discriminator, so distinct reports for the SAME "
+            "subject/project (e.g. a phase-2 and a phase-3 report) collapse "
+            "onto one asset, silently overwriting each other's blob. This is "
+            "an upstream envelope-shape gap, not a bug in this ingest verb."
+        ),
+    )
+    p_report_ingest.add_argument("html", help="Path to the rendered report HTML file.")
+    p_report_ingest.add_argument(
+        "--envelope", required=True, help="Path to the writeback envelope JSON."
+    )
+    p_report_ingest.add_argument("--project", help="Project slug or ID to associate.")
+    p_report_ingest.add_argument(
+        "--sensitivity",
+        help="Override the default sensitivity (default: personal, never public).",
+    )
+
     # bom
     p_bom = sub.add_parser("bom", help="BOM management.")
     bom_sub = p_bom.add_subparsers(dest="bom_cmd")
@@ -579,6 +713,13 @@ def main(argv: list[str] | None = None) -> int:
         elif asset_cmd == "link":
             return cmd_asset_link(args, svcs)
         parser.parse_args(["asset", "--help"])
+        return 1
+
+    elif cmd == "report":
+        report_cmd = getattr(args, "report_cmd", None)
+        if report_cmd == "ingest":
+            return cmd_report_ingest(args, svcs)
+        parser.parse_args(["report", "--help"])
         return 1
 
     elif cmd == "bom":

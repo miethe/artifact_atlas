@@ -50,6 +50,7 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     settings.require_human_approval_for = ["canonical_promotion"]
     settings.bind_host = "127.0.0.1"
     settings.bind_port = 8000
+    settings.public_base_url = "http://localhost:8042"
     # Phase 4 integration export dirs
     settings.meatywiki_dir = tmp_path / "exports" / "meatywiki"
     settings.ccdash_events_path = tmp_path / "exports" / "events" / "ccdash-events.jsonl"

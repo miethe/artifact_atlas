@@ -1,0 +1,168 @@
+run_id: "20260802-m1"
+target: "phase-taskout / M1 — Report-aware ingest returns a servable preview URL"
+generated_at: "2026-08-02T01:45:49Z"
+
+# INPUT-INTEGRITY NOTE (read before using this file):
+# The adjudication payload handed to this decision-record writer was truncated mid-transmission.
+# The orchestrator's summary asserted: accepted=3, rejected=3, disputed=1, watchlist=5,
+# blocking(severity>=high, accepted)=0. Full finding content (claim/evidence/recommendation/
+# validation) was only received for ADJ-01 and ADJ-02. ADJ-03's claim text was cut off after
+# its title, and NO content at all (not even titles) was received for the 3 rejected, 1 disputed,
+# or 5 watchlist findings referenced by the summary counts. This writer will not fabricate the
+# missing finding content. ADJ-03 is recorded below with only the fields actually received, its
+# remaining required schema fields set to explicit "not received" placeholders, and it is flagged
+# `input_truncated: true`. The 9 missing rejected/disputed/watchlist findings are NOT reconstructed
+# here — see `input_gap` meta-finding below and the decision_record.md rationale for the
+# reconciliation instruction back to the orchestrator.
+
+findings:
+  - id: "ADJ-01"
+    title: "Duplicate-hash short-circuit can return a pre-existing asset without applying delivery_report classification or preview_allowed access"
+    claim: >-
+      import_report delegates to import_content, whose global, type-agnostic duplicate-hash check
+      (_find_by_hash, import_index.py ~654-660) scans ALL non-tombstoned assets by content hash
+      regardless of artifact_type_id/sensitivity/agent_access. With the default
+      on_duplicate='return_existing' (used by both the service default and cmd_report_ingest), a
+      hash match on re-ingest or a coincidental collision with a prior non-report asset returns the
+      EXISTING asset unchanged -- never applying artifact_type_id='delivery_report',
+      agent_access='preview_allowed', mime_type='text/html', or the new envelope metadata. This
+      means GET /api/preview/asset/{id}/html can still 403 on this path, directly threatening the
+      pinned M1 AC ('an envelope-driven ingest creates a delivery_report Asset whose .../html
+      returns 200, not 403'). This is also a check-then-act (TOCTOU) race under concurrent writers,
+      and produces no audit trail/warning when it happens. No test in test_report_ingest.py
+      exercises a true duplicate hit through import_report -- the suite explicitly routes around it
+      via on_duplicate='create_new' for unrelated title-fallback tests.
+    finding_type: "bug"
+    severity: "medium"
+    confidence: "high"
+    disposition: "accepted"
+    evidence:
+      - source: "api/app/services/import_index.py"
+        excerpt_or_locator: "lines 262-281 (import_content dedup path) and 654-660 (_find_by_hash) — \"existing = self._find_by_hash(hash_sha256)\\n if existing is not None:\\n     ...\\n     return ImportResult(asset=existing, is_duplicate=True, duplicate_of=existing.id)\""
+        why_it_matters: "Shows the duplicate-hash short-circuit returns the pre-existing asset object verbatim with no re-classification step, so a hash hit never reaches the artifact_type_id/agent_access/mime_type upgrade logic."
+      - source: "api/app/services/import_index.py"
+        excerpt_or_locator: "import_report -> import_content call (~lines 501-515) — \"on_duplicate=on_duplicate,  # defaults to 'return_existing'\""
+        why_it_matters: "Confirms import_report inherits the same default and does not override on_duplicate to force re-classification for the report path."
+      - source: "api/tests/test_report_ingest.py"
+        excerpt_or_locator: "grep for 'duplicate' — \"assert result.is_duplicate is False (line 77) -- no test covers a true duplicate hit against import_report\""
+        why_it_matters: "Demonstrates the test suite has no coverage of the degraded path, so a regression here would ship undetected."
+      - source: "reviewer:task-completion-validator (correctness)"
+        excerpt_or_locator: "CORR-01"
+        why_it_matters: "Independent correctness-lens confirmation of the same code path."
+      - source: "reviewer:council-review-lens (concurrency)"
+        excerpt_or_locator: "TOCTOU finding on the same _find_by_hash check-then-act sequence"
+        why_it_matters: "Independent concurrency-lens confirmation that the same check-then-act sequence is racy under concurrent writers."
+      - source: "reviewer:adversarial-trace"
+        excerpt_or_locator: "traced duplicate-hash path bypassing access/mime/type upgrade with no audit trail; confirmed the suite routes around it via on_duplicate=\"create_new\""
+        why_it_matters: "Independent adversarial trace confirming no audit trail is produced when the degraded path fires, and confirming the test-suite avoidance pattern."
+    affected_workflows:
+      - "atlas report ingest <html> --envelope <writeback.json>"
+      - "GET /api/preview/asset/{id}/html"
+    recommendation: >-
+      Scope the hash lookup to same artifact_type_id, OR on a duplicate hit inside import_report
+      explicitly re-patch artifact_type_id/agent_access/mime_type/metadata onto the existing asset
+      before returning, OR (minimum) add an explicit test asserting the current degraded behavior
+      and flag it in the plan as an accepted risk for M1 rather than leaving it silently assumed to
+      hold.
+    validation:
+      method: "integration_test"
+      test_or_check: "Add api/tests/test_report_ingest.py case: pre-seed a non-report asset with the same content hash, run import_report with on_duplicate default, assert the returned asset has artifact_type_id=delivery_report and agent_access=preview_allowed (currently would fail), then GET /api/preview/asset/{id}/html returns 200."
+    reviewer: "task-completion-validator"
+    provider: "anthropic"
+    model: "claude-sonnet-5"
+    disputed_by: []
+
+  - id: "ADJ-02"
+    title: "Completion-report test count (17) does not match actual test suite (13)"
+    claim: >-
+      The task's own summary states 17 tests for test_report_ingest.py; a direct file read counts
+      13 test methods, matching the progress file's own verified_by note (13 passed). This is a
+      reporting-accuracy gap in the completion evidence, not a functional defect in the shipped
+      code.
+    finding_type: "gap"
+    severity: "low"
+    confidence: "high"
+    disposition: "accepted"
+    evidence:
+      - source: "api/tests/test_report_ingest.py"
+        excerpt_or_locator: "direct file read — 13 test methods counted"
+        why_it_matters: "Establishes the ground-truth test count against which the completion report's claim of 17 is checked."
+      - source: "progress file verified_by note"
+        excerpt_or_locator: "13 passed"
+        why_it_matters: "The progress file's own evidence field corroborates 13, not 17, meaning the completion narrative is internally inconsistent with its own evidence trail."
+      - source: "reviewer:task-completion-validator (correctness)"
+        excerpt_or_locator: "CORR-03; independently re-ran suite and confirmed 13/13 pass"
+        why_it_matters: "Independent re-run confirms 13 passing tests, ruling out a stale count on the reviewer's side."
+    affected_workflows:
+      - "M1 completion report / milestone close-out record"
+    recommendation: >-
+      Correct the completion report's test count to 13 (or add the missing 4 tests if they were
+      intended but not committed) before closing the milestone record.
+    validation:
+      method: "source_verification"
+      test_or_check: "grep -c 'def test_' api/tests/test_report_ingest.py and diff against the completion report's stated count; update the report text to match."
+    reviewer: "task-completion-validator"
+    provider: "anthropic"
+    model: "claude-sonnet-5"
+    disputed_by: []
+
+  - id: "ADJ-03"
+    title: "CLI input-validation/exception-handling gaps violate the documented [TRUNCATED — remainder of finding not received]"
+    claim: >-
+      NOT RECEIVED. The adjudication payload for this finding was cut off after the title fragment
+      above; no claim text, no supporting quote, and no full evidence set were transmitted to this
+      decision-record writer. Do not treat the title fragment as a validated defect — it is an
+      unverified partial signal only.
+    finding_type: "unclear"
+    severity: "info"
+    confidence: "low"
+    disposition: "accepted"
+    input_truncated: true
+    evidence:
+      - source: "orchestrator adjudication payload (this task's prompt)"
+        excerpt_or_locator: "Finding text ends mid-sentence: \"...violate the documented \" — no closing content follows before the prompt's file-writing instructions begin."
+        why_it_matters: "Documents the exact point of truncation so the orchestrator can locate and resend the missing content without re-deriving it from scratch."
+    affected_workflows: []
+    recommendation: >-
+      Re-request the complete ADJ-03 finding object (claim, finding_type, severity, confidence,
+      full evidence array, recommendation, validation) from the adjudication step before this
+      finding is treated as actionable. Do not close the M1 gate on the assumption that ADJ-03 is
+      benign — its severity is genuinely unknown, not assessed-and-low.
+    validation:
+      method: "manual_review"
+      test_or_check: "Orchestrator re-transmits the full ADJ-03 finding object to a decision-record writer (this agent or a fresh instance); re-run this file's ADJ-03 entry against the completed content."
+    reviewer: "task-completion-validator"
+    provider: "anthropic"
+    model: "claude-sonnet-5"
+    disputed_by: []
+
+  - id: "META-INPUT-GAP-01"
+    title: "9 adjudicated findings referenced by the run summary (3 rejected, 1 disputed, 5 watchlist) were never transmitted to this decision-record writer"
+    claim: >-
+      The orchestrator's adjudication summary for this run states counts of rejected=3,
+      disputed=1, watchlist=5 in addition to the 3 accepted findings. This decision-record writer
+      received zero content — not even titles or IDs — for any of those 9 findings. This is a
+      process/pipeline observation about the data handed to the record-writer step, not a finding
+      about the M1 code itself. It is recorded here (rather than silently reconciled by inventing
+      plausible content) so the gap is visible to anyone reading this run's artifacts.
+    finding_type: "gap"
+    severity: "info"
+    confidence: "high"
+    disposition: "watchlist"
+    evidence:
+      - source: "orchestrator adjudication summary (this task's prompt header)"
+        excerpt_or_locator: "\"Accepted: 3 / Rejected: 3 / Disputed: 1 / Watchlist: 5 / Blocking: 0\""
+        why_it_matters: "The declared counts (12 total findings) do not match the content actually received (3 accepted, one of which is itself truncated) — a 9-finding gap between what was counted and what was deliverable."
+    affected_workflows:
+      - "ARC decision-record generation for phase-taskout M1"
+    recommendation: >-
+      Orchestrator should re-run the record-writer step with the complete adjudicated-findings
+      payload (all 12 findings, full content) rather than relying on this run's artifacts as the
+      final record for anything beyond ADJ-01/ADJ-02.
+    validation:
+      method: "manual_review"
+      test_or_check: "Byte-for-byte diff of the original adjudicator output against what was received by the record-writer step; identify where truncation occurred in the pipeline."
+    reviewer: "task-completion-validator"
+    provider: "anthropic"
+    model: "claude-sonnet-5"
+    disputed_by: []

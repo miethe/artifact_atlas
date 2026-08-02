@@ -1,0 +1,10 @@
+# Validation Plan
+
+**Run:** `20260802-m1`
+
+| Finding ID | Validation method | Test/check | Owner | Due | Success criterion |
+|---|---|---|---|---|---|
+| ADJ-01 | integration_test | Add a `test_report_ingest.py` case: pre-seed a non-report asset sharing the same content hash as a report import, run `import_report` with the default `on_duplicate`, assert the returned asset now has `artifact_type_id=delivery_report` and `agent_access=preview_allowed` (currently would fail), then `GET /api/preview/asset/{id}/html` returns `200`. | python-backend-engineer | Before M1 milestone record is treated as closed / before M2 starts consuming M1's ingest contract | New test passes; `GET .../html` returns `200` for the duplicate-hit case, not `403`. |
+| ADJ-02 | source_verification | `grep -c 'def test_' api/tests/test_report_ingest.py`; update the completion report's stated test count to match (13, or commit the additional tests if 17 were genuinely intended). | python-backend-engineer | Before M1 milestone record is treated as closed | Completion report's stated count equals the actual committed test count. |
+| ADJ-03 | manual_review | Orchestrator re-transmits the complete ADJ-03 finding object (claim, finding_type, severity, confidence, evidence array, recommendation, validation) to a decision-record writer; re-adjudicate on the full content. | dev-execution orchestrator (Opus) | Before the M1 gate record is treated as final | ADJ-03 has a real claim, evidence, severity, and recommendation on record — no `input_truncated` flag remaining. |
+| META-INPUT-GAP-01 | manual_review | Orchestrator re-runs the decision-record-writer step with the complete adjudicated-findings payload (all 12 findings) and either supersedes this run's artifacts or merges the missing 9 findings (3 rejected, 1 disputed, 5 watchlist) into them. | dev-execution orchestrator (Opus) | Before this run's artifacts are cited as the canonical M1 gate record anywhere downstream (e.g., delivery-report, IntentTree writeback) | `findings.yaml` for this run (or its successor) accounts for all 12 findings the adjudication summary counted, with real content for each. |

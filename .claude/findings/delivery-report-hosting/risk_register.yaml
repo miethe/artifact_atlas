@@ -1,0 +1,67 @@
+run_id: "20260802-m1"
+risks:
+  - id: "RISK-01"
+    finding_ref: "ADJ-01"
+    risk: >-
+      A re-ingest of an already-imported delivery report, or a coincidental content-hash collision
+      with any prior non-report asset, resolves through import_content's global
+      _find_by_hash short-circuit and returns the pre-existing asset unchanged — without applying
+      artifact_type_id=delivery_report, agent_access=preview_allowed, mime_type=text/html, or the
+      new envelope metadata. GET /api/preview/asset/{id}/html can then 403 on an asset that should
+      be a servable delivery_report preview, silently violating the pinned M1 acceptance criterion.
+      The check-then-act sequence is also racy under concurrent writers (TOCTOU).
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: >-
+      Scope the hash lookup to same artifact_type_id, or explicitly re-patch
+      artifact_type_id/agent_access/mime_type/metadata onto the existing asset on a duplicate hit
+      inside import_report before returning it, or (minimum acceptable for now) add an explicit
+      regression test that asserts and pins the current behavior so any change to it is caught, and
+      record the residual risk explicitly in the M2/M3 plan rather than leaving it as an implicit
+      assumption.
+    owner: "python-backend-engineer"
+
+  - id: "RISK-02"
+    finding_ref: "ADJ-02"
+    risk: >-
+      The M1 completion report's stated test count (17) diverges from the actual committed suite
+      (13 test methods, matching the progress file's own verified_by evidence). Low functional
+      risk, but it erodes trust in the completion-report evidence trail for future milestone
+      close-outs if left uncorrected.
+    likelihood: "low"
+    impact: "low"
+    mitigation: >-
+      Correct the completion report's test count to 13 (or commit the missing 4 tests if they were
+      genuinely intended) before closing the M1 milestone record.
+    owner: "python-backend-engineer"
+
+  - id: "RISK-03"
+    finding_ref: "ADJ-03"
+    risk: >-
+      ADJ-03's full content ("CLI input-validation/exception-handling gaps violate the
+      documented...") was never received by this decision-record writer — only the title fragment.
+      Its actual severity is unknown; treating it as benign by default (rather than as unresolved)
+      would understate whatever the original adjudicator intended to flag.
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: >-
+      Do not close the M1 gate on the assumption ADJ-03 is non-blocking. Re-request the complete
+      finding object from the adjudication step and re-adjudicate it on its own merits before this
+      risk is downgraded or closed.
+    owner: "task-completion-validator"
+
+  - id: "RISK-04"
+    finding_ref: "META-INPUT-GAP-01"
+    risk: >-
+      9 of the 12 findings the adjudication summary counted (3 rejected, 1 disputed, 5 watchlist)
+      were never transmitted to this record-writer step, so this run's decision_record.md and
+      findings.yaml are incomplete relative to what was actually adjudicated. Anyone treating this
+      run's artifacts as the full record of the M1 review will underestimate what was actually
+      found and disputed.
+    likelihood: "high"
+    impact: "medium"
+    mitigation: >-
+      Orchestrator re-runs the decision-record-writer step with the complete adjudicated-findings
+      payload (all 12 findings, full content) and either supersedes this run's artifacts or merges
+      the missing 9 findings into them before this run is treated as the canonical M1 gate record.
+    owner: "dev-execution orchestrator (Opus)"
