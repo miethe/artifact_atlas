@@ -1,5 +1,6 @@
 ---
 it_schema: 1
+schema_version: 2
 feature_slug: delivery-report-hosting
 title: "Delivery-Report Hosting (PF-1: artifact_atlas host) \u2014 implementation\
   \ plan"
@@ -10,7 +11,7 @@ priority: P2
 points: 6
 risk_level: medium
 context_class: C3
-created: 2026-07-31
+created: '2026-07-31'
 prd_ref: docs/project_plans/prds/features/delivery-report-hosting-v1.md
 intenttree_workspace: ws_01KV8VMWX9EJ6VDQKEBMYQZRXG
 intenttree_tree: tree_01KYWGV76XTEM7B11GYWD7Q93Y
@@ -117,6 +118,18 @@ wave_plan:
     - D-018 in docs/DECISIONS.md; DI- rows for G4/G6/backfill/sensitivity; stale-posture
       note reconciled.
 updated: '2026-08-01'
+merge_commit: 0d3ebc2
+merge_branch: main
+commit_refs:
+- 86fb931
+- 7bbae04
+- aed81a8
+- 7acc148
+- 84646b7
+- ad53213
+- bcf84bd
+- 9c6a38f
+- 0d3ebc2
 ---
 
 # Implementation Plan — Delivery-Report Hosting (PF-1: artifact_atlas host)
