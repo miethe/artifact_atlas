@@ -324,6 +324,19 @@ Items descoped during the UI Polish Pass sprint. Each has a design-spec stub for
 
 ---
 
+## Delivery-Report Hosting (PF-1) Deferred Items
+
+Scope explicitly stated as out-of-scope for PF-1 v1 (PRD §7 / plan §Rubric) but captured here so deferral decisions are durable and reviewable. Each is a candidate for promotion in a follow-on or integrated into a larger future phase. See **D-018** for context and rationale.
+
+| Item ID | Title | Reason Deferred | Trigger for Promotion | Status |
+|---------|-------|-----------------|----------------------|--------|
+| DI-G4 | Cross-scope Reports lens | Bespoke `/reports` route with route/revision/truth_status columns and epic→features→reports rollup requires cross-project aggregate queries the API lacks. Per-project saved filter is viable today; full lens is Tier-2 follow-on work | Tier-2 feature sprint; requires query capability expansion | Deferred to Tier-2 |
+| DI-G6 | First-class `epic` as AssetLinkTargetType alias | Optional enhancement; `intenttree_node` already covers epic scope via `meta.role="epic"` convention. Deferred unless a first-class label is later wanted for clarity | Product decision on link taxonomy clarity | Deferred, optional |
+| DI-R7 | Fleet-wide backfill of scattered `.claude/reports/…` HTML | Historical reports from before hosting was available are not migrated in v1. A future `op fleet`-style sweep or manual operator import is the backfill path. v1 scopes to newly-generated reports only | Operator backfill initiative or auto-sweep tooling | Deferred, non-blocking |
+| DI-sensitivity | Report-asset sensitivity defaulting posture | Report assets currently inherit the workspace default sensitivity (`personal` per D-009). Reports carry operator-internal detail (commit hashes, paths, model routing). Confirm whether the current default is appropriate or if report-specific defaulting should be implemented | Security review / operator posture confirmation | Deferred, pending confirmation |
+
+---
+
 ## Post-MVP Enhancement Waves
 
 | Wave | Date | Scope | Status |
