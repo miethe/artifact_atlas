@@ -882,7 +882,7 @@ Prior documentation (pre-hosting planning docs and design specs) references the 
 
 - Reports hosted by Artifact Atlas are accessible to agents through policy-gated APIs, not broad filesystem access — aligns with AOS agent-writing doctrine and system sovereignty.
 - The preview capsule (`GET /api/preview/asset/{id}/html` with sandboxed `text/html` inline route) serves as the hosting infrastructure; no new render/proxy/security code is needed.
-- Re-ingest of the same dossier slug updates the blob in-place via `PUT /content` (stable asset id), leaving project/feature/node links intact (OQ-3 decision, PF-1 M3).
+- Re-ingest of the same report **instance** updates the blob in-place via `PUT /content` (stable asset id), leaving project/feature/node links intact (OQ-3 decision, PF-1 M3). Instance identity is `(route, subject, instance_key)`; two *different* instances of one subject get distinct assets (see DI-SubjectCollapse, resolved 2026-08-03). An earlier revision of this line said "the same dossier slug", which described the `(route, subject)` key that shipped in M3 and has since been superseded.
 - Scattered existing HTML reports in `.claude/reports/…` remain in-place unless explicitly migrated. No fleet-wide backfill is performed by PF-1 (R7, deferred to Tier-2).
 - The decision record chain (D-012 ADR-4 viewer, D-015 full-surface HTML route, D-018 hosting model) unifies HTML as first-class throughout the system: authored via skills, stored as assets, served via capsule, linked to intent.
 
@@ -957,18 +957,28 @@ The following scope items are explicitly deferred and tracked as discovery ticke
 
 ---
 
-### DI-SubjectCollapse — `(route, subject)` identity collapses non-dossier reports (upstream DI-283 / PF-3 OQ-5)
+### DI-SubjectCollapse — RESOLVED 2026-08-03: report identity is `(route, subject, instance_key)`
 
-**Description**: M3's stable asset id is keyed on `(route, subject)` per the plan's accepted OQ-3 decision. But `subject` is a feature/project **slug**, not a per-instance key — it is emitted as `report.subject or report.project` (`delivery-report/scripts/delivery_report.py:1391`). That is exactly right for `dossier` and `feature` (the intended "one living record" model), but it **collapses** `phase`, `program`, and `readiness` reports for the same project onto a single asset: ingesting a phase-2 report and then a phase-3 report for one project overwrites the first's blob. Confirmed by a dedicated regression test (`TestReportRevisionSubjectCollapseLimitation`, `api/tests/test_report_revision.py`) that asserts the collapse rather than a fix, and documented in the `atlas report ingest` help text.
+**Status**: Resolved. Superseded the deferral below; no OQ-3 amendment was required.
 
-**Why deferred — with an important distinction.** Two separable things are at play, and only the first is genuinely upstream:
+**Was**: M3's stable asset id was keyed on `(route, subject)` per OQ-3. But `subject` is a feature/project **slug**, not a per-instance key (emitted as `report.subject or report.project`). Correct for `dossier`/`feature` — the intended "one living record" model — but it **collapsed** `phase`, `program`, and `readiness` reports for one project onto a single asset: ingesting a phase-2 report and then a phase-3 report overwrote the first's blob. The missing discriminator was genuinely upstream; the silent overwrite was a local choice.
 
-1. *The inability to **separate instances*** is upstream. There is no discriminator in the envelope; `subject = report.subject or report.project` and nothing identifies which phase/run a report came from. Atlas cannot mint an authoritative per-instance key for a field it does not own — deriving one from `generated_at` or `revision` would fabricate an upstream contract and then diverge once PF-3 OQ-5 settles it. Correctly deferred.
-2. *The **silent overwrite** is a local choice*, not an upstream constraint. Gating the stable-id lookup on `route in {feature, dossier}` — the plan's own stated "one living record" intent — would turn silent data loss into new-asset-per-ingest, using only data Atlas already owns and inventing nothing. That option was available and was **not** taken in PF-1.
+**Resolution**: PF-3 resolved its OQ-5 on 2026-08-02 (`agentic_meta_dev` #87, `8555cf0`) by adding a **named** `instance_key` to the export envelope — derived by the caller from the thing that actually distinguishes the instance (phase/milestone id for `phase`, milestone id for `program`, decision date for `readiness`), and absent for `feature`/`dossier`. Verified end-to-end here: a `target=atlas` export carries both `instance_key` and a precomputed `link_identity` (`report:{route}:{subject}:{instance_key}`).
 
-An earlier revision of this row described the whole item as upstream. That under-described it: point 2 is a local decision that PF-1 made by applying OQ-3 uniformly across all five routes, where OQ-3's *rationale* ("matches the dossier one-living-record model") only argues for two of them. Not taken unilaterally here because OQ-3 is a human-accepted decision recorded in plan frontmatter whose letter says "NOT a supersedes-chain of new assets"; narrowing it for 3 of 5 routes is a decision to make deliberately, not a fix to slip in during close-out.
+Atlas therefore extends its identity key to `(route, subject, instance_key)` (`api/app/services/import_index.py`, `_find_report_by_identity` / `_has_stable_report_identity`) rather than route-gating. This is strictly better than the route-gate previously recorded as preferred:
 
-**Suggested handling**: Preferred and available now — route-gate the stable-id path to `{feature, dossier}` so a non-dossier re-ingest cannot silently destroy a prior report, and flip the collapse regression test (`api/tests/test_report_revision.py`, `TestReportRevisionSubjectCollapseLimitation`) to assert separation. This needs an explicit amendment to OQ-3, not a silent behavior change. Independently, once PF-3 OQ-5 settles the discriminator, extend the identity key to `(route, subject, <discriminator>)`. Until either lands, callers wanting separate non-dossier assets must supply a distinct subject. Blocks: nothing in PF-1; **does** shape PF-3's phase-close hook, which re-ingests per phase and is therefore the first real consumer to hit this.
+- Distinct instances get distinct assets — the data loss is gone.
+- Re-publishing the *same* instance still replaces in place, so OQ-3's idempotence survives. A route-gate would have made every re-run of the phase-close hook mint another asset, trading silent overwrite for duplicate spam on an unattended caller.
+- **No OQ-3 amendment needed.** OQ-3's letter is "re-ingest updates a STABLE asset id keyed by envelope identity, NOT a supersedes-chain"; this keeps both clauses and only sharpens what "envelope identity" means. PF-3's own OQ-5 rationale makes the same point: once instance identity is a named field, "same instance → replace" and "different instance → distinct record" compose cleanly, and the apparent OQ-3/OQ-5 contradiction dissolves as an artifact of overloading one field with two jobs.
+- Cross-repo coherence holds without a joint decision: PF-2's `itt link report --ref` takes a verbatim `external_id`, and PF-3 computes the Atlas asset identity and the IntentTree `external_id` in one shared function so the two cannot drift.
+
+`revision` is deliberately **not** part of identity: `init_manifest` sets it to `1` and nothing increments it, so folding it in would mint a new asset on every re-render of one report.
+
+**Safety fallback**: a recurring-route envelope carrying no `instance_key` cannot say which instance it is, so it takes the create path (new asset) instead of replacing. PF-3's exporter hard-fails before emitting such an envelope for `target=atlas`, so this only catches hand-rolled or pre-OQ-5 envelopes — the worst case is an extra asset, never a lost one.
+
+**Coverage**: `TestRecurringRouteInstanceIdentity` (`api/tests/test_report_revision.py`) replaces the old collapse-asserting regression test with five cases: distinct instances separate, same instance replaces in place, byte-identical re-publish is a no-op, recurring route without `instance_key` never overwrites, and `feature`/`dossier` still collapse. Documented in the `atlas report ingest` help text.
+
+**Follow-on (upstream, non-blocking)**: `delivery-report.schema.json`'s `report` object sets `additionalProperties: false` and does not declare `instance_key`. Currently harmless — `delivery_report.py validate` uses a hand-rolled validator, and a manifest with `instance_key` passes (verified) — but any consumer validating against the JSON Schema directly would reject a valid manifest. One-line upstream fix in `agentic_meta_dev`.
 
 ---
 

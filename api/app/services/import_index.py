@@ -57,6 +57,13 @@ from app.settings import get_settings
 _TRACKER_TITLE_SEP_RE = re.compile(r"\s+[—-]\s+")
 _TRACKER_NODE_RE = re.compile(r"^(?:node|tree)_[A-Za-z0-9]+$")
 
+# Report routes where one subject legitimately has MANY instances over time, so
+# an explicit per-instance `instance_key` is required before an ingest may
+# replace an existing asset in place (PF-3 OQ-5, resolved 2026-08-02). The
+# complement — `feature`/`dossier` — is "one living record per subject" by
+# design (OQ-3) and needs no discriminator.
+RECURRING_REPORT_ROUTES = frozenset({"phase", "program", "readiness"})
+
 
 @dataclass
 class ImportResult:
@@ -525,15 +532,20 @@ class ImportService:
         ``(target_type, target_id, relationship)`` tuple that already exists
         on the asset, so a second ingest adds zero duplicate links.
 
-        M3 (dossier revisioning, OQ-3 decision): when the envelope's
-        ``(route, subject)`` matches an existing ``delivery_report`` asset
-        (see :meth:`_find_report_by_identity`), the ingest does **not**
-        create a new asset — it revises the existing one in place via
-        :meth:`_revise_report_asset` (``PUT /content`` on the stable id),
-        leaving its ``AssetLink`` rows intact. This only engages when the
-        envelope supplies both a non-blank ``route`` and ``subject``;
-        otherwise (or on a genuine first ingest) the plain
-        :meth:`import_content` path below creates a new asset as before.
+        M3 (revisioning, OQ-3 + OQ-5): when the envelope's
+        ``(route, subject, instance_key)`` matches an existing
+        ``delivery_report`` asset (see :meth:`_find_report_by_identity`), the
+        ingest does **not** create a new asset — it revises the existing one
+        in place via :meth:`_revise_report_asset` (``PUT /content`` on the
+        stable id), leaving its ``AssetLink`` rows intact. This engages only
+        when the envelope carries a full stable identity (see
+        :meth:`_has_stable_report_identity`: ``route`` + ``subject``, plus
+        ``instance_key`` for the recurring routes); otherwise (or on a genuine
+        first ingest of an instance) the plain :meth:`import_content` path
+        below creates a new asset as before. So re-publishing one instance
+        replaces it, while a *different* instance of the same subject gets its
+        own asset instead of silently overwriting its predecessor
+        (``DI-SubjectCollapse``).
         ``on_duplicate`` therefore only governs the first-ingest / no-stable-
         identity path — the stable-id path has its own hash-duplicate check
         (identical bytes are a no-op, ``is_duplicate=True``, no write).
@@ -590,6 +602,8 @@ class ImportService:
             "route": envelope.get("route"),
             "title": envelope.get("title"),
             "subject": envelope.get("subject"),
+            "instance_key": envelope.get("instance_key"),
+            "link_identity": envelope.get("link_identity"),
             "revision": envelope.get("revision"),
             "truth_status": envelope.get("truth_status"),
             "generated_from": envelope.get("generated_from"),
@@ -598,21 +612,18 @@ class ImportService:
             "item_count": envelope.get("item_count"),
         }
 
-        # M3 (OQ-3 decision): re-ingesting the same dossier slug must land on
-        # the SAME asset id, not mint a new one. Identity is (route, subject)
-        # exactly as emitted by the envelope -- see
-        # ``_find_report_by_identity``'s docstring for the DI-283
-        # subject-collapse limitation this implies. Both fields must be
-        # present (subject is nullable upstream) for a stable identity to
-        # exist at all; absent either, this is always a first/plain ingest.
+        # M3 (OQ-3) + DI-SubjectCollapse (resolved via PF-3 OQ-5): re-publishing
+        # the same report INSTANCE must land on the SAME asset id, not mint a new
+        # one -- but two DIFFERENT instances must never collapse onto one asset.
+        # Identity is ``(route, subject, instance_key)``; see
+        # ``_find_report_by_identity`` for why all three are required and what
+        # happens when a recurring route omits ``instance_key``.
         route = envelope.get("route")
         subject = envelope.get("subject")
+        instance_key = envelope.get("instance_key")
         stable_target = (
-            self._find_report_by_identity(route, subject)
-            if isinstance(route, str)
-            and route.strip()
-            and isinstance(subject, str)
-            and subject.strip()
+            self._find_report_by_identity(route, subject, instance_key)
+            if self._has_stable_report_identity(route, subject, instance_key)
             else None
         )
 
@@ -671,24 +682,64 @@ class ImportService:
     # Report revisioning (PF-1 M3 -- executes the plan's OQ-3 decision)
     # ------------------------------------------------------------------
 
-    def _find_report_by_identity(self, route: Any, subject: Any) -> Asset | None:
-        """Return the existing ``delivery_report`` asset whose stable
-        identity matches ``(route, subject)``, or ``None`` on a first
-        ingest.
+    def _has_stable_report_identity(
+        self, route: Any, subject: Any, instance_key: Any
+    ) -> bool:
+        """Whether this envelope carries enough identity to revise in place.
 
-        Identity is **exactly** ``(route, subject)`` as emitted by the PF-3
-        envelope -- the only identity signal it currently provides (no
-        per-instance key; see implementation-notes.md's 2026-08-01
-        "DI-283 / PF-3 OQ-5" entry). This is correct and sufficient for
-        ``route in {feature, dossier}`` where the plan's intent is
-        genuinely "one living record per subject". For
-        ``route in {program, phase, readiness}`` it has a known, documented
-        limitation: multiple distinct reports for the *same* subject/project
-        (e.g. a phase-2 report and a phase-3 report) **collapse onto one
-        asset**, silently overwriting each other's blob on re-ingest,
-        because the envelope carries no phase/wave discriminator this repo
-        can make authoritative. This repo does not invent one -- see the
-        plan's M4 section and the queued ``DI-`` row.
+        Requires a non-blank ``route`` and ``subject`` always, plus a non-blank
+        ``instance_key`` for the **recurring** routes (``phase``, ``program``,
+        ``readiness``) where one subject legitimately has many instances.
+
+        The ``instance_key`` requirement is the fix for ``DI-SubjectCollapse``.
+        A recurring-route envelope with no ``instance_key`` has no way to say
+        *which* instance it is, so treating it as a stable identity is what
+        silently overwrote a prior phase's report. Falling through to the
+        create path instead means the worst case is an extra asset, never a
+        lost one. PF-3's exporter already hard-fails before emitting such an
+        envelope for ``target=atlas`` (``delivery_report.py`` ``build_export``),
+        so in practice this fallback only catches hand-rolled or pre-OQ-5
+        envelopes.
+
+        ``feature``/``dossier`` deliberately need no ``instance_key``: collapse
+        onto one living record per subject is the intended model there (design
+        spec 6.1), which is what OQ-3 accepted.
+        """
+        if not (isinstance(route, str) and route.strip()):
+            return False
+        if not (isinstance(subject, str) and subject.strip()):
+            return False
+        if route in RECURRING_REPORT_ROUTES:
+            return isinstance(instance_key, str) and bool(instance_key.strip())
+        return True
+
+    def _find_report_by_identity(
+        self, route: Any, subject: Any, instance_key: Any = None
+    ) -> Asset | None:
+        """Return the existing ``delivery_report`` asset whose stable identity
+        matches ``(route, subject, instance_key)``, or ``None`` on a first
+        ingest of that instance.
+
+        Identity is ``(route, subject, instance_key)``, all three read verbatim
+        from the PF-3 envelope. ``instance_key`` is the named per-instance
+        discriminator resolved by **PF-3 OQ-5** (2026-08-02): it is derived by
+        the caller from whatever actually distinguishes the instance -- the
+        phase/milestone id for ``phase``, the milestone id for ``program``, the
+        decision date for ``readiness`` -- and is ``None`` for
+        ``feature``/``dossier``, where one living record per subject is correct
+        by design.
+
+        This is what closes ``DI-SubjectCollapse``. Under the previous
+        ``(route, subject)`` key, a phase-2 and a phase-3 report for one
+        project collapsed onto a single asset and the second silently
+        overwrote the first's blob. Keying on the instance too means distinct
+        instances get distinct assets, while re-publishing the *same* instance
+        still replaces in place -- so OQ-3's replace-in-place idempotence and
+        OQ-5's per-instance separation compose instead of conflicting.
+
+        ``revision`` is deliberately **not** part of identity: it is a display
+        field that ``init_manifest`` sets to ``1`` and nothing increments, so
+        folding it in would mint a new asset on every re-render of one report.
 
         Scoped to ``artifact_type_id == "delivery_report"`` so a report can
         never collide with an unrelated asset that happens to carry the same
@@ -698,7 +749,11 @@ class ImportService:
             if asset.artifact_type_id != "delivery_report":
                 continue
             meta = asset.metadata or {}
-            if meta.get("route") == route and meta.get("subject") == subject:
+            if (
+                meta.get("route") == route
+                and meta.get("subject") == subject
+                and meta.get("instance_key") == instance_key
+            ):
                 return asset
         return None
 

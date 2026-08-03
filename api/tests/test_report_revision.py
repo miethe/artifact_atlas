@@ -11,9 +11,10 @@ Covers:
   - A first ingest with no prior matching identity still creates a new
     asset (unaffected by the stable-id lookup).
   - The revised asset keeps serving 200 (not 403) at the preview route.
-  - The DI-283 subject-collapse limitation: two *different* route=phase
-    reports for the same subject collapse onto one asset (documented, not
-    silently "fixed" here).
+  - DI-SubjectCollapse (RESOLVED via PF-3 OQ-5's ``instance_key``): two
+    *different* instances of the same subject get distinct assets, while
+    re-publishing one instance still replaces it in place; a recurring-route
+    envelope with no ``instance_key`` creates rather than overwrites.
   - The ``atlas report ingest`` CLI verb surfaces "revised" for this path.
 """
 
@@ -174,37 +175,111 @@ class TestReportRevisionService:
 
 
 # ---------------------------------------------------------------------------
-# DI-283: documented subject-collapse limitation (route in {program,phase,readiness})
+# DI-SubjectCollapse (RESOLVED): per-instance identity for the recurring routes
 # ---------------------------------------------------------------------------
 
 
-class TestReportRevisionSubjectCollapseLimitation:
-    def test_distinct_phase_reports_for_same_subject_collapse_onto_one_asset(
+class TestRecurringRouteInstanceIdentity:
+    """DI-SubjectCollapse, resolved via PF-3 OQ-5's ``instance_key``.
+
+    Identity is ``(route, subject, instance_key)``. Distinct instances of one
+    subject must get distinct assets (no silent overwrite); re-publishing the
+    SAME instance must still replace in place (OQ-3 idempotence).
+    """
+
+    def test_distinct_instances_for_same_subject_get_distinct_assets(
         self, tmp_registry: Path, tmp_path: Path
     ) -> None:
-        """DI-283 / PF-3 OQ-5: the envelope carries no per-instance
-        discriminator for route=program/phase/readiness, so two genuinely
-        DIFFERENT phase reports for the same project subject collapse onto
-        one asset -- this is the documented limitation, not a bug fix."""
         svc = ImportService(tmp_registry)
 
-        phase2_html = _write_html(tmp_path, "phase2.html", "phase 2 report")
-        phase2 = svc.import_report(
-            phase2_html,
-            _envelope(route="program", subject="artifact-atlas", revision=2),
+        m2_html = _write_html(tmp_path, "m2.html", "milestone 2 report")
+        m2 = svc.import_report(
+            m2_html,
+            _envelope(route="program", subject="artifact-atlas", instance_key="m2"),
         )
 
-        phase3_html = _write_html(tmp_path, "phase3.html", "phase 3 report, different content")
-        phase3 = svc.import_report(
-            phase3_html,
-            _envelope(route="program", subject="artifact-atlas", revision=3),
+        m3_html = _write_html(tmp_path, "m3.html", "milestone 3 report, different content")
+        m3 = svc.import_report(
+            m3_html,
+            _envelope(route="program", subject="artifact-atlas", instance_key="m3"),
         )
 
-        # Collapsed onto the SAME asset id -- phase 2's report is gone,
-        # overwritten by phase 3's. This is the tracked limitation.
-        assert phase2.asset.id == phase3.asset.id
+        # Two instances -> two assets. m2's blob is NOT overwritten.
+        assert m2.asset.id != m3.asset.id
+        assert _delivery_report_count(svc) == 2
+        assert (m2.asset.metadata or {}).get("instance_key") == "m2"
+        assert (m3.asset.metadata or {}).get("instance_key") == "m3"
+
+    def test_republishing_same_instance_replaces_in_place(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """OQ-3 still holds *within* an instance: a re-render of the same
+        phase report revises its asset rather than accumulating duplicates."""
+        svc = ImportService(tmp_registry)
+        env = _envelope(route="phase", subject="artifact-atlas", instance_key="phase-2")
+
+        v1 = svc.import_report(_write_html(tmp_path, "p2v1.html", "phase 2 v1"), env)
+        v2 = svc.import_report(
+            _write_html(tmp_path, "p2v2.html", "phase 2 v2, corrected"), env
+        )
+
+        assert v1.asset.id == v2.asset.id
         assert _delivery_report_count(svc) == 1
-        assert (phase3.asset.metadata or {}).get("revision") == 3
+        assert v2.is_duplicate is False
+
+    def test_byte_identical_republish_of_same_instance_is_a_noop(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """Guards against trading silent overwrite for duplicate spam: an
+        unchanged re-run of the phase-close hook must not mint a new asset."""
+        svc = ImportService(tmp_registry)
+        env = _envelope(route="readiness", subject="artifact-atlas", instance_key="2026-08-03")
+        html = _write_html(tmp_path, "ready.html", "go")
+
+        first = svc.import_report(html, env)
+        second = svc.import_report(html, env)
+
+        assert first.asset.id == second.asset.id
+        assert second.is_duplicate is True
+        assert _delivery_report_count(svc) == 1
+
+    def test_recurring_route_without_instance_key_never_overwrites(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """Fallback safety: a recurring-route envelope carrying no
+        ``instance_key`` (hand-rolled, or pre-OQ-5) has no way to say which
+        instance it is, so it must create a new asset rather than silently
+        replacing a prior one. PF-3's exporter hard-fails before emitting
+        such an envelope for target=atlas; this is the belt-and-braces case.
+        """
+        svc = ImportService(tmp_registry)
+
+        first = svc.import_report(
+            _write_html(tmp_path, "a.html", "phase report A"),
+            _envelope(route="phase", subject="artifact-atlas"),
+        )
+        second = svc.import_report(
+            _write_html(tmp_path, "b.html", "phase report B, different"),
+            _envelope(route="phase", subject="artifact-atlas"),
+        )
+
+        assert first.asset.id != second.asset.id
+        assert _delivery_report_count(svc) == 2
+
+    def test_collapsing_routes_still_collapse_without_instance_key(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """feature/dossier keep the OQ-3 one-living-record model: no
+        ``instance_key`` needed, re-ingest revises the same asset."""
+        svc = ImportService(tmp_registry)
+
+        for route in ("feature", "dossier"):
+            env = _envelope(route=route, subject=f"subj-{route}")
+            first = svc.import_report(_write_html(tmp_path, f"{route}1.html", "v1"), env)
+            second = svc.import_report(
+                _write_html(tmp_path, f"{route}2.html", "v2 revised"), env
+            )
+            assert first.asset.id == second.asset.id, route
 
 
 # ---------------------------------------------------------------------------
