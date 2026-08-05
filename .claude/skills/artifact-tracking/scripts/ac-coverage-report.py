@@ -395,7 +395,7 @@ def main() -> None:
 Examples:
   # Full coverage check
   python ac-coverage-report.py \\
-      --plan docs/project_plans/implementation_plans/enhancements/my-plan.md \\
+      --plan docs/project_plans/implementation_plans/my-plan.md \\
       --progress .claude/progress/my-prd/phase-13-progress.md \\
       --progress .claude/progress/my-prd/phase-16-progress.md
 

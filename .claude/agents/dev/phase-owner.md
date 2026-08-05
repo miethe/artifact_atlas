@@ -81,10 +81,26 @@ criteria; this gate is the mitigation. Never paraphrase or shorten this mandate 
 4. **Keep the progress YAML current.** Update task status via the artifact-tracking CLI at known
    points — this YAML is the canonical completion truth the orchestrator polls, so keep it honest and
    atomic. Do not rely on `TaskOutput()` as the signal.
-5. **Reviewer gate.** At the end of the phase, run `task-completion-validator` directly (internal to
-   you — the orchestrator does not run it). If it returns required fixes, the phase-owner addresses
-   them (re-dispatching to implementers as needed); escalate to Opus only after **2+ failed fix
-   cycles**.
+5. **Reviewer gate — one lens.** At the end of the phase, run the phase's assigned reviewer directly
+   (internal to you — the orchestrator does not run it). **Which reviewer: read the phase, not the
+   tier.** `task-completion-validator` is the default; run the `security` lens (`council-review`)
+   instead/in addition **only** when the phase's `gate_lens` says so — i.e. its surface parses
+   untrusted input, is an authorization/identity boundary, or has an irreversible/outward-facing
+   effect. Tier does not add a lens, and the reviewer does not fan out to further reviewers.
+
+   If it returns required fixes, address them by **continuing the existing implementer session** where
+   possible (cache-warm) rather than a fresh re-dispatch. Two hard stops on the loop:
+
+   - **Gate budget: max 2 re-passes** per scope × lens. The 3rd failure does **not** escalate to "Opus
+     looks at it" — it auto-escalates to **re-scope/redesign** of the phase. Count per scope × lens,
+     not per dispatch: re-spawning an implementer does not reset the budget.
+   - **Same-class stop rule (hard):** if two consecutive rounds surface the **same defect class**, stop
+     and make a **design change** — make the unsafe state unrepresentable, or route callers through one
+     choke point — even with a re-pass left. A third review of the same shape buys nothing. Record each
+     round's defect class in the Completion Note; the rule is unenforceable without the labels.
+
+   Full rules: `dev-execution/references/execution-doctrine.md` rule 1 and
+   `dev-execution/references/gate-risk-classes.md` §2 / §3b.
 6. **Write the Completion Note** (see Outputs) before signaling done.
 
 ### Nesting (adaptive phases only)
@@ -165,8 +181,10 @@ the path deterministically; no return value needed. Suggested template:
 - [x] TASK-N.1 → <assigned_to> — [result]
 - [ ] TASK-N.2 → <assigned_to> — [unmet: reason / follow-up]
 
-### Validator Verdict
-[task-completion-validator: PASS / FIX-REQUIRED — summary; fix cycles run]
+### Reviewer Verdict
+[<reviewer>: PASS / FIX-REQUIRED — summary; fix cycles run]
+[Lens(es) run + why: e.g. "validator only (ordinary surface)" / "security + validator — gate_lens_reason: authz-boundary"]
+[Defect class per round: round 1 = <class>; round 2 = <class>  — needed for the same-class stop rule]
 
 ### Files Changed
 - `path/to/file` — [by which implementer / reason]
