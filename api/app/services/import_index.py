@@ -18,10 +18,12 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any
 
 from app.models.asset import Asset, AssetCreate, AssetLinkCreate
+from app.models.project import Project
 from app.models.vocabulary import (
     AgentAccess,
     AssetLinkRelationship,
@@ -36,6 +38,11 @@ from app.repositories.projects import ProjectRepository
 from app.repositories import jsonl as _jl
 from app.services.audit import AuditService
 from app.settings import get_settings
+
+# Sentinel distinguishing "argument not supplied" from an explicit ``None``
+# (a *resolved-to-nothing* project lookup is meaningful and must not trigger
+# a second lookup).
+_UNSET: Any = object()
 
 # ---------------------------------------------------------------------------
 # PF-1 M2: tracker_links[] resolution
@@ -72,6 +79,17 @@ class ImportResult:
     asset: Asset
     is_duplicate: bool
     duplicate_of: str | None = None  # ID of existing asset if duplicate
+    # DI-ByteCollision: set by :meth:`ImportService.import_report` and by
+    # nothing else. True means the content-hash duplicate branch handed back a
+    # pre-existing report whose ``(route, subject, instance_key)`` identity is
+    # NOT the one just ingested -- i.e. ``asset`` is somebody else's report and
+    # this call stored nothing at all. Callers need it because ``is_duplicate``
+    # alone cannot say so: the revise path's identical-bytes no-op also returns
+    # ``is_duplicate=True``, and there ``asset`` IS the caller's own report.
+    # A plain ``import_content`` hash duplicate never sets it -- identical bytes
+    # there mean identical content, and only reports can be *different*
+    # documents with identical bytes.
+    matched_other_report: bool = False
 
 
 class ImportError(ValueError):
@@ -112,6 +130,41 @@ def _resolve_tracker(tracker: Any) -> tuple[AssetLinkTargetType, str]:
     )
 
 
+def _repo_slug_candidates(repo: Any) -> list[str]:
+    """Derive Atlas project-slug candidates from ``generated_from.repo``.
+
+    The PF-3 envelope's ``generated_from.repo`` is *not* a slug: it is emitted
+    as an absolute path on the **generating** machine (e.g.
+    ``/Users/me/dev/homelab/development/artifact_atlas``), sometimes as a bare
+    directory name (``artifact_atlas``), occasionally as a git remote
+    (``git@host:org/artifact_atlas.git``). Only the basename can name a
+    project, and repo directories are conventionally *underscored* while Atlas
+    project slugs are *hyphenated* (``artifact_atlas`` vs ``artifact-atlas``) —
+    that one-character mismatch is the whole reason repo-derived attribution
+    used to be impossible without a cross-repo envelope contract change.
+
+    Returns the candidate slugs to try, most-literal first, de-duplicated.
+    An empty list means the value cannot name a project at all (absent,
+    non-string, or blank) — callers then fall through, never guess.
+    """
+    if not isinstance(repo, str) or not repo.strip():
+        return []
+    raw = repo.strip().replace("\\", "/").rstrip("/")
+    basename = raw.rsplit("/", 1)[-1]  # path / remote-with-org tail
+    basename = basename.rsplit(":", 1)[-1]  # scp-style remote with no org path
+    if basename.endswith(".git"):
+        basename = basename[: -len(".git")]
+    basename = basename.strip()
+    if not basename:
+        return []
+
+    out: list[str] = []
+    for candidate in (basename, basename.lower(), basename.lower().replace("_", "-")):
+        if candidate and candidate not in out:
+            out.append(candidate)
+    return out
+
+
 class ImportService:
     """Handle asset import from local paths, URLs, and manual records.
 
@@ -137,6 +190,10 @@ class ImportService:
         self._default_sensitivity = default_sensitivity or settings.default_sensitivity
         self._default_agent_access = default_agent_access or settings.default_agent_access
         self._content_store_dir: Path = settings.content_store_dir
+        # Workspace scope, stamped onto ingested reports so a future
+        # workspace-scoped lens can span them (getattr: test fixtures build
+        # Settings via __new__ and may not set every attribute).
+        self._workspace_id: str | None = getattr(settings, "workspace_id", None)
 
     # ------------------------------------------------------------------
     # Local path import
@@ -283,6 +340,7 @@ class ImportService:
         title: str | None = None,
         project_id: str | None = None,
         artifact_type_id: str | None = None,
+        status: AssetStatus | str | None = None,
         sensitivity: str | None = None,
         agent_access: str | None = None,
         mime_type: str | None = None,
@@ -310,6 +368,11 @@ class ImportService:
             title: Asset title (defaults to *filename*).
             project_id: Optional project scope.
             artifact_type_id: Optional artifact type classification.
+            status: Optional lifecycle status for the new asset. Defaults to
+                ``AssetStatus.inbox`` — the historical hardcoded value — so the
+                two long-standing callers (``import_url``'s sibling paths and
+                the MCP/HTTP content upload) keep their exact behaviour. Report
+                ingest passes ``candidate`` (see :meth:`import_report`).
             sensitivity: Override workspace default sensitivity.
             agent_access: Override workspace default agent_access.
             mime_type: Explicit MIME type; guessed from *filename* when absent.
@@ -387,7 +450,7 @@ class ImportService:
             original_uri=uri,
             mime_type=eff_mime,
             size_bytes=size_bytes,
-            status=AssetStatus.inbox,
+            status=AssetStatus(status) if status is not None else AssetStatus.inbox,
             sensitivity=Sensitivity(eff_sensitivity),
             agent_access=AgentAccess(eff_agent_access),
             artifact_type_id=artifact_type_id,
@@ -550,6 +613,34 @@ class ImportService:
         identity path — the stable-id path has its own hash-duplicate check
         (identical bytes are a no-op, ``is_duplicate=True``, no write).
 
+        PF-4 (project attribution / reachability): every Atlas web route lives
+        under ``(projects)/projects/[projectId]``, so a report stored with
+        ``project_id=None`` is reachable from **no** page — hosted but invisible.
+        The owning project is therefore resolved on **both** the create and the
+        revise path by :meth:`_resolve_report_project_id` (explicit caller value
+        → envelope ``subject`` → ``generated_from.repo`` basename → ``None``),
+        always to the *canonical* ``proj_*`` id, never a slug.
+        ``workspace_id`` is stamped from settings at the same time so a future
+        workspace-scoped lens can span reports across projects. Both are
+        applied by :meth:`_stamp_report_attribution` — including on a no-op
+        re-ingest, which makes re-publishing an already-hosted report an
+        idempotent attribution *repair* rather than a wasted call.
+        The one case attribution is **not** applied is the create path's
+        hash-duplicate branch (``is_duplicate`` with no stable-identity target):
+        there the returned asset is a pre-existing report with a *different*
+        identity that merely renders byte-identical HTML, and re-attributing it
+        would move another report to this envelope's project
+        (``DI-ByteCollision``). Such an ingest is a no-op on attribution, and
+        the CLI already reports it as "duplicate of <that asset>".
+
+        Status is ``candidate``, not the ``import_content`` default of
+        ``inbox``: the PRD's OQ-1 decision is that auto-ingest lands at
+        ``status=candidate``, never ``canonical``
+        (``docs/project_plans/prds/features/delivery-report-hosting-v1.md``).
+        The revise path deliberately leaves an existing report's status alone —
+        a later re-ingest must never silently demote a human's promotion back
+        to ``candidate``.
+
         Sensitivity defaults to ``"personal"`` (never ``"public"``) regardless
         of the workspace-wide default: reports embed commit hashes, internal
         paths, and model-routing detail (plan's sensitivity-leakage risk).
@@ -563,7 +654,11 @@ class ImportService:
                 ``.claude/worknotes/delivery-report-hosting/implementation-notes.md``
                 for the verified live field set — this method reads it
                 defensively, via ``.get()``, and does not require every field).
-            project_id: Optional project scope.
+            project_id: Optional project scope, given as either a project
+                **slug** or a canonical **id** — it is resolved to the
+                canonical id before any write, and an unresolvable value is a
+                loud failure (see :meth:`_resolve_explicit_project_id`). When
+                omitted, attribution is inferred from the envelope.
             sensitivity: Override the "personal" default (e.g. for a report
                 confirmed non-sensitive, or one that needs a tighter cap).
                 Ignored on the stable-id revision path — an existing report's
@@ -574,10 +669,17 @@ class ImportService:
             actor_id: Actor performing the ingest.
 
         Returns:
-            ImportResult with the ``delivery_report`` asset and duplicate flag.
+            ImportResult with the ``delivery_report`` asset and duplicate flag,
+            plus ``matched_other_report=True`` on the one path where the
+            returned asset is NOT the report just ingested: a byte-hash
+            collision with an already-stored report of a different identity.
+            Nothing is written to that asset (neither attribution nor scope
+            links) and no new asset is created, so this report is not stored --
+            callers that report success to a human must surface that flag.
 
         Raises:
-            ImportError: if *html_path* does not exist or is not a file, if a
+            ImportError: if *html_path* does not exist or is not a file, if
+                *project_id* is given but names no known project, if a
                 ``tracker_links[]`` entry is not an object, or if a
                 ``tracker_links[]`` entry's ``tracker`` value cannot be
                 resolved to a link target (see :func:`_resolve_tracker`).
@@ -588,10 +690,23 @@ class ImportService:
         if not p.is_file():
             raise ImportError(f"Report HTML path is not a file: {p}")
 
+        # PF-4: resolve project attribution BEFORE any write, for the same
+        # reason link targets are resolved first — an explicit-but-unknown
+        # project must fail loud with no asset created, never store a dangling
+        # id. The subject→project lookup is done once here and handed to
+        # _resolve_report_link_targets, which needs the same answer to type its
+        # link target (it used to re-derive and discard it).
+        subject_project = self._project_for_subject(envelope.get("subject"))
+        resolved_project_id = self._resolve_report_project_id(
+            envelope, project_id, subject_project=subject_project
+        )
+
         # M2: resolve every scope-link target BEFORE any write. A bad
         # envelope must never leave a partially-linked (or unlinked-but-
         # silently-so) asset behind.
-        link_targets = self._resolve_report_link_targets(envelope)
+        link_targets = self._resolve_report_link_targets(
+            envelope, subject_project=subject_project
+        )
 
         title = envelope.get("title") or envelope.get("subject") or p.stem
 
@@ -633,7 +748,7 @@ class ImportService:
                 p,
                 metadata,
                 title=title,
-                project_id=project_id,
+                project_id=resolved_project_id,
                 actor_id=actor_id,
             )
         else:
@@ -642,8 +757,10 @@ class ImportService:
                     p.name,
                     fh,
                     title=title,
-                    project_id=project_id,
+                    project_id=resolved_project_id,
                     artifact_type_id="delivery_report",
+                    # PRD OQ-1: auto-ingest lands at candidate, never canonical.
+                    status=AssetStatus.candidate,
                     sensitivity=self._report_sensitivity(sensitivity),
                     agent_access=AgentAccess.preview_allowed.value,
                     mime_type="text/html",
@@ -653,8 +770,208 @@ class ImportService:
                     generated_by=GeneratedBy.agent.value,
                 )
 
-        self._link_report_targets(result.asset, link_targets, actor_id=actor_id)
+        # PF-4 + DI-ByteCollision: attribution applies on a genuine create and
+        # on the whole revise path (including the identical-bytes no-op, so
+        # re-publishing an already-hosted-but-unattributed report REPAIRS it) —
+        # but never on the create path's hash-duplicate branch. There, the asset
+        # ``import_content`` handed back is a *pre-existing, differently
+        # identified* report that merely shares bytes (two reports can render
+        # byte-identical HTML), and stamping this envelope's project onto it
+        # would silently move someone else's report to another project page.
+        # ``artifact_type_id`` cannot catch that case — both assets are
+        # delivery_reports — so the identity check has to happen here, where
+        # ``stable_target`` says which asset we actually set out to write.
+        #
+        # The scope links are gated by the SAME condition, because an AssetLink
+        # is just as much a write onto ``result.asset`` as the attribution patch
+        # is. Left ungated (as it was), a colliding ingest of report B attached
+        # B's ``("project", "fleet-beta")`` evidence link -- plus an
+        # ``asset_linked`` audit event -- onto report A's asset, contaminating
+        # the very project surface the attribution guard was protecting. Both
+        # writes are skipped together, which is what makes "nothing is written
+        # to the matched asset" literally true rather than nearly true.
+        wrote_intended_asset = (
+            stable_target is not None and result.asset.id == stable_target.id
+        )
+        if not result.is_duplicate or wrote_intended_asset:
+            result.asset = self._stamp_report_attribution(
+                result.asset, project_id=resolved_project_id, actor_id=actor_id
+            )
+            self._link_report_targets(result.asset, link_targets, actor_id=actor_id)
+        else:
+            # Nothing was written -- and on this path ``import_content`` returned
+            # a pre-existing asset instead of creating one, so THIS report may
+            # not be stored anywhere. Whether that is true depends on the
+            # matched asset's identity, not on ``is_duplicate``: re-ingesting an
+            # identity-less envelope (a recurring route with no instance_key)
+            # can land on the *same* report, which is stored. Ask
+            # ``_find_report_by_identity`` -- the single source of truth for
+            # report identity -- rather than re-deriving the tuple, so this
+            # cannot drift the day identity grows a field (it already grew
+            # ``instance_key`` once, in DI-SubjectCollapse). Unconditionally
+            # here, not via ``_has_stable_report_identity``: that gate decides
+            # whether to REVISE in place, a stricter question than whether the
+            # asset we landed on happens to be the same report.
+            twin = self._find_report_by_identity(route, subject, instance_key)
+            result.matched_other_report = twin is None or twin.id != result.asset.id
         return result
+
+    # ------------------------------------------------------------------
+    # Report project attribution (PF-4) — reachability, not decoration
+    # ------------------------------------------------------------------
+
+    def _project_for_subject(self, subject: Any) -> Project | None:
+        """Return the Atlas project whose slug equals the envelope ``subject``.
+
+        ``subject`` carries no type tag upstream — the emitter sets it to
+        ``report.subject or report.project``, i.e. a *project* slug for
+        route=program/phase/readiness and a *feature* slug for
+        route=feature/dossier. One lookup against Atlas's own project registry
+        answers both questions that need it: which link target type to use
+        (:meth:`_resolve_report_link_targets`) and which project owns the
+        report (:meth:`_resolve_report_project_id`). Shared here so the two
+        can never disagree, and so the resolved Project is used rather than
+        looked up and thrown away.
+        """
+        if not isinstance(subject, str) or not subject.strip():
+            return None
+        return self._projects.get_by_slug(subject.strip())
+
+    def _resolve_explicit_project_id(self, explicit: str) -> str:
+        """Resolve a caller-supplied project **slug or id** to the canonical id.
+
+        Fails loud on an unknown value. This is the fix for the original
+        pass-through bug: ``--project artifact-atlas`` (a slug) used to be
+        stored verbatim as ``project_id="artifact-atlas"`` while the real id is
+        ``proj_artifact_atlas``, so the asset matched *no* project under
+        ``GET /api/projects/{id}/assets``' exact-equality filter — hosted and
+        silently unreachable. Storing a dangling id is strictly worse than
+        refusing, so an unresolvable value raises with nothing written.
+        """
+        candidate = explicit.strip()
+        project = self._projects.get(candidate) or self._projects.get_by_slug(candidate)
+        if project is None:
+            raise ImportError(
+                f"Unknown project for report ingest: {explicit!r} "
+                "(expected an existing project id or slug)"
+            )
+        return project.id
+
+    def _resolve_report_project_id(
+        self,
+        envelope: dict[str, Any],
+        explicit: str | None,
+        *,
+        subject_project: Project | None = None,
+    ) -> str | None:
+        """Resolve the canonical ``proj_*`` id that owns this report.
+
+        Order — first hit wins:
+
+        1. **Explicit caller value** (slug or id) — resolved, or a loud failure.
+        2. **Envelope ``subject``** matched against a project slug (the lookup
+           passed in as *subject_project*).
+        3. **``generated_from.repo`` basename**, underscore-normalized
+           (``artifact_atlas`` → ``artifact-atlas``) — see
+           :func:`_repo_slug_candidates`. This is the cheap win: it needs no
+           change to the cross-repo envelope contract.
+        4. **``None``** — left unattributed rather than guessed. An
+           unattributed report is visible to a workspace-wide lens and to a
+           backfill sweep; a *wrongly* attributed one lies to whoever reads
+           that project's page.
+        """
+        if isinstance(explicit, str) and explicit.strip():
+            return self._resolve_explicit_project_id(explicit)
+
+        if subject_project is not None:
+            return subject_project.id
+
+        generated_from = envelope.get("generated_from")
+        repo = generated_from.get("repo") if isinstance(generated_from, dict) else None
+        for slug in _repo_slug_candidates(repo):
+            project = self._projects.get_by_slug(slug)
+            if project is not None:
+                return project.id
+
+        return None
+
+    def _stamp_report_attribution(
+        self, asset: Asset, *, project_id: str | None, actor_id: str = "system"
+    ) -> Asset:
+        """Write the resolved ``project_id`` + workspace scope onto *asset*.
+
+        The ``artifact_type_id == "delivery_report"`` check is a **type** guard
+        and nothing more: it stops attribution being stamped onto a *non-report*
+        asset (e.g. a plain HTML upload) that happens to share bytes with this
+        report. It deliberately does **not** claim to tell one report from
+        another — two different report instances can render byte-identical HTML
+        and both pass this guard. Keeping this method off a byte-duplicate of a
+        *different* report is therefore the **caller's** responsibility:
+        :meth:`import_report` only calls it when ``result.asset`` is either
+        freshly created or the stable-identity target it set out to revise (see
+        the ``DI-ByteCollision`` comment there).
+
+        ``project_id`` is normally already correct on the create path (the
+        repository writes it at create time), so this usually only adds
+        ``workspace_id`` there. On the revise path — where
+        :meth:`_revise_report_asset` historically used ``project_id`` for the
+        audit event only, never writing it — this is what actually attributes
+        the asset.
+
+        A ``project_id`` delta is what marks an attribution **repair**: it moves
+        an already-stored report from one project page to another (or off
+        "unattributed"), and on the identical-bytes no-op path
+        :meth:`_revise_report_asset` returns before emitting anything, so without
+        its own event that move would leave no trace at all. That case therefore
+        bumps ``last_indexed_at`` and emits an
+        ``asset_added``/``report_attribution_repaired`` event carrying the
+        before/after ids. A ``workspace_id``-only stamp stays quiet: it backfills
+        a never-populated field on an asset whose create/revise event was just
+        emitted, so logging it would only double up.
+
+        A *fresh* create produces no ``project_id`` delta (the repository already
+        wrote the resolved id), so it does not emit a repair event —
+        ``test_first_ingest_does_not_emit_a_spurious_repair_event`` pins that
+        rather than leaving it to inspection.
+
+        Returns the refreshed asset, or *asset* unchanged when there is nothing
+        to write.
+        """
+        if asset.artifact_type_id != "delivery_report":
+            return asset
+
+        patch: dict[str, Any] = {}
+        if project_id is not None and asset.project_id != project_id:
+            patch["project_id"] = project_id
+        if self._workspace_id and asset.workspace_id != self._workspace_id:
+            patch["workspace_id"] = self._workspace_id
+        if not patch:
+            return asset
+
+        reattributed = "project_id" in patch
+        if reattributed:
+            # Mirrors AssetRepository.update: assets carry last_indexed_at, not
+            # updated_at, as their mutation timestamp.
+            patch["last_indexed_at"] = datetime.now(tz=timezone.utc).isoformat()
+
+        _jl.update_record(self._assets._assets_path, asset.id, patch)
+        refreshed = self._assets.get(asset.id)
+        stamped = refreshed if refreshed is not None else asset
+
+        if reattributed:
+            self._audit.emit_asset_added(
+                stamped.id,
+                project_id=project_id,
+                actor_id=actor_id,
+                payload={
+                    "action": "report_attribution_repaired",
+                    "project_id_before": asset.project_id,
+                    "project_id_after": project_id,
+                    "route": (asset.metadata or {}).get("route"),
+                    "subject": (asset.metadata or {}).get("subject"),
+                },
+            )
+        return stamped
 
     def _report_sensitivity(self, explicit: str | None) -> str:
         """Resolve the sensitivity for a report asset.
@@ -786,6 +1103,13 @@ class ImportService:
         ``duplicate_of`` still pointing at the (unchanged) stable asset id,
         distinguishing "revised" from "brand new" for callers that care
         (e.g. the CLI's status line).
+
+        *project_id* here is the already-resolved canonical id, used for the
+        audit event only — writing it onto the asset is
+        :meth:`_stamp_report_attribution`'s job, which :meth:`import_report`
+        runs after this returns so the identical-hash early return is covered
+        too. ``status`` is deliberately untouched: a re-ingest must not demote
+        a report a human already promoted back to ``candidate``.
         """
         new_hash = _sha256_file(html_path)
         if new_hash == existing.hash_sha256:
@@ -836,10 +1160,21 @@ class ImportService:
     # ------------------------------------------------------------------
 
     def _resolve_report_link_targets(
-        self, envelope: dict[str, Any]
+        self,
+        envelope: dict[str, Any],
+        *,
+        subject_project: Any = _UNSET,
     ) -> list[tuple[AssetLinkTargetType, str]]:
         """Resolve the envelope's ``subject`` and every ``tracker_links[]``
         entry into ``(target_type, target_id)`` pairs.
+
+        *subject_project* is the already-resolved
+        :meth:`_project_for_subject` result, passed in by
+        :meth:`import_report` so the same lookup is not repeated (and, more to
+        the point, so the resolved Project is *used* for attribution rather
+        than discarded). Omit it and the lookup happens here as before — an
+        explicit ``None`` means "resolved to no project", which is why the
+        default is a sentinel rather than ``None``.
 
         ``subject`` is optional (nullable upstream) — when absent or blank,
         it is simply skipped, not an error (there is nothing "named" to fail
@@ -865,7 +1200,12 @@ class ImportService:
         subject = envelope.get("subject")
         if isinstance(subject, str) and subject.strip():
             slug = subject.strip()
-            if self._projects.get_by_slug(slug) is not None:
+            resolved = (
+                self._project_for_subject(subject)
+                if subject_project is _UNSET
+                else subject_project
+            )
+            if resolved is not None:
                 targets.append((AssetLinkTargetType.project, slug))
             else:
                 targets.append((AssetLinkTargetType.feature, slug))
@@ -889,6 +1229,14 @@ class ImportService:
         target, skipping any ``(target_type, target_id, relationship)`` that
         already exists on *asset* — idempotent re-link (a second ingest of
         the same report adds zero duplicate links).
+
+        Like :meth:`_stamp_report_attribution`, this trusts *asset* to be the
+        right one and cannot check: linking is a write, so calling it with a
+        byte-twin of a **different** report attaches this envelope's scope links
+        (and ``asset_linked`` events) to that other report's asset. Keeping it
+        off that asset is therefore the **caller's** responsibility —
+        :meth:`import_report` calls it under the same guard as the attribution
+        stamp (see the ``DI-ByteCollision`` comment there).
         """
         if not targets:
             return

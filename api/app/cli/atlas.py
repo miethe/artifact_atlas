@@ -250,6 +250,20 @@ def cmd_asset_link(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     return 0
 
 
+def _resolve_project_ref(ref: str, svcs: dict[str, Any]) -> Any | None:
+    """Resolve a project **slug or id** to its Project, or None if unknown.
+
+    Mirrors ``_find_project_bom``'s slug-or-id tolerance (below) so every CLI
+    verb accepts whichever handle the operator happens to have. Report ingest
+    resolves here rather than passing the raw string through: ``--project
+    artifact-atlas`` used to be stored verbatim as ``project_id`` while the
+    real id is ``proj_artifact_atlas``, leaving the asset matched by no project
+    page at all.
+    """
+    projects = svcs["projects"].list_projects()
+    return next((p for p in projects if p.id == ref or p.slug == ref), None)
+
+
 def cmd_report_ingest(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     """Ingest a rendered delivery-report HTML file + its writeback envelope.
 
@@ -258,14 +272,42 @@ def cmd_report_ingest(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     creates ``AssetLink`` rows to the envelope's ``subject`` and every
     ``tracker_links[]`` target, idempotently. Fails loud (nonzero exit, no
     partial asset) on a missing HTML file, a missing/unparsable envelope, a
-    malformed envelope shape, or a ``tracker_links[]`` entry naming a
-    wrong/absent/unresolvable target.
+    malformed envelope shape, an unknown ``--project``, or a
+    ``tracker_links[]`` entry naming a wrong/absent/unresolvable target.
 
     ``subject`` is checked against Atlas's own project registry (by slug),
     but ``tracker_links[]`` targets are validated for *shape* only (does the
     id look like a node/tree id) — not for *existence* against IntentTree,
     the upstream system of record (Atlas has no IntentTree client). See
     ``implementation-notes.md``.
+
+    PF-4 — ``--project`` accepts a slug or an id and is resolved to the
+    canonical ``proj_*`` id before ingest (unknown value → nonzero exit, no
+    asset). Omitted, the service infers attribution from the envelope
+    (``subject``, then ``generated_from.repo``) so the report lands on a
+    reachable project page instead of ``project_id=null``.
+
+    ``DI-ByteCollision`` — one case prints ``Report duplicate of: <id>`` for an
+    asset that is a *different* report: a first ingest whose HTML is
+    byte-identical to an already-stored report of another identity. Two things
+    are true there, and both are stated on stderr rather than left to be
+    inferred from the field block:
+
+    1. **Nothing is written to the matched asset** — no attribution patch and
+       no scope links, both skipped under one guard in ``import_report`` (an
+       earlier version gated only the attribution and so leaked this envelope's
+       links onto the other report's asset). So every field printed below,
+       ``Project:`` and ``Links:`` included, describes the *matched* asset, not
+       this envelope.
+    2. **This invocation's own report is not stored at all** — ``import_content``
+       returns the pre-existing asset rather than creating one, so the report
+       just rendered exists nowhere in Atlas. Silence here would be
+       indistinguishable from a successful ingest, hence the explicit
+       ``WARNING: report NOT stored`` lines.
+
+    The exit code on that path stays **0**, deliberately: a byte collision is
+    not an operator input error, and callers script against the exit status.
+    The warning, not the status, is what carries the signal.
     """
     from app.services.import_index import ImportError as ReportIngestError
 
@@ -294,12 +336,25 @@ def cmd_report_ingest(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
         print("ERROR: envelope JSON must be an object.", file=sys.stderr)
         return 1
 
+    # PF-4: resolve --project (slug OR id) up front so the operator gets a
+    # CLI-shaped error, and so only a canonical proj_* id ever reaches the
+    # service. The service revalidates independently — HTTP/MCP callers never
+    # pass through here.
+    project_ref = (args.project or "").strip()
+    resolved_project_id: str | None = None
+    if project_ref:
+        project = _resolve_project_ref(project_ref, svcs)
+        if project is None:
+            print(f"ERROR: project not found: {project_ref}", file=sys.stderr)
+            return 1
+        resolved_project_id = project.id
+
     import_svc = svcs["import_svc"]
     try:
         result = import_svc.import_report(
             html_path,
             envelope,
-            project_id=args.project or None,
+            project_id=resolved_project_id,
             sensitivity=args.sensitivity or None,
             actor_id="cli",
         )
@@ -317,10 +372,44 @@ def cmd_report_ingest(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
         verb = "ingested"
     meta = asset.metadata or {}
     print(f"Report {verb}: {asset.id}")
+    if result.matched_other_report:
+        # DI-ByteCollision. Printed here, immediately under the header, so the
+        # field block below is read in context: those fields belong to the
+        # matched asset. stderr (like every other diagnostic in this file) and
+        # exit 0 (see the docstring) -- so this warning is the ONLY thing
+        # distinguishing "your report is hosted" from "your report does not
+        # exist in Atlas".
+        #
+        # Flush stdout first: when stdout is a pipe it is block-buffered while
+        # stderr is not, so without this the warning overtakes the header line
+        # and "the details below" names the wrong lines.
+        sys.stdout.flush()
+        print(
+            "WARNING: report NOT stored. Its HTML is byte-identical to "
+            f"already-stored report {asset.id} "
+            f"({asset.title!r}, route={meta.get('route')!r}, "
+            f"subject={meta.get('subject')!r}, "
+            f"instance_key={meta.get('instance_key')!r}) — a DIFFERENT report.",
+            file=sys.stderr,
+        )
+        print(
+            "WARNING: no asset was created for this ingest and nothing was "
+            f"written to {asset.id} (no attribution, no scope links). The "
+            f"report just rendered is not hosted in Atlas; the details below "
+            f"describe {asset.id}. Re-ingest once the two reports' HTML "
+            f"actually differs — or, if it IS the same report, under the "
+            f"identity {asset.id} already carries.",
+            file=sys.stderr,
+        )
     print(f"  Title:        {asset.title}")
     print(f"  Route:        {meta.get('route')}")
     print(f"  Subject:      {meta.get('subject')}")
     print(f"  Type:         {asset.artifact_type_id}")
+    # PF-4: attribution is what makes the report reachable from a project page,
+    # so surface it (and its absence) rather than leaving it silent.
+    print(f"  Project:      {asset.project_id or '(unattributed)'}")
+    print(f"  Workspace:    {asset.workspace_id or '(none)'}")
+    print(f"  Status:       {asset.status.value if hasattr(asset.status, 'value') else asset.status}")
     print(f"  Sensitivity:  {asset.sensitivity.value if hasattr(asset.sensitivity, 'value') else asset.sensitivity}")
     print(f"  Agent access: {asset.agent_access.value if hasattr(asset.agent_access, 'value') else asset.agent_access}")
     # Origin-qualified ABSOLUTE url, not a relative path: the intenttree
@@ -622,7 +711,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_report_ingest.add_argument(
         "--envelope", required=True, help="Path to the writeback envelope JSON."
     )
-    p_report_ingest.add_argument("--project", help="Project slug or ID to associate.")
+    p_report_ingest.add_argument(
+        "--project",
+        help=(
+            "Project slug or ID to associate. Resolved to the canonical "
+            "project id; an unknown value is a hard error. Omit to let the "
+            "envelope decide (subject slug, then generated_from.repo)."
+        ),
+    )
     p_report_ingest.add_argument(
         "--sensitivity",
         help="Override the default sensitivity (default: personal, never public).",
