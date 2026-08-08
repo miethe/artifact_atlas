@@ -338,6 +338,23 @@ Scope explicitly stated as out-of-scope for PF-1 v1 (PRD §7 / plan §Rubric) bu
 
 ---
 
+## Reports Hub (PF-4) — Discovery Surfaces
+
+Work package `node_01KZH6QVPKAN01N8JTQ09XRMXA`. PF-1/2/3 delivered hosting and linking; **discovery** — the operator's actual ask — was deferred by all three and never filed until 2026-08-08. The measured trigger: exactly one `delivery_report` asset existed in the live instance, with `project_id: null`, so it rendered on no page of the app. See **D-019**.
+
+| ID | Title | Scope | Status |
+|---|---|---|---|
+| PF4-1 | Delivery-report project attribution | Attribution resolves at ingest (explicit → envelope `subject` → `generated_from.repo` basename → none), stores canonical `proj_*` ids only, stamps `workspace_id`, lands at `status: candidate` per PRD OQ-1, repairs attribution idempotently on re-ingest, and writes neither attribution nor scope links on a byte-collision with a different report. Reachability asserted through the project-scoped query the UI hits. | ✅ SHIPPED 2026-08-08 (D-019 §1–6) |
+| PF4-2 | Fleet Atlas project rows | `scripts/seed_fleet_projects.py` seeds a project row per AOS repo from `agentic_meta_dev/docs/05-app-registry.yaml`; dry-run default, deterministic `proj_<slug>` ids, one shared workspace, tombstone-aware uniqueness on both id and slug, `--allow-real-registry` gate before touching canonical state. Verified: 42 apps → 41 create / 1 skip / 0 problem. | ✅ SHIPPED 2026-08-08 (D-019 §7–9) — **not yet applied to canonical `registry/` or the live node** |
+| PF4-3 | DI-Backfill report ingest | `scripts/backfill_reports.py` — dry-run-first, explicit selection, reuses `ImportService.import_report`, synthesizes envelopes from each report's own manifest, never moves/rewrites a canonical file, anchors `instance_key` explicitly and records its derivation. Verified: 15 candidates → 14 ingestable. Resolves **DI-R7** above. | ✅ SHIPPED 2026-08-08 (D-019 §10–11) — **not yet applied** |
+| PF4-4 | Per-project Reports surface (operator ask #1) | Reports-only lens on the project page with route / revision / truth_status / source commit, rows opening the hosted HTML, and linked tracker nodes. | 📋 PLANNED — implementation held. `docs/project_plans/implementation_plans/features/reports-hub-per-project-surface-v1.md` |
+| PF4-5 | Cross-project `/reports` lens (operator ask #2) | One top-level surface listing every report across all projects, faceted by project / route / truth_status / date / epic. Resolves **DI-G4** — and refutes its "additive UI only" premise: no cross-project asset list endpoint exists, so backend work is required. | 📋 PLANNED — implementation held. `.../reports-hub-central-lens-v1.md` |
+| PF4-6 | Dynamic AOS-wide overview (operator ask #3) | Live overview page with per-project latest-status links, productizing the static `:8099` prototype's collector contract rather than its build. Re-measures the git-before-tracker premise (which still holds; the gap widened) and concludes a collector service is required. | 📋 PLANNED — implementation held. `.../reports-hub-aos-overview-v1.md` |
+
+Follow-ups surfaced by PF-4 are filed as IntentTree nodes rather than table rows — see the D-019 "Deferred items" table for the eight node ids. That is deliberate: `DI-G4` sat in this document for six days reading "File as a feature in Tier-2 planning" and was never filed.
+
+---
+
 ## Post-MVP Enhancement Waves
 
 | Wave | Date | Scope | Status |

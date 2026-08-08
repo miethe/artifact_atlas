@@ -983,3 +983,100 @@ Atlas therefore extends its identity key to `(route, subject, instance_key)` (`a
 ---
 
 Deferred items are reviewed at each phase boundary. None of these block PF-1 acceptance (all are explicitly out-of-scope per the plan). See the PF-1 exit criteria (plan M4 section) for acceptance gates.
+
+---
+
+## D-019 — Reports Hub Foundations: Project Attribution, Fleet Project Rows, Report Backfill (PF-4 prerequisites)
+
+**Status**: Accepted
+**Date**: 2026-08-08
+**Phase**: PF-4 (work package `node_01KZH6QVPKAN01N8JTQ09XRMXA`)
+**Deciders**: nick (PF-4 lead)
+
+### Context
+
+PF-1/PF-2/PF-3 shipped hosting and linking: a delivery report can be rendered, exported to Atlas, and link-attached to an IntentTree node. **Discovery never shipped.** Every discovery item was deferred and none was filed as tree work — `DI-G4` said "File as a feature in Tier-2 planning" on 2026-08-02 and that never happened.
+
+Measured live state on 2026-08-08 (`http://10.42.10.76:8042`): exactly **one** `delivery_report` asset existed (`asset_c7c088ab3c8d4639`), with `project_id: null`, `workspace_id: null`, `status: inbox`. Its three `AssetLink` rows were correct and its IntentTree external link (`extlink_01KZ2M7R924SNQJ0ZQSYABMT06`) resolved — so the pipeline worked end to end once. But every Atlas web route is nested under `(projects)/projects/[projectId]`, so a project-less asset renders on **no page of the app**. The pipeline was proven; the destination did not exist.
+
+`GET /api/projects` returned a single row (`proj_artifact_atlas`). The ~40 other AOS repos had no project rows at all, so "all reports for all projects" could not resolve even in principle.
+
+This decision covers the three prerequisites implemented in the PF-4 run. The three discovery surfaces themselves (per-project reports view, cross-project `/reports` lens, AOS-wide overview) were **planned and deliberately held** — see the three `reports-hub-*-v1.md` implementation plans.
+
+### Decision
+
+**1. Report project attribution resolves at ingest, in a fixed precedence, storing only canonical ids.**
+
+Order, first hit wins: explicit caller `project_id` (accepted as slug **or** id, resolved to canonical) → envelope `subject` matched against a project slug → `generated_from.repo` basename, normalized for the underscore/hyphen mismatch (`artifact_atlas` → `artifact-atlas`) → `None`. The stored value is always the canonical `proj_*` id, never a slug.
+
+The repo-basename step is the load-bearing cheap win: it needs **no change to the cross-repo PF-3 envelope contract**, because the envelope already carries an absolute repo path. Resolution runs before any write, mirroring how link targets already resolved, so a bad value cannot leave a partially-written asset. The single lookup is shared between link-target typing and attribution so the two cannot disagree — previously the code called `get_by_slug(subject)` and threw the resolved `Project` away.
+
+**2. An explicit but unresolvable `project_id` fails loud; an unresolvable *inferred* one leaves the report unattributed.**
+
+A dangling `project_id` is strictly worse than a refused ingest: `GET /api/projects/{id}/assets` filters on exact equality, so the asset would silently match nothing — the very defect being fixed. Conversely an unattributed report is merely invisible until a workspace-wide lens or backfill picks it up, whereas a *wrongly* attributed one lies on that project's page. So: explicit and wrong → raise; inferred and absent → `None`, never a best guess.
+
+**3. `workspace_id` is stamped at the report-ingest service layer, not declared on `AssetCreate`.**
+
+`AssetRepository.create` splats `model_dump(exclude_none=False)`, so declaring the field would write `"workspace_id": null` into every asset from every create path and promote it to a client-settable field on the public `POST /api/projects/{id}/assets` body. Scoping the stamp to report ingest disturbs nothing shared. **Known fragility, accepted and recorded**: on the Project side the seeder's `workspace_id` rides on `ConfigDict(extra="allow")` because `ProjectCreate` does not declare it. One break mode is loud (`extra="forbid"` → `ValidationError`, abort before writing) and one is silent (extras ceasing to reach the stored record → rows with no `workspace_id`, no error). Declaring the field is filed as follow-up work.
+
+**4. Report ingest lands at `status: candidate`, and re-ingest never demotes.**
+
+Honours the PRD's explicit OQ-1 commitment ("auto-ingest … at `status=candidate`, never canonical"), which had been recorded in the PRD but never reached the code or D-018 — ingest hardcoded `inbox`, a third state. `import_content` gained an optional `status` defaulting to `inbox`, so `import_url` and the MCP/HTTP content-upload path are behaviourally unchanged (pinned by tests). The revise path deliberately leaves status alone: a later re-ingest must never silently demote a report a human already promoted to `canonical`, per this repo's agent-writes-stay-suggestion-grade rule.
+
+**5. Re-ingest repairs attribution idempotently, and the repair is audited.**
+
+A report first ingested while unattributable previously stayed unreachable forever — `_revise_report_asset` accepted `project_id` and used it only for the audit event. Attribution is now applied on the revise path *and* on the identical-bytes no-op, so re-publication is an attribution repair. Because attribution is now policy-relevant, a `project_id` delta bumps `last_indexed_at` and emits a `report_attribution_repaired` event; a `workspace_id`-only stamp stays silent to avoid double-logging beside the create/revise event.
+
+**6. On a content-hash collision with a *different* report's asset, neither attribution nor scope links are written.**
+
+Two distinct reports (different `(route, subject, instance_key)`) can render byte-identical HTML and hit the dedup branch. Writing attribution there would re-attribute the other project's report; writing links there contaminated it with the wrong project's evidence links plus an `asset_linked` audit event. Both are now gated together. The trigger is narrow but the failure was silent and cross-project. Exit code 0 is retained deliberately, with an explicit CLI warning naming the matched asset and stating that this invocation's report was **not** stored — the operator must not read a silent success as "hosted".
+
+**7. Fleet project rows are seeded from a single machine-readable source into one shared workspace.**
+
+`scripts/seed_fleet_projects.py` reads `agentic_meta_dev/docs/05-app-registry.yaml` (overridable via `--registry`, so Atlas does not hard-depend on a sibling checkout), dry-run by default, `--apply` to write, and `--allow-real-registry` required before it will touch canonical `registry/`. Ids are deterministic (`proj_<normalized_slug>`) so re-seeding is stable and matches the hand-authored `proj_artifact_atlas` convention. Slugs are normalized (lowercase, `_`→`-`) and validated against the OpenAPI contract's `^[a-z0-9-]+$`; anything unnormalizable is reported, never written. Whitespace is **not** stripped — a whitespace-bearing fleet id reports INVALID like any other pattern violation, surfacing the upstream typo rather than silently repairing it.
+
+All rows take the configured `settings.workspace_id`, because the central lens spans a workspace and splitting it would fragment the surface PF-4 exists to build. (The workspace is consequently named `ws_artifact_atlas_local` while holding fleet-wide content — a recorded misnomer, filed for rename.)
+
+**8. Uniqueness is enforced over tombstones on both id *and* slug.**
+
+`get_by_slug` filters soft-deleted rows, so nothing below the seeder rejects a second row reusing a tombstoned slug. The derived-id guard is **not** a backstop: existing rows need not carry the derived id form, so a tombstone with id `proj_legacy_id` holding slug `foo` leaves `proj_foo` free and a candidate for `foo` passes the id guard entirely (reproduced: exit 0, `conflict: 0`, duplicate slug written). Slugs are therefore split into live (idempotent SKIP) versus tombstone-held (CONFLICT), keeping the two legitimate outcomes distinct instead of collapsing them into a silent skip or a silent duplicate.
+
+Remediation guidance for such a conflict names only operations that exist — hand-edit the tombstone line out of `registry/projects.jsonl`, or change the fleet app id. `jsonl.hard_delete_record` has zero callers and no CLI/API/service surface, so advising a hard delete would send the operator after a command the codebase does not offer.
+
+**9. `root_intenttree_node_id` is left null rather than filled with the wrong id type.**
+
+The field wants a **node** id; the only machine-readable fleet tree data holds **tree** ids. Writing a `tree_*` id into a node-id field would read as populated while being a type lie. The seeder accepts an optional `--tree-map` of slug → root node id and leaves the field null otherwise.
+
+**10. Backfill is dry-run-first, reuses the one ingest path, and never touches canonical files.**
+
+`scripts/backfill_reports.py` (resolves `DI-Backfill`, which had marked fleet backfill an explicit non-goal) discovers candidates, prints the full envelope it *would* emit, and ingests only on `--apply` plus explicit selection. It calls `ImportService.import_report` rather than adding a second ingest path. Envelopes are synthesized from each report's own `report.json` manifest, so `subject`/`route` are faithful rather than guessed; candidates without a manifest are skipped with a stated reason. No canonical `.claude/reports` or `docs/project_plans/reports` file is moved, deleted, rewritten, or repointed (D-018) — Atlas holds a derived pointer plus a content-store copy, asserted by a byte-identity test. Sensitivity keeps the existing ingest defaults (`personal` / `preview_allowed`) per `DI-Sensitivity` rather than inventing a new policy for backfilled content.
+
+An explicitly-named but un-ingestable `--select` key is a **usage error (exit 2)**, not a 0-exit no-op, and a mixed selection refuses the whole run rather than partially applying — the safe direction, now pinned by a test so it cannot silently flip.
+
+**11. Backfill identity is anchored explicitly, records its derivation, and refuses ambiguous layouts.**
+
+`instance_key` was originally `f"{collection}/{key}"` with `collection` defaulting to the scan root's name, so re-running with a differently-spelled `--root` produced a different key and **duplicated every asset instead of revising it** — silently destroying the one guarantee the script exists to provide. Derivation now anchors on an explicit `--collection` (else the owning repo root) and records its inputs in the envelope as `instance_key_derivation` (`anchor_kind`, `anchor_path`, `collection`, `relative_path`) so a mismatch is detectable rather than silent. Two distinct reports laid out as `<dir>/index.html` and `<dir>.html` previously collided onto one key; that pair is now refused. Residual invocation-sensitivity (the anchor *rule* still depends on whether `--collection` is passed, and the repo-root fallback depends on which checkout a path is reached through) is documented in-script and filed as follow-up.
+
+### Consequences
+
+- A delivery report ingested for a known project is now reachable from a project-scoped Atlas surface. Pinned by tests that assert reachability through `GET /api/projects/{id}/assets?artifact_type_id=delivery_report` — the same exact-equality filter the UI hits — rather than merely asserting ingest returned 200.
+- The three discovery surfaces have implementation plans but **no implementation**; they remain the substance of PF-4.
+- Nothing has been applied to the live node or to canonical `registry/`. Both scripts are dry-run by default; seeding the deployed instance is a separate, explicitly-gated action.
+- Backend suite: 779 passed, 2 skipped. Both scripts verified executing against real sibling data (42 fleet apps → 41 create / 1 skip / 0 problem; 15 backfill candidates → 14 ingestable, the lone skip being the prototype's own `index.html`).
+
+### Deferred items (filed as tree work, not left in this document)
+
+Unlike `DI-G4`, which sat here for six days with "File as a feature in Tier-2 planning" and was never filed, each of these is an IntentTree node:
+
+| Item | Node |
+|---|---|
+| `AssetLink.target_id` stores a project slug while `project_id` stores the canonical id | `node_01KZHJX2Z3FCQBP9Q36J93FTFJ` |
+| `root_intenttree_node_id` needs a tree→root-node resolution | `node_01KZHJXCFSKVH7T8S9TACE92FH` |
+| Rename `ws_artifact_atlas_local` → `ws_aos` | `node_01KZHJXM14NSTSMV8BT8D6YBRJ` |
+| Fleet seeding creates 41 projects where ~14 produce reports | `node_01KZHNGY48EVDTR4G814048QNX` |
+| Backfill `instance_key` still varies with the invocation | `node_01KZHNHBMQSR87X6D8ZX25T5MA` |
+| No Python lint gate (`make lint` covers `web/` only) | `node_01KZHNHP84MBRH9KYRS7A0T37Q` |
+| PF-3's stale "no live round trip" deferred_item (cross-repo) | `node_01KZHJYBDJCEEHAVH2309XS6Q9` |
+| `skillmeat deploy` blocked repo-wide by a malformed bundle record | `node_01KZHJYTV7FFRARVJVAYJ344JH` |
+
+`DI-G4` and `DI-Backfill` above are partially superseded by this decision: `DI-Backfill`'s "explicit non-goal" is resolved by item 10, and `DI-G4`'s "additive UI only" assumption is refuted by the central-lens plan — there is no cross-project asset list endpoint, so that surface requires backend work.
