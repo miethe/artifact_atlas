@@ -88,10 +88,16 @@ class TestReportIngestService:
         html = _write_html(tmp_path)
         svc = ImportService(tmp_registry)
 
-        result = svc.import_report(html, _envelope(), project_id="proj-atlas")
+        # PF-4: an explicit project_id is now resolved (slug OR id) and an
+        # unknown value fails loud, so this scope must name a real project —
+        # the seed registry's ``proj_artifact_atlas``. The former "proj-atlas"
+        # was a dangling id that silently made the asset unreachable; see
+        # test_report_attribution.py for the reachability coverage.
+        result = svc.import_report(html, _envelope(), project_id="proj_artifact_atlas")
         asset = result.asset
 
         assert result.is_duplicate is False
+        assert asset.project_id == "proj_artifact_atlas"
         assert asset.artifact_type_id == "delivery_report"
         assert asset.mime_type == "text/html"
         assert asset.agent_access.value == "preview_allowed"
