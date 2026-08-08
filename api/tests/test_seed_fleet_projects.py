@@ -1,0 +1,879 @@
+"""PF-4 — scripts/seed_fleet_projects.py: fleet -> Atlas project-row seeding.
+
+Covers the load-bearing guarantees:
+  - dry run is the DEFAULT, exits 0, and writes nothing;
+  - dry-run output names every required field per candidate;
+  - --apply creates rows through the service layer (readable back by slug);
+  - re-applying is idempotent on slug (no duplicate rows, no duplicate ids);
+  - underscore fleet ids normalize to hyphenated slugs (artifact_atlas ->
+    artifact-atlas) and reproduce the hand-authored proj_artifact_atlas id;
+  - a fleet id that cannot be normalized into ^[a-z0-9-]+$ is SKIPPED and
+    REPORTED, never written as an invalid slug — including one carrying stray
+    whitespace, which is NOT trimmed ("normalized, never sanitized");
+  - the conflict guards see TOMBSTONES on BOTH axes: a soft-deleted row blocks
+    a fleet app that would reuse its id *or* its slug, instead of appending a
+    duplicate — including when the tombstoned row's id is NOT the derived form
+    (id proj_legacy_id holding slug foo), where the id guard cannot help;
+  - workspace_id survives the create round trip even though it is an undeclared
+    extra field on ProjectCreate (the documented fragility);
+  - without --tree-map, root_intenttree_node_id stays null (the fleet registry
+    carries no node ids — only tree ids exist upstream, a different type).
+
+Every test runs against the ``tmp_registry`` fixture (a temp copy of the seed
+JSONL) and passes ``--registry-dir`` explicitly. The real ``registry/`` is never
+written to.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from app.models.project import ProjectCreate
+from app.repositories.projects import ProjectRepository
+from app.services.projects import ProjectService
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT_PATH = _REPO_ROOT / "scripts" / "seed_fleet_projects.py"
+
+
+def _load_script_module() -> Any:
+    """Import scripts/seed_fleet_projects.py as a module (not on sys.path)."""
+    spec = importlib.util.spec_from_file_location(
+        "seed_fleet_projects_under_test", _SCRIPT_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+seed = _load_script_module()
+
+
+# ---------------------------------------------------------------------------
+# Fixtures / helpers
+# ---------------------------------------------------------------------------
+
+
+def _fleet_yaml(tmp_path: Path, apps: list[dict[str, Any]]) -> Path:
+    """Write a minimal fleet app registry mirroring the real file's shape."""
+    lines = ["# test fleet registry", "schema_version: 1", "apps:"]
+    for app in apps:
+        lines.append(f"  - id: {json.dumps(app['id'])}")
+        for key, value in app.items():
+            if key == "id":
+                continue
+            lines.append(f"    {key}: {json.dumps(value)}")
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "05-app-registry.yaml"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+@pytest.fixture()
+def fleet_registry(tmp_path: Path) -> Path:
+    """A three-app fleet source: underscore id, hyphen id, and Atlas itself."""
+    return _fleet_yaml(
+        tmp_path,
+        [
+            {
+                "id": "signal_to_system",
+                "name": "Signal to System",
+                "path": "/repos/signal_to_system",
+                "layer": "L6",
+                "role": "AAR -> system pipeline",
+                "purpose": "Turns after-action signal into durable system change",
+                "status": "partial",
+            },
+            {
+                "id": "research-foundry",
+                "name": "Research Foundry",
+                "path": "/repos/research-foundry",
+                "layer": "L4",
+                "role": "Evidence pipeline",
+                "purpose": "Claim-traceable research runs and evidence bundles",
+                "status": "strong",
+            },
+            {
+                # Already present in the seed registry as proj_artifact_atlas.
+                "id": "artifact_atlas",
+                "name": "Artifact Atlas",
+                "path": "/repos/artifact_atlas",
+                "layer": "L5",
+                "role": "Asset graph",
+                "purpose": "Asset graph, artifact BOM, context-pack builder",
+                "status": "ok",
+            },
+        ],
+    )
+
+
+def _projects_file(registry: Path) -> Path:
+    return registry / "projects.jsonl"
+
+
+def _read_rows(registry: Path) -> list[dict[str, Any]]:
+    path = _projects_file(registry)
+    if not path.exists():
+        return []
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _run(
+    fleet: Path,
+    registry: Path,
+    *extra: str,
+) -> int:
+    return seed.main(
+        ["--registry", str(fleet), "--registry-dir", str(registry), *extra]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pure normalization / derivation contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("fleet_id", "expected_slug"),
+    [
+        ("artifact_atlas", "artifact-atlas"),
+        ("signal_to_system", "signal-to-system"),
+        ("research-foundry", "research-foundry"),
+        ("Boxbrain-2", "boxbrain-2"),
+    ],
+)
+def test_normalize_slug_underscores_and_case(fleet_id: str, expected_slug: str) -> None:
+    slug = seed.normalize_slug(fleet_id)
+    assert slug == expected_slug
+    assert seed.is_valid_slug(slug)
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "Bad App!",
+        "app.with.dots",
+        "café-app",
+        "has space",
+        "",
+        "under_score!",
+        # Whitespace is NOT trimmed — it is a pattern violation like any other.
+        "  intenttree  ",
+        "intenttree ",
+        "\tintenttree",
+    ],
+)
+def test_unnormalizable_ids_fail_the_openapi_slug_pattern(bad_id: str) -> None:
+    assert not seed.is_valid_slug(seed.normalize_slug(bad_id))
+
+
+def test_normalize_slug_applies_exactly_two_transforms_and_never_strips() -> None:
+    """The "normalized, never sanitized" invariant, asserted literally.
+
+    Only lowercase and ``_`` -> ``-`` are applied. Whitespace survives, so a
+    whitespace-bearing fleet id fails the slug pattern and gets REPORTED rather
+    than silently repaired into a passing slug (which would hide an upstream
+    data typo in the fleet registry).
+    """
+    assert seed.normalize_slug("  Intent_Tree  ") == "  intent-tree  "
+    assert not seed.is_valid_slug(seed.normalize_slug("  Intent_Tree  "))
+
+    # Equivalent to composing exactly the two documented transforms, for any
+    # input — no third transform hides in there.
+    for raw in ["  intenttree  ", "Boxbrain-2", "signal_to_system", "A B_c "]:
+        assert seed.normalize_slug(raw) == raw.lower().replace("_", "-")
+
+
+def test_whitespace_fleet_id_is_reported_invalid_not_normalized(
+    tmp_path: Path,
+    tmp_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """End-to-end twin of the unit test: whitespace surfaces as INVALID.
+
+    A stray-whitespace id in the fleet registry is an upstream typo. It must be
+    reported (and tripped by --strict), never trimmed into a row.
+    """
+    fleet = _fleet_yaml(
+        tmp_path / "whitespace",
+        [
+            {"id": "  intenttree  ", "name": "IntentTree", "purpose": "padded id"},
+            {"id": "good-app", "name": "Good App", "purpose": "fine"},
+        ],
+    )
+
+    rc = _run(fleet, tmp_registry, "--apply")
+    out = capsys.readouterr().out
+
+    assert rc == 0, "a padded id is reported, not fatal"
+    assert "INVALID" in out
+    assert "^[a-z0-9-]+$" in out
+
+    slugs = {r["slug"] for r in _read_rows(tmp_registry)}
+    assert "good-app" in slugs
+    # The padded id was NOT silently repaired into a passing slug.
+    assert "intenttree" not in slugs
+    assert not any(s != s.strip() for s in slugs)
+
+    # ...and it is a --strict-visible problem, like every other pattern violation.
+    assert _run(fleet, tmp_registry, "--strict") == 2
+
+
+def test_blank_fleet_id_still_reports_as_a_missing_id(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Dropping .strip() must not lose the missing-id branch.
+
+    A whitespace-ONLY id has no id to report, so it keeps the clearer
+    "no 'id' field" reason rather than a slug-pattern complaint.
+    """
+    fleet = _fleet_yaml(tmp_path / "blank", [{"id": "   ", "name": "Blank"}])
+
+    assert _run(fleet, tmp_registry, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["summary"]["invalid"] == 1
+    assert payload["candidates"][0]["fleet_id"] == "<missing id>"
+    assert "no 'id' field" in payload["candidates"][0]["reason"]
+
+
+def test_derived_id_matches_the_hand_authored_convention() -> None:
+    # The registry's one hand-authored row is proj_artifact_atlas / artifact-atlas.
+    assert seed.derive_project_id("artifact-atlas") == "proj_artifact_atlas"
+    assert seed.derive_project_id("signal-to-system") == "proj_signal_to_system"
+
+
+# ---------------------------------------------------------------------------
+# Dry run is the default and writes nothing
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_is_default_and_writes_nothing(
+    tmp_registry: Path,
+    fleet_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    before = _projects_file(tmp_registry).read_bytes()
+
+    rc = _run(fleet_registry, tmp_registry)
+
+    assert rc == 0
+    assert _projects_file(tmp_registry).read_bytes() == before
+    out = capsys.readouterr().out
+    assert "DRY RUN (no writes)" in out
+    assert "nothing written" in out
+
+
+def test_dry_run_reports_every_required_field_per_candidate(
+    tmp_registry: Path,
+    fleet_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc = _run(fleet_registry, tmp_registry)
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    # Derived id, slug, name, workspace_id, root node id, and the action verb.
+    assert "id=proj_signal_to_system" in out
+    assert "slug=signal-to-system" in out
+    assert "name=Signal to System" in out
+    assert "workspace_id=ws_test" in out
+    assert "root_intenttree_node_id=null" in out
+    assert "CREATE" in out
+    # Atlas itself is already present -> SKIP, not CREATE.
+    skip_line = next(ln for ln in out.splitlines() if "artifact-atlas" in ln)
+    assert skip_line.strip().startswith("SKIP")
+
+
+def test_dry_run_json_plan_is_machine_readable(
+    tmp_registry: Path,
+    fleet_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc = _run(fleet_registry, tmp_registry, "--json")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["mode"] == "dry_run"
+    assert payload["workspace_id"] == "ws_test"
+    assert payload["summary"] == {
+        "total": 3,
+        "create": 2,
+        "skip": 1,
+        "invalid": 0,
+        "conflict": 0,
+        "created": [],
+    }
+    by_slug = {c["slug"]: c for c in payload["candidates"]}
+    assert by_slug["signal-to-system"]["id"] == "proj_signal_to_system"
+    assert by_slug["artifact-atlas"]["action"] == "skip"
+
+
+# ---------------------------------------------------------------------------
+# Apply
+# ---------------------------------------------------------------------------
+
+
+def test_apply_creates_rows_through_the_service_layer(
+    tmp_registry: Path, fleet_registry: Path
+) -> None:
+    rc = _run(fleet_registry, tmp_registry, "--apply")
+    assert rc == 0
+
+    repo = ProjectRepository(tmp_registry)
+    created = repo.get_by_slug("signal-to-system")
+    assert created is not None
+    assert created.id == "proj_signal_to_system"
+    assert created.name == "Signal to System"
+    assert created.workspace_id == "ws_test"
+    assert created.status.value == "active"
+    assert created.description == "Turns after-action signal into durable system change"
+    assert seed.FLEET_TAG in created.tags
+    assert "layer:l6" in created.tags
+    # Repository stamps timestamps — proof the write went through the layer,
+    # not a hand-appended JSONL line.
+    assert created.created_at is not None
+    assert created.updated_at is not None
+
+    assert repo.get_by_slug("research-foundry") is not None
+    # The pre-existing Atlas row is untouched (still the hand-authored id).
+    atlas = repo.get_by_slug("artifact-atlas")
+    assert atlas is not None and atlas.id == "proj_artifact_atlas"
+
+
+def test_apply_is_idempotent_on_slug(
+    tmp_registry: Path, fleet_registry: Path
+) -> None:
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+    after_first = _read_rows(tmp_registry)
+
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+    after_second = _read_rows(tmp_registry)
+
+    assert after_second == after_first, "re-apply must not create duplicate rows"
+
+    slugs = [r["slug"] for r in after_second]
+    ids = [r["id"] for r in after_second]
+    assert len(slugs) == len(set(slugs))
+    assert len(ids) == len(set(ids))
+
+
+def test_reapply_reports_everything_as_skip(
+    tmp_registry: Path,
+    fleet_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+    capsys.readouterr()
+
+    assert _run(fleet_registry, tmp_registry, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["summary"]["create"] == 0
+    assert payload["summary"]["skip"] == 3
+
+
+def test_underscore_fleet_id_lands_as_hyphenated_slug(
+    tmp_registry: Path, fleet_registry: Path
+) -> None:
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    assert "signal_to_system" not in rows
+    assert rows["signal-to-system"]["id"] == "proj_signal_to_system"
+    for row in rows.values():
+        assert seed.is_valid_slug(row["slug"]), row
+
+
+# ---------------------------------------------------------------------------
+# Invalid slugs are skipped AND reported
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_slug_is_skipped_and_reported(
+    tmp_path: Path,
+    tmp_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fleet = _fleet_yaml(
+        tmp_path / "invalid",
+        [
+            {"id": "Bad App!", "name": "Bad App", "purpose": "unnormalizable id"},
+            {"id": "good-app", "name": "Good App", "purpose": "fine"},
+        ],
+    )
+
+    rc = _run(fleet, tmp_registry, "--apply")
+    out = capsys.readouterr().out
+
+    assert rc == 0, "an unnormalizable id is reported, not fatal"
+    assert "INVALID" in out
+    assert "Bad App!" in out
+    assert "^[a-z0-9-]+$" in out
+
+    slugs = {r["slug"] for r in _read_rows(tmp_registry)}
+    assert "good-app" in slugs
+    assert not any("Bad App" in s or "!" in s for s in slugs)
+    for slug in slugs:
+        assert seed.is_valid_slug(slug), slug
+
+
+def test_strict_exits_two_when_a_candidate_is_invalid(
+    tmp_path: Path, tmp_registry: Path
+) -> None:
+    target = tmp_path / "strict"
+    target.mkdir()
+    fleet = _fleet_yaml(target, [{"id": "app.with.dots", "name": "Dotted"}])
+
+    assert _run(fleet, tmp_registry, "--strict") == 2
+    assert _run(fleet, tmp_registry) == 0
+
+
+def test_duplicate_fleet_slugs_conflict_instead_of_duplicating(
+    tmp_path: Path, tmp_registry: Path
+) -> None:
+    target = tmp_path / "dupes"
+    target.mkdir()
+    fleet = _fleet_yaml(
+        target,
+        [
+            {"id": "twin_app", "name": "Twin A"},
+            {"id": "twin-app", "name": "Twin B"},
+        ],
+    )
+
+    assert _run(fleet, tmp_registry, "--apply") == 0
+    rows = [r for r in _read_rows(tmp_registry) if r["slug"] == "twin-app"]
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Twin A"
+
+
+# ---------------------------------------------------------------------------
+# Derived-id conflict guard (must see TOMBSTONES)
+# ---------------------------------------------------------------------------
+
+
+def _seed_then_tombstone(registry: Path, project_id: str, slug: str) -> None:
+    """Write a project row through the repo, then soft-delete it.
+
+    Leaves a real ``_deleted: true`` line in projects.jsonl — the row is
+    invisible to ``ProjectService.list_projects()`` but its id is still
+    physically present in the file.
+    """
+    repo = ProjectRepository(registry)
+    repo.create(project_id, ProjectCreate(name=slug.title(), slug=slug))
+    assert repo.delete(project_id) is True
+
+
+def test_tombstoned_row_conflicts_instead_of_duplicating_its_id(
+    tmp_path: Path,
+    tmp_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A soft-deleted proj_foo/foo must block a fleet app that would reuse it.
+
+    Regression pin for the guards being read through
+    ``ProjectService.list_projects()`` (``include_deleted=False``), which hides
+    tombstones. Under that read the fleet app planned as CREATE and appended a
+    SECOND row carrying id ``proj_foo`` *and* slug ``foo``;
+    ``jsonl.update_record`` resolves ids by first match, so the new row would
+    have been permanently unupdatable.
+
+    Here the tombstone collides on both axes, and the slug guard reports first
+    (it names the blocking row and a remediation the codebase actually offers).
+    The id guard's own tombstone-awareness is pinned separately by
+    :func:`test_tombstoned_derived_id_under_a_different_slug_still_conflicts`.
+    """
+    _seed_then_tombstone(tmp_registry, "proj_foo", "foo")
+
+    # Precondition: the service-layer read genuinely cannot see the tombstone.
+    live = ProjectService(tmp_registry).list_projects()
+    assert all(p.id != "proj_foo" for p in live)
+    assert all(p.slug != "foo" for p in live)
+
+    fleet = _fleet_yaml(
+        tmp_path / "tombstone", [{"id": "foo", "name": "Foo", "purpose": "revived"}]
+    )
+
+    rc = _run(fleet, tmp_registry, "--apply")
+    out = capsys.readouterr().out
+
+    # The conflict is REPORTED...
+    assert rc == 0
+    assert "CONFLICT" in out
+    assert "proj_foo" in out
+    conflict_line = next(ln for ln in out.splitlines() if "CONFLICT" in ln)
+    assert "soft-deleted row" in conflict_line
+
+    # ...and NO duplicate row was appended.
+    rows = _read_rows(tmp_registry)
+    assert [r["id"] for r in rows].count("proj_foo") == 1
+    assert [r["slug"] for r in rows].count("foo") == 1
+    assert len({r["id"] for r in rows}) == len(rows), "no duplicate ids in the file"
+    # The surviving proj_foo line is still the tombstone, untouched.
+    foo_row = next(r for r in rows if r["id"] == "proj_foo")
+    assert foo_row["_deleted"] is True
+
+    # It is a --strict-visible problem, not a silent skip.
+    capsys.readouterr()
+    assert _run(fleet, tmp_registry, "--strict") == 2
+
+
+def test_tombstoned_conflict_is_reported_in_the_json_plan(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The machine-readable plan carries the conflict too (for orchestrators)."""
+    _seed_then_tombstone(tmp_registry, "proj_foo", "foo")
+    fleet = _fleet_yaml(tmp_path / "tombstone-json", [{"id": "foo", "name": "Foo"}])
+
+    assert _run(fleet, tmp_registry, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["summary"]["conflict"] == 1
+    assert payload["summary"]["create"] == 0
+    assert payload["summary"]["created"] == []
+    cand = payload["candidates"][0]
+    assert cand["action"] == "conflict"
+    assert cand["id"] == "proj_foo"
+    assert "proj_foo" in cand["reason"]
+
+
+def test_tombstoned_slug_with_a_non_derived_id_conflicts_instead_of_duplicating(
+    tmp_path: Path,
+    tmp_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The case the id guard CANNOT catch: tombstoned slug, unrelated id.
+
+    Existing rows are under no obligation to carry the derived id form. A
+    tombstoned row with id ``proj_legacy_id`` holding slug ``foo`` leaves
+    ``proj_foo`` free, so the derived-id guard passes; and ``get_by_slug``
+    filters deleted rows, so the slug reads free too. Before the slug guard
+    became tombstone-aware this planned CREATE, exited 0 reporting ``conflict:
+    0``, and left slug ``foo`` in projects.jsonl TWICE.
+    """
+    repo = ProjectRepository(tmp_registry)
+    repo.create("proj_legacy_id", ProjectCreate(name="Foo", slug="foo"))
+    assert repo.delete("proj_legacy_id") is True
+
+    # Preconditions that make this distinct from the derived-id tombstone case:
+    # the slug reads free, AND the derived id is genuinely unused.
+    assert repo.get_by_slug("foo") is None
+    assert all(p.id != "proj_foo" for p in repo.list(include_deleted=True))
+
+    fleet = _fleet_yaml(
+        tmp_path / "tombstoned-slug",
+        [{"id": "foo", "name": "Foo", "purpose": "would duplicate the slug"}],
+    )
+
+    rc = _run(fleet, tmp_registry, "--apply")
+    out = capsys.readouterr().out
+
+    # Reported as a CONFLICT naming the row that actually blocks it...
+    assert rc == 0
+    conflict_line = next(ln for ln in out.splitlines() if "CONFLICT" in ln)
+    assert "proj_legacy_id" in conflict_line
+    assert "soft-deleted row" in conflict_line
+    # ...with remediation the codebase actually offers (no hard-delete surface).
+    assert "projects.jsonl" in conflict_line
+
+    # ...and NOTHING was written: no duplicate slug, no new row at all.
+    rows = _read_rows(tmp_registry)
+    assert [r["slug"] for r in rows].count("foo") == 1, "the duplicate-slug hole"
+    assert [r["id"] for r in rows].count("proj_foo") == 0
+    assert len({r["slug"] for r in rows}) == len(rows), "no duplicate slugs in the file"
+    foo_row = next(r for r in rows if r["slug"] == "foo")
+    assert foo_row["id"] == "proj_legacy_id"
+    assert foo_row["_deleted"] is True
+
+    # The machine-readable plan counts it too (an orchestrator must see it).
+    capsys.readouterr()
+    assert _run(fleet, tmp_registry, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"]["conflict"] == 1
+    assert payload["summary"]["create"] == 0
+    assert payload["candidates"][0]["action"] == "conflict"
+
+    # ...and it trips --strict rather than exiting clean.
+    capsys.readouterr()
+    assert _run(fleet, tmp_registry, "--strict") == 2
+
+
+def test_tombstoned_derived_id_under_a_different_slug_still_conflicts(
+    tmp_path: Path, tmp_registry: Path
+) -> None:
+    """The id guard's tombstone-awareness stays load-bearing on its own.
+
+    Mirror image of the test above: the tombstone holds the DERIVED id
+    (``proj_foo``) under an unrelated slug, so the slug guard sees nothing and
+    only the tombstone-inclusive id read can refuse the candidate. Without it, a
+    second row would take id ``proj_foo`` and be shadowed forever by
+    ``jsonl.update_record``'s first-id-match resolution.
+    """
+    repo = ProjectRepository(tmp_registry)
+    repo.create("proj_foo", ProjectCreate(name="Legacy", slug="legacy-name"))
+    assert repo.delete("proj_foo") is True
+
+    # The slug guard cannot see this one: slug 'foo' is untouched, live or dead.
+    assert all(p.slug != "foo" for p in repo.list(include_deleted=True))
+
+    fleet = _fleet_yaml(tmp_path / "tombstoned-id", [{"id": "foo", "name": "Foo"}])
+
+    assert _run(fleet, tmp_registry, "--apply") == 0
+
+    rows = _read_rows(tmp_registry)
+    assert [r["id"] for r in rows].count("proj_foo") == 1
+    assert "foo" not in {r["slug"] for r in rows}
+    assert next(r for r in rows if r["id"] == "proj_foo")["_deleted"] is True
+
+
+def test_derived_id_taken_by_a_live_row_with_a_different_slug_conflicts(
+    tmp_path: Path, tmp_registry: Path
+) -> None:
+    """The other path into the same guard: id taken, slug free.
+
+    A hand-authored row can hold ``proj_foo`` under an unrelated slug. The
+    derived id is then unavailable even though the slug is, so the candidate
+    conflicts rather than appending a duplicate id.
+    """
+    repo = ProjectRepository(tmp_registry)
+    repo.create("proj_foo", ProjectCreate(name="Legacy", slug="legacy-name"))
+
+    fleet = _fleet_yaml(tmp_path / "id-taken", [{"id": "foo", "name": "Foo"}])
+
+    assert _run(fleet, tmp_registry, "--apply") == 0
+
+    rows = _read_rows(tmp_registry)
+    assert [r["id"] for r in rows].count("proj_foo") == 1
+    assert next(r for r in rows if r["id"] == "proj_foo")["slug"] == "legacy-name"
+    assert "foo" not in {r["slug"] for r in rows}
+
+
+def test_live_slug_still_skips_rather_than_conflicting(
+    tmp_registry: Path, fleet_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tombstone-awareness must not turn ordinary idempotency into a conflict.
+
+    A LIVE matching row is the normal re-seed case and stays SKIP (exit 0, and
+    clean under --strict).
+    """
+    assert _run(fleet_registry, tmp_registry, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    by_slug = {c["slug"]: c for c in payload["candidates"]}
+    assert by_slug["artifact-atlas"]["action"] == "skip"
+    assert payload["summary"]["conflict"] == 0
+    assert _run(fleet_registry, tmp_registry, "--strict") == 0
+
+
+# ---------------------------------------------------------------------------
+# root_intenttree_node_id: null unless an explicit node map is supplied
+# ---------------------------------------------------------------------------
+
+
+def test_tree_map_absent_leaves_root_intenttree_node_id_null(
+    tmp_registry: Path, fleet_registry: Path
+) -> None:
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    assert rows["signal-to-system"]["root_intenttree_node_id"] is None
+    assert rows["research-foundry"]["root_intenttree_node_id"] is None
+
+
+def test_tree_map_present_populates_root_node_id(
+    tmp_path: Path, tmp_registry: Path, fleet_registry: Path
+) -> None:
+    tree_map = tmp_path / "tree-map.json"
+    tree_map.write_text(
+        json.dumps(
+            {
+                # Keys are normalized the same way fleet ids are.
+                "signal_to_system": "node_01SIGNALROOT",
+                "research-foundry": "node_01RFROOT",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rc = _run(fleet_registry, tmp_registry, "--tree-map", str(tree_map), "--apply")
+    assert rc == 0
+
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    assert rows["signal-to-system"]["root_intenttree_node_id"] == "node_01SIGNALROOT"
+    assert rows["research-foundry"]["root_intenttree_node_id"] == "node_01RFROOT"
+
+
+def test_missing_tree_map_file_is_a_clean_error(
+    tmp_path: Path,
+    tmp_registry: Path,
+    fleet_registry: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    before = _projects_file(tmp_registry).read_bytes()
+
+    rc = _run(
+        fleet_registry, tmp_registry, "--tree-map", str(tmp_path / "nope.json"), "--apply"
+    )
+
+    assert rc == 1
+    assert "--tree-map file not found" in capsys.readouterr().err
+    assert _projects_file(tmp_registry).read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# Source-file handling and write guard
+# ---------------------------------------------------------------------------
+
+
+def test_missing_fleet_registry_is_a_clean_error(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc = _run(tmp_path / "absent.yaml", tmp_registry, "--apply")
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Fleet registry not found" in err
+    assert "--registry" in err
+
+
+def test_apply_refuses_the_canonical_registry_without_the_explicit_flag(
+    tmp_path: Path,
+    tmp_registry: Path,
+    fleet_registry: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The guard is exercised against a FAKE repo root, never the real registry."""
+    fake_root = tmp_path / "fake-repo"
+    (fake_root / "registry").mkdir(parents=True)
+    monkeypatch.setattr(seed, "_REPO_ROOT", fake_root)
+
+    rc = seed.main(
+        [
+            "--registry",
+            str(fleet_registry),
+            "--registry-dir",
+            str(fake_root / "registry"),
+            "--apply",
+        ]
+    )
+
+    assert rc == 1
+    assert "refusing to --apply" in capsys.readouterr().err
+    assert not (fake_root / "registry" / "projects.jsonl").exists()
+
+    # ...and it goes through with the explicit acknowledgement.
+    rc = seed.main(
+        [
+            "--registry",
+            str(fleet_registry),
+            "--registry-dir",
+            str(fake_root / "registry"),
+            "--apply",
+            "--allow-real-registry",
+        ]
+    )
+    assert rc == 0
+    assert (fake_root / "registry" / "projects.jsonl").exists()
+
+
+def test_workspace_id_defaults_to_settings_and_is_overridable(
+    tmp_path: Path, tmp_registry: Path, fleet_registry: Path
+) -> None:
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    # tmp_registry's patched settings carry workspace_id == "ws_test".
+    assert rows["signal-to-system"]["workspace_id"] == "ws_test"
+
+    # A later seed can stamp a different workspace without editing the script
+    # (the ws_artifact_atlas_local -> ws_aos rename is a follow-up).
+    other = _fleet_yaml(tmp_path / "ws-override", [{"id": "late_app", "name": "Late"}])
+    assert _run(other, tmp_registry, "--workspace-id", "ws_aos", "--apply") == 0
+
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    assert rows["late-app"]["workspace_id"] == "ws_aos"
+    # Pre-existing rows are untouched by the override.
+    assert rows["signal-to-system"]["workspace_id"] == "ws_test"
+
+
+def test_workspace_id_persists_although_undeclared_on_projectcreate(
+    tmp_registry: Path, fleet_registry: Path
+) -> None:
+    """Pin the fragility documented in the script's module warning.
+
+    ``workspace_id`` is NOT a declared field on ``ProjectCreate`` and is absent
+    from the OpenAPI ``ProjectCreate`` schema. It reaches the JSONL row only via
+    ``model_config = ConfigDict(extra="allow")`` plus
+    ``ProjectRepository.create``'s ``model_dump()`` spread. If ``ProjectCreate``
+    ever tightens to ``extra="forbid"`` (or the repository stops spreading
+    extras) workspace scoping would vanish from every seeded row with no error —
+    this test is the thing that would catch it.
+    """
+    # The precondition that makes the pass-through work at all.
+    assert "workspace_id" not in ProjectCreate.model_fields
+    assert ProjectCreate.model_config.get("extra") == "allow"
+
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+
+    # It survives the model -> repository -> JSONL round trip...
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    assert rows["signal-to-system"]["workspace_id"] == "ws_test"
+    # ...and reads back through the Project model, which DOES declare it.
+    created = ProjectRepository(tmp_registry).get_by_slug("signal-to-system")
+    assert created is not None and created.workspace_id == "ws_test"
+
+
+def test_fleet_status_is_not_mapped_onto_project_status(
+    tmp_registry: Path, fleet_registry: Path
+) -> None:
+    """Fleet 'status' is layer maturity, not lifecycle — never mistranslated."""
+    assert _run(fleet_registry, tmp_registry, "--apply") == 0
+
+    rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
+    # research-foundry is status: strong upstream; it must land as `active`.
+    assert rows["research-foundry"]["status"] == "active"
+    assert rows["signal-to-system"]["status"] == "active"
+
+
+def test_real_fleet_registry_plans_cleanly_when_present(tmp_registry: Path) -> None:
+    """Smoke test against the actual launchpad registry, if it is checked out.
+
+    Dry run only — asserts the real 42-app file yields valid slugs and no
+    unexpected fatal, and writes nothing.
+    """
+    fleet = seed.default_fleet_registry_path()
+    if fleet is None or not fleet.is_file():
+        pytest.skip("sibling agentic_meta_dev checkout not available")
+
+    before = _projects_file(tmp_registry).read_bytes()
+    entries = seed.load_fleet_apps(fleet)
+    candidates = seed.plan_candidates(
+        entries,
+        existing_slugs={"artifact-atlas"},
+        existing_ids={"proj_artifact_atlas"},
+        workspace_id="ws_test",
+    )
+
+    assert len(candidates) == len(entries)
+    assert _projects_file(tmp_registry).read_bytes() == before
+    for cand in candidates:
+        if cand.action in (seed.ACTION_CREATE, seed.ACTION_SKIP):
+            assert seed.is_valid_slug(cand.slug or "")
+            assert cand.project_id == seed.derive_project_id(cand.slug or "")
+            assert cand.root_intenttree_node_id is None
+    by_slug = {c.slug: c for c in candidates}
+    assert by_slug["artifact-atlas"].action == seed.ACTION_SKIP
+    assert by_slug["signal-to-system"].action == seed.ACTION_CREATE
