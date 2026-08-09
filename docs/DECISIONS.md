@@ -1080,3 +1080,67 @@ Unlike `DI-G4`, which sat here for six days with "File as a feature in Tier-2 pl
 | `skillmeat deploy` blocked repo-wide by a malformed bundle record | `node_01KZHJYTV7FFRARVJVAYJ344JH` |
 
 `DI-G4` and `DI-Backfill` above are partially superseded by this decision: `DI-Backfill`'s "explicit non-goal" is resolved by item 10, and `DI-G4`'s "additive UI only" assumption is refuted by the central-lens plan — there is no cross-project asset list endpoint, so that surface requires backend work.
+
+---
+
+## D-020 — Fleet seeding scope: commit recency, not layer or report history (resolves D-019's open scoping question)
+
+**Status**: Accepted
+**Date**: 2026-08-08
+**Phase**: PF-4 follow-up (`node_01KZHNGY48EVDTR4G814048QNX`)
+**Deciders**: nick (scope call), agent (filter design)
+
+### Context
+
+D-019 shipped `scripts/seed_fleet_projects.py` but left its scope unresolved and filed it as `node_01KZHNGY48EVDTR4G814048QNX`: a dry run planned **41 CREATE / 1 SKIP** from the launchpad's 42-app registry, while the `aos-atlas` prototype covered only ~14 report-producing projects. Seeding all 41 would have given the `/reports` lens ~27 permanently-empty project groups — noise in exactly the grouping surface PF-4 exists to build. The seeder had no filtering flag at all.
+
+The registry's own header declares it authoritative for **intent and topology**, not current state, so it is a superset of the active fleet by design. That makes "what does the registry contain" the wrong question; the right one is "which of these repos is actually being worked on".
+
+### Decision
+
+**1. Scope is commit recency, with a 14-day window for the initial seed.**
+
+The alternatives considered were filtering by declared architecture `layer`, and filtering by observed report history. `layer` is static metadata that says nothing about whether a repo is live. Report history is circular: a repo produces no reports partly *because* it has no project row to attribute them to, so seeding only report-producers would freeze the current set in place and the lens could never grow. Commit recency is the one available signal that is both current and causally independent of Atlas state.
+
+Recency is measured from each fleet entry's `path:` field, which the registry already carries.
+
+**2. "Inactive" and "unmeasurable" are separate outcomes, never collapsed.**
+
+Two new plan actions, alongside the existing CREATE/SKIP/INVALID/CONFLICT:
+
+- `STALE` — last commit measured, older than the window.
+- `UNRESOLVED` — recency could not be measured at all (no `path`, path absent locally, not a git repo, or no commit touches the path).
+
+Collapsing these would silently drop repos: a repo that simply is not checked out on the machine running the seed is not a dormant repo, and treating it as one would make the seed's result depend on which machine ran it without saying so. Both are excluded by default and both are reported; `--include-unresolved-recency` opts the unmeasurable ones in. This mirrors the seeder's existing "report, never silently repair" invariant (cf. its slug handling, which reports an invalid slug rather than sanitizing one).
+
+Neither action trips `--strict` — that flag's contract stays INVALID/CONFLICT, i.e. genuine problems, not deliberate exclusions.
+
+**3. Excluded candidates do not reserve their slug or id.**
+
+Nothing is written for a STALE or UNRESOLVED candidate, so reserving its identifiers would make a later fresh entry colliding on slug report a false CONFLICT. The gate therefore sits immediately before the reservation, after all the correctness checks (INVALID → in-fleet duplicate → existing-slug SKIP → tombstone → id conflict → **recency** → CREATE), so an already-seeded row still reports SKIP regardless of its repo's activity.
+
+**4. A fleet path may be a subdirectory of a repo, not its root.**
+
+Real case: `hermes` lives inside the `agentic_meta_dev` checkout. Measuring the containing repo's tip would report every such entry as being as fresh as its parent. Resolution detects this and measures `git log -1 -- <relpath>` in the toplevel instead. Verified distinct: `hermes` 0.33d vs `agentic_meta_dev` 0.005d from the same repo.
+
+**5. `--active-since` defaults to off.**
+
+Absent the flag, the plan is byte-identical to D-019's (42 → 41 create / 1 skip / 0 problem, verified). The filter is opt-in so existing invocations and the test suite are unaffected.
+
+**6. The filter runs where the repos are; the node receives a pruned registry.**
+
+The agentic node has no `~/dev` tree, so running `--active-since` there would measure absent paths and report everything UNRESOLVED. The filter therefore runs on the laptop and its verdict travels to the node as a pruned registry YAML carrying a provenance header (source, window, generation date, and every exclusion with its measured age). The node then seeds that allowlist with the ordinary unfiltered seeder — no new flag needed in the deployed image, and the pruned file is a self-documenting record of what was seeded and why.
+
+### Consequences
+
+Applied to the live instance (`10.42.10.76:8042`) on 2026-08-08: **25 of 42** apps kept, seeded **24 create / 1 skip / 0 problem**, taking `projects.jsonl` from 1 row to 25. All rows carry `workspace_id: ws_artifact_atlas_local`, matching the pre-existing hand-authored row; no duplicate slugs or ids; 24 tagged `aos-fleet` (the hand-authored `proj_artifact_atlas` row stays untagged). `GET /api/projects` serves all 25.
+
+Excluded: 9 STALE (22.9d–333.0d: `meatywiki-portal`, `skillmeat-docs`, `ccusage`, `skill-seekers`, `codebase-map`, `meatyideas`, `map`, `image-scraper`, `export-chatgpt`) and 8 UNRESOLVED (present but not git repos: `dev-infra`, `auto-inventory`, `boxbrain`, `trident`, `family-gift-dash`, `knit-wit-legacy`, `opcode`, `screenhero`).
+
+**Recency is a proxy, and it admits personally-scoped repos.** `daily-joe`, `deal-brain`, `family-shopping-dashboard`, `boxbrain-2`, `meatymusic`, `ai-scratchpad`, `citytile-pack`, `knitwit` and `chat-history-corpus-workbench` are all recently active and therefore seeded, though none is AOS core. An "AOS-core-only" cut is a different and narrower judgement; it was not made here. It remains available as a follow-up, and is cheap in one direction only — see below.
+
+**Un-seeding is expensive, so a backup was taken first.** There is no hard-delete surface for a project row: `ProjectService.delete_project` and `ProjectRepository.delete` only tombstone, and a tombstoned slug still blocks a later re-seed of that slug (the seeder reports it CONFLICT by design). Narrowing the seeded set later therefore means hand-editing `projects.jsonl`, not running a command. `projects.jsonl.bak-preseed-20260808` sits beside the live file in the `atlas-data` volume.
+
+**The seeded rows are ephemeral against a volume reset, not a redeploy.** They live in the `atlas-data` named volume, which survives container replacement (cf. D-016).
+
+**Widening the window is cheap and idempotent; narrowing it is not.** A later `--active-since 30` re-seed adds only the newly-included rows and reports the rest SKIP.
