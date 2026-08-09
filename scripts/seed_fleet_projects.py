@@ -107,12 +107,48 @@ Usage
     # machine-readable plan
     python3 scripts/seed_fleet_projects.py --json
 
+    # scope to recently-active repos (see D-020); excluded entries are reported
+    python3 scripts/seed_fleet_projects.py --active-since 14
+
     # write (orchestrator decision; the real registry needs the explicit flag)
     python3 scripts/seed_fleet_projects.py --apply --allow-real-registry
 
 Registry-dir resolution honours ``ATLAS_REGISTRY_DIR`` via ``app.settings``;
 ``--registry-dir`` overrides both. The fleet source path may also come from
 ``ATLAS_FLEET_REGISTRY``.
+
+Seeding a deployed instance
+---------------------------
+``--active-since`` reads each fleet app's git history through its ``path:``, so
+it must run **where the fleet repos are checked out**. The agentic node has no
+``~/dev`` tree: running the filter there measures absent paths and reports every
+candidate UNRESOLVED, seeding nothing.
+
+So split the two steps — filter here, seed there — and let a pruned registry
+carry the verdict between them (D-020 §6):
+
+1. Run ``--active-since <N> --json`` locally and prune the fleet YAML down to the
+   ``create``/``skip`` ids, keeping a header that records the source, the window,
+   and each exclusion with its measured age. The pruned file is then the audit
+   record of what was seeded and why.
+2. Copy it to the instance and seed that allowlist with the ordinary,
+   *unfiltered* seeder — the pruning already is the filter, so the deployed image
+   needs no recency support:
+
+       podman cp pruned.yaml <api-container>:/tmp/fleet.yaml
+       podman exec -w /app <api-container> python scripts/seed_fleet_projects.py \
+           --registry /tmp/fleet.yaml --registry-dir /data/registry --json
+
+   Dry-run first and check ``workspace_id`` in the plan matches the rows already
+   in that instance — a mismatch seeds rows the workspace-scoped lens will not
+   group with the existing ones.
+
+Back up ``projects.jsonl`` before ``--apply`` against a live instance. There is
+**no hard-delete surface** for a project row (service and repository both only
+tombstone), and a tombstoned slug still blocks a later re-seed of that slug, so
+narrowing a seeded set afterwards means hand-editing the JSONL rather than
+running a command. Widening the window later is cheap and idempotent — already
+-present rows report SKIP.
 
 Exit codes
 ----------
