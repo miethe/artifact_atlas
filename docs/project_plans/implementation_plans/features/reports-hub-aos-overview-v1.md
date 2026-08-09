@@ -4,7 +4,7 @@ schema_version: 2
 feature_slug: reports-hub-aos-overview
 title: "Reports Hub — dynamic AOS-wide overview with per-project latest status (PF-4, operator ask #3) — implementation plan"
 doc_type: implementation_plan
-status: draft
+status: deferred
 tier: 3
 priority: P2
 points: 13
@@ -12,6 +12,9 @@ risk_level: medium
 context_class: C3
 created: '2026-08-08'
 prd_ref: null
+program_ref: docs/project_plans/implementation_plans/features/reports-hub-program-v1.md
+deferred_reason: "Operator call 2026-08-09 — scope limited to operator asks #1 and #2;
+  this plan is pickup-ready with its blocking OQs resolved."
 intenttree_workspace: ws_01KV8VMWX9EJ6VDQKEBMYQZRXG
 intenttree_tree: tree_01KYWGV76XTEM7B11GYWD7Q93Y
 intenttree_node: node_01KZH6VA1PKE7C6NDERQPRKNCC
@@ -20,6 +23,7 @@ adr_refs:
 - docs/DECISIONS.md#D-018
 - docs/DECISIONS.md#ADR-8
 related_documents:
+- docs/project_plans/implementation_plans/features/reports-hub-program-v1.md
 - docs/project_plans/implementation_plans/features/reports-hub-per-project-surface-v1.md
 - docs/project_plans/implementation_plans/features/reports-hub-central-lens-v1.md
 - docs/project_plans/implementation_plans/features/delivery-report-hosting-v1.md
@@ -55,18 +59,10 @@ acceptance_criteria:
   which parts retire and which survive and why; DI rows exist for every deferred piece;
   docs/mvp-backlog.md is updated.'
 open_questions:
-- "OQ-1 (BLOCKS M2 — needs sign-off before code): WHERE does the collector run? The
-  prototype's collector reads 14 working git checkouts under /Users/miethe/dev/homelab/development
-  (collect.py:20) — including `git worktree list` and `status --porcelain`, which are
-  checkout-local and CANNOT be reproduced from a bare mirror on the agentic node. The
-  Atlas API container has none of those repos. Plan recommends: the collector runs where
-  the checkouts are (operator laptop) and pushes its snapshot to Atlas over HTTP; Atlas
-  never shells git."
-- "OQ-2 (BLOCKS M2): what artifact type carries the snapshot? A new `fleet_snapshot`
-  type (vocabulary change, api/app/models/vocabulary.py) vs an untyped asset read through
-  a bespoke route vs reusing `delivery_report` (WRONG — it is not a rendered report and
-  would pollute both sibling reports surfaces' counts). Plan recommends a distinct type
-  precisely so it does NOT appear in the sibling lenses."
+- "OQ-1 — RESOLVED 2026-08-09; see `decisions` (\"RESOLVES OQ-1\"). No longer blocks M2.
+  Left as a numbered placeholder so cross-references still land."
+- "OQ-2 — RESOLVED 2026-08-09; see `decisions` (\"RESOLVES OQ-2\"). No longer blocks M2.
+  Left as a numbered placeholder so cross-references still land."
 - "OQ-3: does the overview live at a new `/overview`, or replace `web/app/page.tsx`'s
   ProjectsIndexView at `/`? Plan recommends `/overview` in v1 (reversible, no regression
   on the shipped root), with promotion to `/` as a later, separate decision."
@@ -82,10 +78,11 @@ open_questions:
 - "OQ-6: AC2 says \"latest program/dossier-route report\". When a project has both a
   `program` and a `dossier` report, which wins? Plan recommends: newest by `metadata.generated_at`
   across both routes, with the route shown on the link so the operator is never guessing."
-- "OQ-7: does this node widen `SidebarNav`'s `href: (projectId: string) => string`
-  (web/components/shell/SidebarNav.tsx:22), or consume a widening already made by
-  node_01KZH6T216V98DRSSRGTQRJ2ST? Both nodes need the same signature change; doing it
-  twice is a merge conflict. This needs a sequencing call, not a design call."
+- "OQ-7 — RESOLVED 2026-08-09 (the sequencing call was made): **program milestone M3 —
+  the central-lens plan, node_01KZH6T216V98DRSSRGTQRJ2ST — widens `SidebarNav`'s
+  `href: (projectId: string) => string` (web/components/shell/SidebarNav.tsx:22) and edits
+  `CommandPalette`.** This plan CONSUMES the already-widened signature and MUST NOT re-do
+  the widening. See `decisions` (\"RESOLVES OQ-7\")."
 decisions:
 - decision: "AC3 re-measured 2026-08-08. The git-before-tracker premise HOLDS; the gap
     widened rather than closed. Therefore the overview CANNOT be a page that simply reads
@@ -156,6 +153,35 @@ decisions:
     is the shipped precedent. Identical structural choice to the sibling central-lens
     node, deliberately, so the two surfaces do not diverge."
   status: proposed
+- decision: "RESOLVES OQ-1: the collector runs LAPTOP-SIDE, where the 14 working checkouts
+    are, and PUSHES a versioned snapshot to Atlas over HTTP. Atlas NEVER shells git, and
+    the render path makes ZERO git, ZERO IntentTree, and ZERO LAN-probe calls."
+  rationale: "Operator call 2026-08-09, recorded in reports-hub-program-v1.md so this plan
+    is unblocked the moment it is picked up. The prototype collector needs `git worktree
+    list` and `status --porcelain` across 14 checkouts under /Users/miethe/dev/homelab/development
+    (collect.py:20) — checkout-local commands that cannot be reproduced from a bare mirror
+    and are physically impossible inside the deployed API container. Snapshot-in / page-out
+    is the only shape that satisfies both AC1 (not a hand-run static build) and AOS constraint
+    4 (nothing expensive on the render path)."
+  status: accepted
+- decision: "RESOLVES OQ-2: the snapshot is carried by a DISTINCT NEW `fleet_snapshot`
+    artifact type (vocabulary addition, api/app/models/vocabulary.py). Reusing `delivery_report`
+    is REJECTED."
+  rationale: "Operator call 2026-08-09. A fleet snapshot is not a rendered report, and typing
+    it as one would make it appear in — and inflate the counts of — the two lenses the
+    PF-4 program builds (the per-project reports lens and the cross-project `/reports`
+    lens). The distinct type exists precisely so fleet snapshots do NOT surface there.
+    An untyped asset behind a bespoke route was also declined: it loses the vocabulary
+    guarantee that keeps the two surfaces clean."
+  status: accepted
+- decision: "RESOLVES OQ-7: program milestone M3 (the central-lens plan) widens `SidebarNav`'s
+    `NavItem.href` and edits `CommandPalette`. This plan CONSUMES the widened signature
+    and MUST NOT re-do the widening."
+  rationale: "The sequencing call this OQ asked for, made by the program: all three PF-4
+    plans need the identical signature change to the identical file (web/components/shell/SidebarNav.tsx:22,35),
+    and doing it twice is a merge conflict. Since M3 ships before this deferred plan is
+    picked up, the widening will already be in main."
+  status: accepted
 routing_constraints:
 - "The AC3 re-measurement and the data-source decision (M1, C3) MUST stay claude-primary.
   It is the architectural pivot for the whole feature: getting it wrong produces a page
@@ -219,7 +245,7 @@ wave_plan:
     exit_criteria:
     - :8099 recommendation recorded as a numbered decision naming what retires and what
       survives; DI rows for every deferral; docs/mvp-backlog.md updated.
-updated: '2026-08-08'
+updated: '2026-08-09'
 ---
 
 # Implementation Plan — Reports Hub: dynamic AOS-wide overview
@@ -238,10 +264,24 @@ row states where it stands, when that was measured, and links straight to its ne
 `dossier`-route delivery report. The static `:8099` surface is gone, its collector is the new
 contract, and the page tells you how old its numbers are instead of implying they are live.
 
-> **This plan is HELD, not deferred.** The operator explicitly held implementation on
-> `node_01KZH6VA1PKE7C6NDERQPRKNCC` for this run. Nothing here is implemented; `status: draft` is
-> accurate and load-bearing. This document exists so the *next* run starts from a settled
-> architecture and a measured premise rather than re-litigating both.
+> **This plan is DEFERRED and PICKUP-READY — not cancelled, and not to be re-planned.** Operator call
+> 2026-08-09: the PF-4 program
+> (`docs/project_plans/implementation_plans/features/reports-hub-program-v1.md`) is scoped to operator
+> asks **#1 and #2** only; this is ask **#3**. Nothing here is implemented, and
+> `node_01KZH6VA1PKE7C6NDERQPRKNCC` stays open. `status: deferred` is accurate and load-bearing.
+>
+> **What changed on deferral: the three blocking OQs are now RESOLVED**, so a future run starts from a
+> settled architecture rather than re-litigating it. **OQ-1** — the collector runs laptop-side and
+> pushes a snapshot over HTTP; Atlas never shells git. **OQ-2** — a distinct new `fleet_snapshot`
+> artifact type, chosen so fleet snapshots do NOT appear in the two lenses the program builds.
+> **OQ-7** — program M3 widens `SidebarNav`; this plan consumes that signature. All three are in
+> `decisions` with rationale. OQ-3/4/5/6 remain genuinely open and are non-blocking.
+>
+> **Premise correction (2026-08-09).** Sibling plans authored 2026-08-08 assumed D-018 was the latest
+> decision. **D-019 exists** at `docs/DECISIONS.md:989` (Reports Hub Foundations, Accepted, shipped in
+> `456fdf1`), and the PF-4 program claims **D-020**. When this plan is picked up, its M1/M4 decision
+> records must take the then-next-free number — **not** D-019, and not D-020. References to D-018
+> below are references to the *report-hosting* decision and remain correct.
 
 ## Scope boundary
 

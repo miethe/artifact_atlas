@@ -5,7 +5,7 @@ feature_slug: reports-hub-central-lens
 title: "Reports Hub — centralized cross-project /reports lens (PF-4 DI-G4, operator\
   \ ask #2) — implementation plan"
 doc_type: implementation_plan
-status: draft
+status: ready
 tier: 2
 priority: P1
 points: 8
@@ -13,6 +13,7 @@ risk_level: medium
 context_class: C3
 created: '2026-08-08'
 prd_ref: null
+program_ref: docs/project_plans/implementation_plans/features/reports-hub-program-v1.md
 intenttree_workspace: ws_01KV8VMWX9EJ6VDQKEBMYQZRXG
 intenttree_tree: tree_01KYWGV76XTEM7B11GYWD7Q93Y
 intenttree_node: node_01KZH6T216V98DRSSRGTQRJ2ST
@@ -21,6 +22,7 @@ adr_refs:
 - docs/DECISIONS.md#D-018
 - docs/DECISIONS.md#ADR-8
 related_documents:
+- docs/project_plans/implementation_plans/features/reports-hub-program-v1.md
 - docs/project_plans/implementation_plans/features/delivery-report-hosting-v1.md
 - docs/project_plans/prds/features/delivery-report-hosting-v1.md
 - docs/DECISIONS.md
@@ -50,15 +52,10 @@ acceptance_criteria:
   blocker is recorded as a decision + DI row; the stale ADR-7 citation in web/lib/flags.ts
   is corrected to ADR-8.'
 open_questions:
-- "OQ-1 (BLOCKS M1 — needs sign-off before code): new `GET /api/reports` collection\
-  \ route vs a generic `GET /api/assets` cross-project list vs relaxing `q` to optional\
-  \ on `GET /api/search`. Plan recommends `GET /api/reports`; see 'The AC4 finding'.\
-  \ Relaxing /api/search is ruled OUT on evidence (it returns SearchResult, which drops\
-  \ `metadata` — api/app/api/search.py:24-35 — and the lens is entirely metadata-driven)."
-- "OQ-2: does the lens filter by workspace at all in v1? Deployment is single-workspace\
-  \ (`ws_artifact_atlas_local`, api/app/settings.py:80) and pre-fix reports carry `workspace_id:\
-  \ null`, so a workspace filter is a SECOND silent-drop path beyond project_id. Plan\
-  \ recommends: no workspace filter in v1, or treat null as in-scope."
+- "OQ-1 — RESOLVED 2026-08-09; see `decisions` (\"RESOLVES OQ-1\"). Left as a numbered\
+  \ placeholder so cross-references still land. Do not re-open."
+- "OQ-2 — RESOLVED 2026-08-09; see `decisions` (\"RESOLVES OQ-2\"). Left as a numbered\
+  \ placeholder so cross-references still land. Do not re-open."
 - "OQ-3: `reports-hub` flag default-on (ADR-8 posture: new UX is the product default)\
   \ vs default-off until the backfill sibling lands so the nav does not advertise a\
   \ 1-row page. Plan recommends default-on because AC3's empty states must be informative\
@@ -79,8 +76,11 @@ decisions:
   rationale: "AC4's escape clause ('or any change it does need is recorded') is the\
     \ clause that applies. The change is additive-only (new path, no existing route/schema\
     \ altered) and touches NO ingest or storage contract, so DI-G4's *intent* survives\
-    \ — only its 'UI only' claim does not."
-  status: proposed
+    \ — only its 'UI only' claim does not. ANNOTATED 2026-08-09: **D-019 (docs/DECISIONS.md:989,\
+    \ Accepted) supersedes DI-G4's deferral**, so `GET /api/reports` is a SANCTIONED contract\
+    \ change, not a violation to argue around. AC4 is satisfied by RECORDING the change\
+    \ at M4 — there is nothing left to seek permission for."
+  status: accepted
 - decision: "Route choice: new `GET /api/reports`, NOT a generic `GET /api/assets`\
     \ list. Implemented as a thin composition over `AssetService.search_assets(project_id=None)`\
     \ (api/app/services/assets.py:325-353), which already returns cross-project assets\
@@ -126,6 +126,47 @@ decisions:
     \ (:61). A reports lens built on that pattern would render FAKE reports during\
     \ an API outage — indistinguishable from real ones, and worse than an error."
   status: proposed
+- decision: "RESOLVES OQ-1: the cross-project lens is served by a NEW purpose-built `GET\
+    \ /api/reports`. Relaxing `q` to optional on `GET /api/search` is ruled OUT, and a\
+    \ generic `GET /api/assets` cross-project list is declined."
+  rationale: "Operator call 2026-08-09, on the evidence already in this plan: `GET /api/search`\
+    \ returns `SearchResult`, whose projection DROPS `metadata` (api/app/api/search.py:24-35),\
+    \ and this lens is entirely metadata-driven (`route`, `truth_status`, `revision`, `subject`,\
+    \ `generated_from` all live in `metadata`). A generic asset list is a wider contract\
+    \ and a wider policy surface than this run needs. OQ-1 no longer blocks M1."
+  status: accepted
+- decision: "RESOLVES OQ-2: v1 applies NO workspace filter, and `workspace_id: null` is\
+    \ treated as IN-SCOPE."
+  rationale: "Operator call 2026-08-09. Deployment is single-workspace (`ws_artifact_atlas_local`,\
+    \ api/app/settings.py:80) and pre-fix reports carry `workspace_id: null`, so a workspace\
+    \ filter would be a SECOND silent-drop path on top of `project_id` — the exact failure\
+    \ NODE AC3 exists to forbid. OQ-2 no longer blocks M1."
+  status: accepted
+- decision: "PROGRAM: this plan is program milestones **M2 (the `GET /api/reports` route)\
+    \ and M3 (the `/reports` lens UI)**. Program M1 is the sibling per-project plan and\
+    \ ships FIRST."
+  rationale: "Recorded in reports-hub-program-v1.md `wave_plan`. The lens is a client of\
+    \ a contract that does not exist until M2, and of a module that does not exist until\
+    \ M1 — so the sequence is a real data/code dependency, not house style."
+  status: accepted
+- decision: "PROGRAM: this plan REUSES the canonical report-metadata type and parser that\
+    \ program M1 mints in `web/features/reports/`. It MUST NOT create a `DeliveryReportMetadata`\
+    \ type. Every reference to `DeliveryReportMetadata` in this document means \"the type\
+    \ M1 owns\"."
+  rationale: "This plan's own rule already says whichever plan ships first owns `web/features/reports/`;\
+    \ the program fixes that as M1. Two types over one field set is a duplicate-parser\
+    \ divergence — the same failure this plan's \"do not let two report tables exist\"\
+    \ rule guards against."
+  status: accepted
+- decision: "PROGRAM: this plan ALONE widens `SidebarNav`'s `NavItem.href` from `(projectId:\
+    \ string) => string` to accept a non-project route (`web/components/shell/SidebarNav.tsx:22,35`),\
+    \ and ALONE edits `CommandPalette` (`web/components/shell/CommandPalette.tsx:61-100`).\
+    \ It also owns the `web/lib/flags.ts:16-19` ADR-7 -> ADR-8 comment correction."
+  rationale: "Resolves the sibling AOS-overview plan's OQ-7 and keeps program M1 off those\
+    \ files. All three PF-4 plans need the identical signature change to the identical\
+    \ file; doing it twice is a merge conflict, not a style issue. The flags.ts comment\
+    \ correction is one edit to the same shared file and belongs with the same owner."
+  status: accepted
 routing_constraints:
 - "The AC4 contract decision + the `GET /api/reports` shape (M1, C3) MUST stay claude-primary.\
   \ It adds a cross-project read surface with a policy dimension; getting the filter/facet\
@@ -183,7 +224,7 @@ wave_plan:
     exit_criteria:
     - AC4 contract change recorded as a numbered decision; epic blocker recorded; flags.ts
       ADR citation corrected to ADR-8.
-updated: '2026-08-08'
+updated: '2026-08-09'
 ---
 
 # Implementation Plan — Reports Hub: centralized cross-project `/reports` lens
@@ -209,6 +250,12 @@ route, `truth_status`, date, and tracker node, with counts that are actually cor
 > recorded"): this plan records an additive API contract change — a new `GET /api/reports` — and
 > confirms the *substantive* half of AC4 holds: **no ingest and no storage contract changes.**
 > DI-G4's "Blocks: none (additive UI only)" line should be corrected when M4 records the decision.
+>
+> **ANNOTATED 2026-08-09 — the finding stands, the tension does not.** D-019
+> (`docs/DECISIONS.md:989`, Accepted, shipped in `456fdf1`) **supersedes DI-G4's deferral**. The new
+> `GET /api/reports` path is therefore a **sanctioned** additive contract change, not a violation
+> being argued past. AC4 is satisfied by **recording** it at M4 (now **D-020** — D-019 is taken); no
+> further permission is outstanding.
 
 ## Scope boundary
 
@@ -350,9 +397,11 @@ dependency rather than a code dependency — the lens must function (degraded) w
 | `node_01KZH6VA655DBTKDS99RZW76Y9` — `scripts/backfill_reports.py` | The 14 rendered `aos-atlas` program reports. Without it the lens ships with ~1 row, which is indistinguishable from broken and gives no way to judge whether the grouping design works. | **Blocks the M3 demo**, not the M1/M2 code. |
 
 Adjacent (shares code, does not block): `node_01KZH6T1X0Q13XR1C66SD1CM1K` (per-project reports
-surface, operator ask #1) needs the *same* `DeliveryReportMetadata` type, the same report columns, and
-the same row-to-hosted-HTML open. **Whichever ships first owns `web/features/reports/`**; the other
-imports from it. Do not let two report tables exist.
+surface, operator ask #1) needs the *same* report-metadata type, the same report columns, and
+the same row-to-hosted-HTML open. **SETTLED 2026-08-09: that sibling is program M1 and it ships
+first, so IT owns `web/features/reports/` and the single canonical report-metadata type and parser.**
+This plan imports from it and creates no `DeliveryReportMetadata` of its own. Do not let two report
+tables or two metadata types exist.
 
 Downstream consumer: `node_01KZH6VA1PKE7C6NDERQPRKNCC` (AOS overview) needs "latest
 `program`/`dossier` report per project". M1's filter set must not preclude that (`route=program` +
@@ -460,10 +509,11 @@ is not a modeled entity"). Amend the DI-G4 row to point at this plan and strike 
 server-side `group_by` if the report population outgrows one page; the deliberately-not-added generic
 `/api/assets` list. Correct the stale **ADR-7 -> ADR-8** citation in `web/lib/flags.ts:16-19`.
 
-**AC:** the new decision number is present in `docs/DECISIONS.md` (D-018 is the latest as of
-2026-08-08 — **siblings in this same PF-4 run may claim D-019, so verify the next free number at M4
-start**); each deferral is a tracked `DI-` row; `grep -n "ADR-8" web/lib/flags.ts` hits and `ADR-7`
-no longer appears as the default-on authority.
+**AC:** **D-020** is present in `docs/DECISIONS.md` — the next free number is settled, not to be
+re-derived: D-019 was taken by the Reports Hub foundations decision (`docs/DECISIONS.md:989`, shipped
+in `456fdf1`), so the earlier note here that "D-018 is the latest" is corrected. Each deferral is a
+tracked `DI-` row; `grep -n "ADR-8" web/lib/flags.ts` hits and `ADR-7` no longer appears as the
+default-on authority.
 
 ## AC -> command -> evidence
 
@@ -494,9 +544,10 @@ house style: M2 has nothing to list until the route exists, and M3's counts *are
 building M3 first would force the page-derived counts R2 exists to prevent. M4 needs only M1's
 contract shape settled and can run concurrently with M3.
 
-**Decision gate before M1 opens.** OQ-1 (route choice) and OQ-2 (workspace filtering) must be signed
-off before backend code, because both are baked into the response contract and into
-`shared/openapi.yaml`; changing either after M2 means re-cutting the frontend query layer. OQ-3 (flag
+**Decision gate before M1 opens — DISCHARGED 2026-08-09.** OQ-1 (route choice) and OQ-2 (workspace
+filtering) both had to be signed off before backend code, because both are baked into the response
+contract and into `shared/openapi.yaml`. Both are now RESOLVED in `decisions` (new `GET /api/reports`;
+no workspace filter, `workspace_id: null` in-scope). Do not re-litigate either at M1 start. OQ-3 (flag
 default) can wait until M2. OQ-4 is upstream and blocks nothing here — the epic decision above routes
 around it. OQ-5 can be settled inside M1.
 

@@ -5,7 +5,7 @@ feature_slug: reports-hub-per-project-surface
 title: "Per-project Reports surface (PF-4: reports-only lens on the Atlas project\
   \ page) — implementation plan"
 doc_type: implementation_plan
-status: draft
+status: ready
 tier: 2
 priority: P1
 points: 5
@@ -13,6 +13,7 @@ risk_level: medium
 context_class: C2
 created: '2026-08-08'
 prd_ref: null
+program_ref: docs/project_plans/implementation_plans/features/reports-hub-program-v1.md
 intenttree_workspace: ws_01KV8VMWX9EJ6VDQKEBMYQZRXG
 intenttree_tree: tree_01KYWGV76XTEM7B11GYWD7Q93Y
 intenttree_node: node_01KZH6T1X0Q13XR1C66SD1CM1K
@@ -25,6 +26,7 @@ adr_refs:
 - '../agentic_meta_dev/docs/project_plans/design-specs/delivery-report-hosting-and-linking-v1.md
   §14.1 "cross-scope Reports lens"'
 related_documents:
+- docs/project_plans/implementation_plans/features/reports-hub-program-v1.md
 - docs/project_plans/implementation_plans/features/delivery-report-hosting-v1.md
 - docs/project_plans/prds/features/delivery-report-hosting-v1.md
 - .claude/worknotes/delivery-report-hosting/implementation-notes.md
@@ -51,7 +53,10 @@ open_questions:
   \ project memory index says ADR-8, and `docs/DECISIONS.md` numbers decisions `D-0xx`\
   \ not `ADR-x`. This plan cites what the code comment says (ADR-7). Reconciling the\
   \ numbering is out of scope here and must not be done by editing `docs/DECISIONS.md`\
-  \ from this node."
+  \ from this node. ANNOTATED 2026-08-09 (program): the deferral STANDS for this milestone\
+  \ — program milestone M3 (the central-lens plan) owns the ADR-7 -> ADR-8 code-comment\
+  \ correction in `web/lib/flags.ts:16-19`. Do not make that edit here; it would be a\
+  \ duplicate touch of the same lines."
 - "OQ-4 (banner placement): the unattributed count is a workspace-global number. Repeating\
   \ it on 26 project pages is noise. RECOMMEND rendering it ONLY when the project has\
   \ zero reports — which is exactly AC3's literal wording — not alongside\
@@ -61,7 +66,11 @@ open_questions:
   \ `POST /api/search/semantic` (:71) — so that accessor 405s, and `web/components/shell/GlobalSearch.tsx:62`\
   \ already depends on it. RECOMMEND adding a separate GET accessor for M3 and filing\
   \ the POST bug as a `DI-` row; do NOT fix it opportunistically, because that changes\
-  \ global-search behavior outside this node's ACs."
+  \ global-search behavior outside this node's ACs. CONFIRMED still true as of 2026-08-09\
+  \ (re-measured by the program plan): `web/lib/api.ts:371-378` still sends `method: \"\
+  POST\"` to `/api/search`, and `api/app/api/search.py:36` is still `@router.get(\"/search\"\
+  )`. The recommendation is unchanged — add a GET accessor, file the DI row, do not\
+  \ refactor the existing caller."
 decisions:
 - decision: 'A bespoke `web/app/(projects)/projects/[projectId]/reports` route, NOT
     a saved/pinned filter on the existing AssetLibrary. Resolves DI-G4''s OQ-2 for
@@ -127,6 +136,27 @@ decisions:
     this project has no reports\" would become unreachable and untrue. The hook must\
     \ expose `isError` and the UI must distinguish error from empty."
   status: proposed
+- decision: "PROGRAM: this plan is program milestone **M1**, and it OWNS `web/features/reports/`\
+    \ plus the SINGLE canonical report-metadata type and its runtime parser. The sibling\
+    \ central-lens plan (program M2/M3) REUSES them and MUST NOT define a second type."
+  rationale: "Both sibling plans independently specify the same field set under different\
+    \ names (`ReportMetadata` here vs `DeliveryReportMetadata` there). This plan ships\
+    \ first in the program sequence, so it mints the module; a second type is a duplicate-parser\
+    \ divergence, not a stylistic choice. Recorded in reports-hub-program-v1.md `decisions`."
+  status: accepted
+- decision: "PROGRAM: this plan registers a PROJECT-SCOPED nav item ONLY and MUST NOT\
+    \ widen `SidebarNav`'s `NavItem.href` signature (`web/components/shell/SidebarNav.tsx:22`,\
+    \ `(projectId: string) => string`). Program milestone M3 owns that widening."
+  rationale: "All three PF-4 plans need the same signature change to the same file; doing\
+    \ it twice is a merge conflict. A project-scoped route needs no widening, so this\
+    \ plan has no reason to touch it."
+  status: accepted
+- decision: "PROGRAM: the next free decision number is **D-020**, not D-019. Every D-019\
+    \ reference in this plan's M4 is corrected to D-020."
+  rationale: "This plan was authored 2026-08-08 assuming D-018 was the latest. FALSE as\
+    \ of `456fdf1`: D-019 exists at `docs/DECISIONS.md:989` (\"Reports Hub Foundations\"\
+    , Accepted), re-verified 2026-08-09."
+  status: accepted
 routing_constraints:
 - "AC3's two-mode empty state and the probe's degradation rule (an unknown count must\
   \ NEVER render as zero) are correctness-class — claude-primary, no offload.\
@@ -179,9 +209,10 @@ wave_plan:
     depends_on:
     - M1
     exit_criteria:
-    - "D-019 in `docs/DECISIONS.md`; backlog row updated; `DI-` rows for the `searchApi`\
+    - "D-020 in `docs/DECISIONS.md` (D-019 is TAKEN — see the program decision); backlog\
+      \ row updated; `DI-` rows for the `searchApi`\
       \ POST bug, the empty-`q` contract reliance, and the fixture-fallback hazard."
-updated: '2026-08-08'
+updated: '2026-08-09'
 ---
 
 # Implementation Plan — Per-project Reports surface (PF-4, operator ask #1)
@@ -194,9 +225,26 @@ has a reports-only lens: one row per delivery report, with route / revision / tr
 commit on the row, the hosted HTML one click away, and the tracker node(s) it is attached to visible
 — and an empty state that tells the truth about *why* it is empty.
 
-> **This plan is HELD, not deferred.** The operator explicitly held implementation on
-> node_01KZH6T1X0Q13XR1C66SD1CM1K for this run as too large to land alongside its three sibling
-> nodes. Nothing here is implemented. `status: draft` is accurate and load-bearing.
+> **This plan was HELD, and is now SCHEDULED as program milestone M1.** The operator held
+> implementation on node_01KZH6T1X0Q13XR1C66SD1CM1K in the `456fdf1` run as too large to land
+> alongside its three sibling nodes. Nothing here is implemented yet; `status: ready` now reflects
+> that it is scheduled under
+> `docs/project_plans/implementation_plans/features/reports-hub-program-v1.md` as **M1**, which runs
+> after program M0 applies the shipped foundations to the live instance.
+
+> **Premise corrections (2026-08-09, from the program plan — do not re-litigate).**
+> **(1) Decision numbering.** This plan's M4 originally targeted D-019 on the assumption that D-018
+> was the latest decision. **CORRECTED:** D-019 already exists at `docs/DECISIONS.md:989` (Reports
+> Hub Foundations, Accepted, shipped in `456fdf1`). The next free number is **D-020**.
+> **(2) Live data state.** The sibling-dependency table below states that without seeding the only
+> browsable project is `proj_artifact_atlas` and there is ~1 report to show. **Still TRUE of the live
+> instance as measured 2026-08-09** (1 project; 1 delivery_report with `project_id: null`) — but
+> program **M0 changes it before this milestone starts** by running `scripts/seed_fleet_projects.py
+> --apply` and `scripts/backfill_reports.py --apply` against `10.42.10.76:8042`. Treat the two HARD
+> data dependencies as satisfied at M1 start, not as risks to design around.
+> **(3) DI-G4's "additive UI only".** D-019 supersedes that deferral's framing; see the central-lens
+> sibling plan for the detail. It does not change this plan's scope — this milestone still adds no
+> backend route.
 
 ## Scope boundary
 
@@ -204,7 +252,7 @@ commit on the row, the hosted HTML one click away, and the tracker node(s) it is
 report-metadata parser, a fixture-free `useProjectReports` hook, a reports table rendering the four
 report columns, a per-row hosted-HTML affordance, per-row tracker-link display from
 `GET /api/assets/{assetId}/links`, the two-mode empty state, nav + command-palette registration, and
-a D-019 decision record. All by **composing shipped primitives** — existing endpoints only, no new
+a D-020 decision record. All by **composing shipped primitives** — existing endpoints only, no new
 backend routes, no schema change, no ingest change.
 
 **Out (stated, not dropped):** the cross-project `/reports` lens and its real collection endpoint ->
@@ -454,7 +502,7 @@ unattributed claim (the "unknown is not zero" assertion); the backend contract t
 
 ### M4 — Decision record + docs + deferrals  (docs, C1)
 
-Record **D-019** in `docs/DECISIONS.md` (bespoke-route decision, the interim-probe decision and its
+Record **D-020** in `docs/DECISIONS.md` (bespoke-route decision, the interim-probe decision and its
 successor seam, links-over-metadata, no-flag, no-fixture-fallback), cross-referencing DI-G4 as
 partially discharged (per-project case only; the cross-project case stays open under
 `node_01KZH6T216V98DRSSRGTQRJ2ST`). Update `docs/mvp-backlog.md`. New `DI-` rows for: the
@@ -462,7 +510,7 @@ partially discharged (per-project case only; the cross-project case stays open u
 contract reliance; the `useAssets` fixture-fallback hazard as a repo-wide pattern risk, not just
 here. Worknotes ledger at `.claude/worknotes/reports-hub/implementation-notes.md`.
 
-**AC:** `grep D-019 docs/DECISIONS.md` hits; DI-G4 is annotated as partially discharged with the
+**AC:** `grep D-020 docs/DECISIONS.md` hits; DI-G4 is annotated as partially discharged with the
 successor node id; each deferred item is a tracked `DI-` row.
 
 ## AC -> command -> evidence
@@ -479,7 +527,7 @@ successor node id; each deferred item is a tracked `DI-` row.
 | M3 empty-state matrix | `cd web && npm run test -- reports-surface` | all four table rows asserted, including probe-failed -> banner absent |
 | M3 probe contract | `cd api && python3 -m pytest -q -k report_search_unattributed` | `?q=` + `artifact_type=delivery_report` spans projects and includes a `project_id=None` row |
 | M3 project scoping | `cd api && python3 -m pytest -q -k project_reports_scope` | `?artifact_type_id=delivery_report` returns only that project's reports |
-| M4 decision + deferrals | `grep -n "D-019" docs/DECISIONS.md` | D-019 present; DI- rows exist; DI-G4 annotated partially-discharged |
+| M4 decision + deferrals | `grep -n "D-020" docs/DECISIONS.md` | D-020 present; DI- rows exist; DI-G4 annotated partially-discharged |
 | Live smoke (once, before done) | `curl -s "$ATLAS_API/api/projects/proj_artifact_atlas/assets?artifact_type_id=delivery_report"` then load `/projects/proj_artifact_atlas/reports` | at least one real report row renders and its hosted URL returns `200` |
 
 Frontend commands run from `web/` (there is no root `package.json` and no pnpm workspace; `web/`
