@@ -42,6 +42,20 @@ Design invariants
   a slug with a LIVE row is ordinary idempotency and SKIPs; a slug held only by
   a tombstone is a reported CONFLICT (not a silent SKIP, and not a duplicate).
   See :func:`_existing_slugs_and_ids`.
+* **Commit recency is a filter, off by default, that reports two DISTINCT
+  exclusions rather than one.** ``--active-since DAYS`` excludes a fleet app
+  whose last commit (from its ``path`` field) is older than the window
+  (``ACTION_STALE``, measured). A repo whose recency simply could not be
+  measured — no ``path``, path missing locally, not a git checkout, or no
+  commits touch it — is ``ACTION_UNRESOLVED``, a SEPARATE outcome from STALE.
+  "We could not measure this repo" is a different fact from "this repo is
+  inactive," and collapsing the two would silently drop repos that are
+  actually fine but merely unmeasurable from this machine. Neither trips
+  ``--strict`` (that flag's contract stays invalid/conflict only) and neither
+  reserves a slug or id — see :func:`measure_commit_recency` and the recency
+  gate in :func:`plan_candidates`. Omitting ``--active-since`` disables the
+  filter entirely: no git subprocess is ever spawned, and the plan is
+  byte-identical to before this filter existed.
 
 Known upstream mismatches (deliberately not papered over)
 ---------------------------------------------------------
@@ -113,8 +127,10 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -172,6 +188,15 @@ ACTION_CREATE = "create"
 ACTION_SKIP = "skip"
 ACTION_INVALID = "invalid"
 ACTION_CONFLICT = "conflict"
+#: Last commit older than the ``--active-since`` window. Measured — the
+#: candidate's ``recency_days``/``recency_source`` are populated.
+ACTION_STALE = "stale"
+#: Recency could not be measured at all (no/blank path, path missing locally,
+#: not a git repo, or no commits touch it). Deliberately kept DISTINCT from
+#: ACTION_STALE: "we could not measure this repo" is a different fact from
+#: "this repo is inactive", and collapsing the two would silently drop repos
+#: that are actually fine but merely unmeasurable from this machine.
+ACTION_UNRESOLVED = "unresolved"
 
 
 class SeedError(RuntimeError):
@@ -197,6 +222,17 @@ class Candidate:
     root_intenttree_node_id: str | None = None
     tags: list[str] = field(default_factory=list)
     reason: str | None = None
+    #: One of ``"fresh"``, ``"stale"``, ``"unresolved"`` — set only when the
+    #: recency gate actually measured this candidate (``--active-since``
+    #: supplied). ``None`` means recency was never evaluated for this row.
+    recency_state: str | None = None
+    #: Age, in days, of the last commit touching the measured path. ``None``
+    #: when unresolved or never measured.
+    recency_days: float | None = None
+    #: The repository path that was actually measured (a repo toplevel, or a
+    #: subdirectory-of-repo's toplevel when the fleet ``path`` is nested inside
+    #: a larger checkout). ``None`` when unresolved or never measured.
+    recency_source: str | None = None
 
     @property
     def is_actionable(self) -> bool:
@@ -204,6 +240,10 @@ class Candidate:
 
     @property
     def is_problem(self) -> bool:
+        # Deliberately excludes ACTION_STALE / ACTION_UNRESOLVED: --strict's
+        # contract is invalid/conflict only. "This repo looks inactive" or "we
+        # could not measure this repo" are not data-quality problems with the
+        # fleet registry the way an invalid slug or an id collision are.
         return self.action in (ACTION_INVALID, ACTION_CONFLICT)
 
     def as_dict(self) -> dict[str, Any]:
@@ -218,6 +258,9 @@ class Candidate:
             "root_intenttree_node_id": self.root_intenttree_node_id,
             "tags": list(self.tags),
             "reason": self.reason,
+            "recency_state": self.recency_state,
+            "recency_days": self.recency_days,
+            "recency_source": self.recency_source,
         }
 
 
@@ -253,6 +296,137 @@ def derive_project_id(slug: str) -> str:
     re-seed reproduces the existing hand-authored id byte-for-byte.
     """
     return "proj_" + slug.replace("-", "_")
+
+
+# --------------------------------------------------------------------------
+# Commit-recency measurement
+# --------------------------------------------------------------------------
+
+
+def _run_git(cwd: Path, args: Sequence[str]) -> tuple[bool, str]:
+    """Run ``git <args>`` in *cwd*. Never raises — a git failure is data, not
+    a script bug: it is reported upstream as an UNRESOLVED reason, not an
+    exception.
+
+    Returns ``(ok, stdout_stripped)``. ``ok`` is ``False`` on a nonzero exit,
+    a missing ``git`` binary, or any other :class:`OSError` while spawning it.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False, ""
+    if proc.returncode != 0:
+        return False, ""
+    return True, proc.stdout.strip()
+
+
+def _measure_commit_recency_uncached(
+    resolved: Path, raw_path: str
+) -> tuple[float | None, str | None, str | None]:
+    """Uncached body of :func:`measure_commit_recency`. See its docstring."""
+    if not resolved.exists():
+        return None, None, f"path does not exist locally: {raw_path}"
+
+    ok, toplevel_out = _run_git(resolved, ["rev-parse", "--show-toplevel"])
+    if not ok or not toplevel_out:
+        return None, None, f"not inside a git repository: {raw_path}"
+
+    try:
+        toplevel = Path(toplevel_out).resolve()
+    except OSError:  # pragma: no cover - unresolvable path
+        toplevel = Path(toplevel_out)
+
+    if toplevel == resolved:
+        # The fleet path IS the repo root.
+        ok, commit_iso = _run_git(resolved, ["log", "-1", "--format=%cI"])
+        if not ok or not commit_iso:
+            return None, None, f"no commits found in repository: {raw_path}"
+        source = str(resolved)
+    else:
+        # The fleet path is a SUBDIRECTORY of a repo (real case: `hermes`
+        # lives inside the agentic_meta_dev checkout). Measure the last commit
+        # that actually touches that subtree, not the whole repo's HEAD.
+        try:
+            relpath = resolved.relative_to(toplevel)
+        except ValueError:  # pragma: no cover - rev-parse guarantees an ancestor
+            return (
+                None,
+                None,
+                f"could not resolve {raw_path} relative to repo toplevel {toplevel}",
+            )
+        ok, commit_iso = _run_git(
+            toplevel, ["log", "-1", "--format=%cI", "--", str(relpath)]
+        )
+        if not ok or not commit_iso:
+            return None, None, f"no commits touch {relpath} in {toplevel}"
+        source = str(toplevel)
+
+    try:
+        commit_dt = datetime.fromisoformat(commit_iso)
+    except ValueError:
+        return None, None, f"could not parse commit timestamp {commit_iso!r} for {raw_path}"
+
+    age_days = (datetime.now(timezone.utc) - commit_dt).total_seconds() / 86400.0
+    return age_days, source, None
+
+
+def measure_commit_recency(
+    path_value: Any,
+    *,
+    cache: dict[str, tuple[float | None, str | None, str | None]],
+) -> tuple[float | None, str | None, str | None]:
+    """Measure the age (in days) of the most recent commit touching an entry's
+    ``path``.
+
+    Returns ``(age_days, source, unresolved_reason)``:
+
+    * Measured successfully: ``(age_days, <repo-or-subdir toplevel measured>,
+      None)``.
+    * Could not be measured: ``(None, None, <human-readable reason>)``. This
+      is reported as :data:`ACTION_UNRESOLVED`, never silently treated as
+      stale — a git failure or a missing checkout is not evidence that a repo
+      is inactive.
+
+    Resolution order, matching the fleet registry's real shape:
+
+    1. no/blank ``path`` -> unresolved.
+    2. ``path`` does not exist on this machine -> unresolved.
+    3. ``git -C <path> rev-parse --show-toplevel`` fails -> unresolved (not a
+       git checkout).
+    4. toplevel == the resolved path -> ``git log -1 --format=%cI`` at the
+       root.
+    5. toplevel is an ANCESTOR of the resolved path (the fleet entry names a
+       subdirectory of a larger repo) -> ``git log -1 --format=%cI --
+       <relpath>``; no output -> unresolved (nothing under that subtree has
+       ever been committed).
+
+    Memoized per RESOLVED path in *cache* so a repo named by multiple fleet
+    entries — or the same entry re-measured across CREATE auditing — is only
+    shelled out to once per :func:`plan_candidates` call. Callers own the
+    cache's lifetime; passing a fresh dict re-measures everything.
+    """
+    raw_path = path_value if isinstance(path_value, str) else ""
+    if not raw_path.strip():
+        return None, None, "fleet entry has no 'path'"
+
+    try:
+        resolved = Path(raw_path).expanduser().resolve()
+    except OSError:  # pragma: no cover - unresolvable path
+        resolved = Path(raw_path).expanduser()
+
+    cache_key = str(resolved)
+    if cache_key in cache:
+        return cache[cache_key]
+
+    result = _measure_commit_recency_uncached(resolved, raw_path)
+    cache[cache_key] = result
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -440,6 +614,8 @@ def plan_candidates(
     workspace_id: str,
     tombstoned_slugs: dict[str, str] | None = None,
     tree_map: dict[str, str] | None = None,
+    active_since: float | None = None,
+    include_unresolved_recency: bool = False,
 ) -> list[Candidate]:
     """Derive one :class:`Candidate` per fleet entry, in registry order.
 
@@ -448,12 +624,29 @@ def plan_candidates(
     that row's id (a match -> CONFLICT, because appending would duplicate the
     slug in the JSONL). *existing_ids* is tombstone-inclusive. See
     :func:`_existing_slugs_and_ids`.
+
+    *active_since* is the commit-recency filter window in days. ``None`` (the
+    default) disables the filter entirely — no measurement happens and the
+    plan is byte-identical to before this filter existed. When set, every
+    candidate that clears the earlier guards is measured via
+    :func:`measure_commit_recency` before it is allowed to reserve its slug
+    and id: a last commit older than *active_since* days plans as
+    :data:`ACTION_STALE`; a candidate whose recency could not be measured at
+    all plans as :data:`ACTION_UNRESOLVED` unless *include_unresolved_recency*
+    is set, in which case it proceeds to CREATE. *include_unresolved_recency*
+    has no effect while *active_since* is ``None``.
     """
     tree_map = tree_map or {}
     tombstoned_slugs = tombstoned_slugs or {}
     planned_slugs: dict[str, str] = {}
     planned_ids: set[str] = set()
     candidates: list[Candidate] = []
+    # Per-run memoization for measure_commit_recency: a repo named by several
+    # fleet entries (or the same repo re-measured for auditability across
+    # CREATEs) is only shelled out to once. Local to this call, not module
+    # state, so repeated plan_candidates() calls in one process (e.g. tests)
+    # never see stale cached recency from a prior run.
+    _recency_cache: dict[str, tuple[float | None, str | None, str | None]] = {}
 
     for entry in entries:
         raw_id = entry.get("id")
@@ -553,6 +746,45 @@ def plan_candidates(
             candidates.append(base)
             continue
 
+        # Recency gate. Disabled entirely (no measurement, no field
+        # population) unless --active-since was passed — that is what keeps
+        # the filter-off plan byte-identical to pre-filter behaviour. Placed
+        # LAST, immediately before the slug/id reservation below: a STALE or
+        # UNRESOLVED candidate must NOT reserve its slug or id, or a later
+        # fleet entry that collides with it would be falsely reported as a
+        # CONFLICT against a row that was never actually going to be created.
+        if active_since is not None:
+            age_days, source, unresolved_reason = measure_commit_recency(
+                entry.get("path"), cache=_recency_cache
+            )
+            # Populated on every candidate reaching this point, including
+            # eventual CREATEs — auditability of what was measured, not just
+            # a record of what got excluded.
+            base.recency_days = age_days
+            base.recency_source = source
+
+            if unresolved_reason is not None:
+                base.recency_state = "unresolved"
+                if not include_unresolved_recency:
+                    base.action = ACTION_UNRESOLVED
+                    base.reason = unresolved_reason
+                    candidates.append(base)
+                    continue
+                # --include-unresolved-recency: fall through to CREATE below.
+            else:
+                assert age_days is not None  # measured => age_days is set
+                if age_days > active_since:
+                    base.recency_state = "stale"
+                    base.action = ACTION_STALE
+                    base.reason = (
+                        f"last commit {age_days:.1f} day(s) ago, older than "
+                        f"--active-since {active_since} day(s) "
+                        f"(measured at {source})"
+                    )
+                    candidates.append(base)
+                    continue
+                base.recency_state = "fresh"
+
         planned_slugs[slug] = fleet_id
         planned_ids.add(project_id)
         candidates.append(base)
@@ -614,6 +846,8 @@ _ACTION_LABEL = {
     ACTION_SKIP: "SKIP",
     ACTION_INVALID: "INVALID",
     ACTION_CONFLICT: "CONFLICT",
+    ACTION_STALE: "STALE",
+    ACTION_UNRESOLVED: "UNRESOLVED",
 }
 
 
@@ -626,9 +860,16 @@ def render_plan(
     tree_map_size: int,
     applied: bool,
     created: Sequence[str] | None = None,
+    active_since: float | None = None,
     stream: Any = None,
 ) -> None:
-    """Print the human-readable plan (or applied result)."""
+    """Print the human-readable plan (or applied result).
+
+    *active_since* is display-only (the recency gate already ran inside
+    :func:`plan_candidates`); it is only printed as a header line when set, so
+    the filter-disabled plan's header stays byte-identical to before this
+    filter existed.
+    """
     out = stream or sys.stdout
     mode = "APPLY" if applied else "DRY RUN (no writes)"
 
@@ -641,6 +882,8 @@ def render_plan(
         + ("" if tree_map_size else " (root_intenttree_node_id stays null)"),
         file=out,
     )
+    if active_since is not None:
+        print(f"  active since   : {active_since} day(s)", file=out)
     print("", file=out)
 
     id_w = max([8] + [len(c.project_id or "") for c in candidates])
@@ -658,24 +901,37 @@ def render_plan(
             f"workspace_id={cand.workspace_id or '-'} "
             f"root_intenttree_node_id={node}"
         )
+        if cand.recency_state is not None:
+            days = f"{cand.recency_days:.1f}d" if cand.recency_days is not None else "-"
+            line += f" recency={cand.recency_state}({days})"
         if cand.reason:
             line += f"  [{cand.reason}]"
         print(line, file=out)
 
     creates = [c for c in candidates if c.action == ACTION_CREATE]
     skips = [c for c in candidates if c.action == ACTION_SKIP]
+    stales = [c for c in candidates if c.action == ACTION_STALE]
+    unresolved = [c for c in candidates if c.action == ACTION_UNRESOLVED]
     problems = [c for c in candidates if c.is_problem]
 
     print("", file=out)
     print(
         f"  summary: {len(candidates)} fleet apps -> "
-        f"{len(creates)} create, {len(skips)} skip, {len(problems)} problem",
+        f"{len(creates)} create, {len(skips)} skip, "
+        f"{len(stales)} stale, {len(unresolved)} unresolved, "
+        f"{len(problems)} problem",
         file=out,
     )
     if problems:
         print("  problems (skipped, nothing written for these):", file=out)
         for cand in problems:
             print(f"    - {cand.fleet_id}: {cand.reason}", file=out)
+    excluded_by_recency = [c for c in candidates if c.action in (ACTION_STALE, ACTION_UNRESOLVED)]
+    if excluded_by_recency:
+        print("  excluded by recency (skipped, nothing written for these):", file=out)
+        for cand in excluded_by_recency:
+            label = _ACTION_LABEL[cand.action]
+            print(f"    - [{label}] {cand.fleet_id}: {cand.reason}", file=out)
     if applied:
         print(f"  created: {len(created or [])} project rows", file=out)
     else:
@@ -706,6 +962,8 @@ def build_json_payload(
             "skip": sum(1 for c in candidates if c.action == ACTION_SKIP),
             "invalid": sum(1 for c in candidates if c.action == ACTION_INVALID),
             "conflict": sum(1 for c in candidates if c.action == ACTION_CONFLICT),
+            "stale": sum(1 for c in candidates if c.action == ACTION_STALE),
+            "unresolved": sum(1 for c in candidates if c.action == ACTION_UNRESOLVED),
             "created": list(created or []),
         },
     }
@@ -772,6 +1030,28 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Workspace id to stamp on every seeded row. Defaults to the "
             "configured settings.workspace_id."
+        ),
+    )
+    parser.add_argument(
+        "--active-since",
+        type=float,
+        default=None,
+        help=(
+            "Exclude fleet apps whose last commit (measured from the entry's "
+            "'path') is older than this many days. A candidate whose recency "
+            "cannot be measured at all (missing/invalid path, not a git repo, "
+            "no commits) plans as UNRESOLVED rather than STALE — see "
+            "--include-unresolved-recency. Default: no recency filter — "
+            "every candidate is planned exactly as before this flag existed."
+        ),
+    )
+    parser.add_argument(
+        "--include-unresolved-recency",
+        action="store_true",
+        help=(
+            "When --active-since is set, let a candidate whose recency could "
+            "not be measured proceed to CREATE instead of being excluded as "
+            "UNRESOLVED. Has no effect unless --active-since is also set."
         ),
     )
     mode = parser.add_mutually_exclusive_group()
@@ -859,6 +1139,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         workspace_id=workspace_id,
         tombstoned_slugs=tombstoned_slugs,
         tree_map=tree_map,
+        active_since=args.active_since,
+        include_unresolved_recency=args.include_unresolved_recency,
     )
 
     created: list[str] = []
@@ -885,6 +1167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             tree_map_size=len(tree_map),
             applied=args.apply,
             created=created,
+            active_since=args.active_since,
         )
 
     if args.strict and any(c.is_problem for c in candidates):

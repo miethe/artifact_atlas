@@ -18,6 +18,25 @@ Covers the load-bearing guarantees:
     extra field on ProjectCreate (the documented fragility);
   - without --tree-map, root_intenttree_node_id stays null (the fleet registry
     carries no node ids — only tree ids exist upstream, a different type).
+  - the commit-recency filter (--active-since):
+      * omitted -> the filter is disabled entirely and the plan is exactly
+        what it was before the filter existed (no recency fields populated,
+        no git subprocess spawned);
+      * a fresh repo -> CREATE, with recency_state "fresh" and recency_days /
+        recency_source populated (auditability on CREATEs too);
+      * a stale repo (last commit older than the window) -> ACTION_STALE,
+        excluded, does NOT trip --strict;
+      * recency that could not be measured at all -> ACTION_UNRESOLVED, a
+        SEPARATE outcome from STALE (never collapsed into it), also does not
+        trip --strict;
+      * --include-unresolved-recency flips an otherwise-UNRESOLVED candidate
+        to CREATE;
+      * a fleet path naming a SUBDIRECTORY of a larger repo (the real
+        `hermes`-inside-`agentic_meta_dev` case) is measured via `git log --
+        <relpath>` at the repo toplevel, not the repo's overall HEAD age;
+      * a STALE/UNRESOLVED candidate does not reserve its slug, so a later
+        fleet entry that collides with it on slug can still legitimately
+        CREATE instead of being reported as a false CONFLICT.
 
 Every test runs against the ``tmp_registry`` fixture (a temp copy of the seed
 JSONL) and passes ``--registry-dir`` explicitly. The real ``registry/`` is never
@@ -28,7 +47,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -138,6 +159,69 @@ def _run(
     return seed.main(
         ["--registry", str(fleet), "--registry-dir", str(registry), *extra]
     )
+
+
+def _git(cwd: Path, *args: str, env: dict[str, str] | None = None) -> None:
+    subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, env=env
+    )
+
+
+def _make_git_repo(root: Path, *, days_ago: float, touch: str = "README.md") -> Path:
+    """Create a REAL git repo at *root* with one commit backdated *days_ago*
+    days via ``GIT_AUTHOR_DATE``/``GIT_COMMITTER_DATE``.
+
+    *touch* is the file the commit creates, relative to *root* — pass a
+    nested path (e.g. ``"sub/dir/file.txt"``) to build the
+    subdirectory-of-repo case.
+    """
+    import os
+
+    root.mkdir(parents=True, exist_ok=True)
+    commit_dt = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    date_str = commit_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_DATE": date_str,
+        "GIT_COMMITTER_DATE": date_str,
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test")
+
+    target = root / touch
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("seed\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", f"seed commit ({days_ago}d ago)", env=env)
+    return root
+
+
+def _commit_in_repo(root: Path, *, days_ago: float, touch: str) -> None:
+    """Add a SECOND backdated commit touching *touch* in an existing repo."""
+    import os
+
+    commit_dt = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    date_str = commit_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_DATE": date_str,
+        "GIT_COMMITTER_DATE": date_str,
+        "GIT_AUTHOR_NAME": "Test",
+        "GIT_AUTHOR_EMAIL": "test@example.com",
+        "GIT_COMMITTER_NAME": "Test",
+        "GIT_COMMITTER_EMAIL": "test@example.com",
+    }
+    target = root / touch
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("changed\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-q", "-m", f"follow-up ({days_ago}d ago)", env=env)
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +398,8 @@ def test_dry_run_json_plan_is_machine_readable(
         "skip": 1,
         "invalid": 0,
         "conflict": 0,
+        "stale": 0,
+        "unresolved": 0,
         "created": [],
     }
     by_slug = {c["slug"]: c for c in payload["candidates"]}
@@ -877,3 +963,330 @@ def test_real_fleet_registry_plans_cleanly_when_present(tmp_registry: Path) -> N
     by_slug = {c.slug: c for c in candidates}
     assert by_slug["artifact-atlas"].action == seed.ACTION_SKIP
     assert by_slug["signal-to-system"].action == seed.ACTION_CREATE
+
+
+# ---------------------------------------------------------------------------
+# Commit-recency filter (--active-since / --include-unresolved-recency)
+# ---------------------------------------------------------------------------
+
+
+def test_active_since_default_disables_the_filter_entirely(
+    tmp_registry: Path, fleet_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Omitting --active-since must reproduce the pre-filter plan exactly.
+
+    No candidate carries recency fields (all null), and the stale/unresolved
+    summary counts are always present but zero — the create/skip outcomes are
+    untouched by the filter's existence.
+    """
+    assert _run(fleet_registry, tmp_registry, "--json") == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["summary"]["stale"] == 0
+    assert payload["summary"]["unresolved"] == 0
+    assert payload["summary"]["create"] == 2
+    assert payload["summary"]["skip"] == 1
+    for cand in payload["candidates"]:
+        assert cand["recency_state"] is None
+        assert cand["recency_days"] is None
+        assert cand["recency_source"] is None
+
+
+def test_active_since_fresh_repo_creates_and_records_recency(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A repo committed to yesterday clears a 7-day window -> CREATE.
+
+    recency_* is populated on the CREATE too (auditability, not just on
+    exclusions).
+    """
+    repo = _make_git_repo(tmp_path / "fresh-repo", days_ago=1)
+    fleet = _fleet_yaml(
+        tmp_path / "fresh",
+        [{"id": "fresh-app", "name": "Fresh App", "path": str(repo)}],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+
+    cand = payload["candidates"][0]
+    assert cand["action"] == "create"
+    assert cand["recency_state"] == "fresh"
+    assert cand["recency_days"] is not None and cand["recency_days"] < 2
+    assert Path(cand["recency_source"]).resolve() == repo.resolve()
+
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--apply") == 0
+    assert ProjectRepository(tmp_registry).get_by_slug("fresh-app") is not None
+
+
+def test_active_since_stale_repo_is_excluded_and_does_not_trip_strict(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A repo last committed 100 days ago fails a 7-day window -> STALE.
+
+    STALE is excluded (nothing written on --apply) but is NOT a --strict
+    problem — that flag's contract stays invalid/conflict only.
+    """
+    repo = _make_git_repo(tmp_path / "stale-repo", days_ago=100)
+    fleet = _fleet_yaml(
+        tmp_path / "stale",
+        [{"id": "stale-app", "name": "Stale App", "path": str(repo)}],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7")
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "STALE" in out
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["summary"]["stale"] == 1
+    assert payload["summary"]["create"] == 0
+    cand = payload["candidates"][0]
+    assert cand["action"] == "stale"
+    assert cand["recency_state"] == "stale"
+    assert cand["recency_days"] is not None and cand["recency_days"] > 7
+    assert cand["reason"] is not None and "older than" in cand["reason"]
+
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--apply") == 0
+    assert ProjectRepository(tmp_registry).get_by_slug("stale-app") is None
+
+    # Not a --strict-visible problem.
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--strict") == 0
+
+
+def test_active_since_unresolved_recency_is_excluded_and_distinct_from_stale(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A path that does not exist locally cannot be measured -> UNRESOLVED.
+
+    UNRESOLVED must be a SEPARATE outcome from STALE: "we could not measure
+    this repo" is not the same fact as "this repo is inactive," and folding
+    the two together would silently drop repos that are actually fine.
+    """
+    missing_path = tmp_path / "does-not-exist"
+    fleet = _fleet_yaml(
+        tmp_path / "unresolved",
+        [{"id": "ghost-app", "name": "Ghost App", "path": str(missing_path)}],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7")
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "UNRESOLVED" in out
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["summary"]["unresolved"] == 1
+    assert payload["summary"]["stale"] == 0
+    assert payload["summary"]["create"] == 0
+    cand = payload["candidates"][0]
+    assert cand["action"] == "unresolved"
+    assert cand["recency_state"] == "unresolved"
+    assert cand["recency_days"] is None
+    assert cand["recency_source"] is None
+    assert "does not exist locally" in cand["reason"]
+
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--apply") == 0
+    assert ProjectRepository(tmp_registry).get_by_slug("ghost-app") is None
+
+    # Not a --strict-visible problem either.
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--strict") == 0
+
+
+def test_active_since_missing_path_field_is_unresolved(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No 'path' field at all is the same unresolved bucket, distinctly reasoned."""
+    fleet = _fleet_yaml(tmp_path / "nopath", [{"id": "no-path-app", "name": "No Path"}])
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    cand = payload["candidates"][0]
+    assert cand["action"] == "unresolved"
+    assert "no 'path'" in cand["reason"]
+
+
+def test_active_since_path_not_a_git_repo_is_unresolved(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A path that exists but is not a git checkout is unresolved, not stale."""
+    plain_dir = tmp_path / "not-a-repo"
+    plain_dir.mkdir()
+    fleet = _fleet_yaml(
+        tmp_path / "notrepo",
+        [{"id": "plain-dir", "name": "Plain Dir", "path": str(plain_dir)}],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    cand = payload["candidates"][0]
+    assert cand["action"] == "unresolved"
+    assert "not inside a git repository" in cand["reason"]
+
+
+def test_include_unresolved_recency_flips_unresolved_to_create(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--include-unresolved-recency lets an unmeasurable candidate through.
+
+    Also pins that the flag has NO EFFECT unless --active-since is set (the
+    recency gate never runs at all in that case).
+    """
+    missing_path = tmp_path / "still-missing"
+    fleet = _fleet_yaml(
+        tmp_path / "include-unresolved",
+        [{"id": "ghost-app", "name": "Ghost App", "path": str(missing_path)}],
+    )
+
+    rc = _run(
+        fleet,
+        tmp_registry,
+        "--active-since",
+        "7",
+        "--include-unresolved-recency",
+        "--apply",
+    )
+    assert rc == 0
+    created = ProjectRepository(tmp_registry).get_by_slug("ghost-app")
+    assert created is not None
+    capsys.readouterr()  # drain the apply plan before the next --json run
+
+    # Without --active-since, the flag is a no-op: the gate never runs.
+    other_fleet = _fleet_yaml(
+        tmp_path / "no-active-since",
+        [{"id": "ghost-app-2", "name": "Ghost App 2", "path": str(missing_path)}],
+    )
+    assert (
+        _run(other_fleet, tmp_registry, "--include-unresolved-recency", "--json") == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    cand = payload["candidates"][0]
+    assert cand["action"] == "create"
+    assert cand["recency_state"] is None
+
+
+def test_active_since_measures_subdirectory_commits_not_repo_head(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The real hermes-inside-agentic_meta_dev case: fleet path is a SUBDIRECTORY.
+
+    The repo root's own last commit is old; a later commit touches only the
+    subdirectory. Recency must come from the commit that actually touches
+    that subtree (measured at the repo TOPLEVEL with `git log -- <relpath>`),
+    not from the repo's unrelated, older HEAD.
+    """
+    repo_root = _make_git_repo(tmp_path / "monorepo", days_ago=100, touch="root-file.txt")
+    _commit_in_repo(repo_root, days_ago=2, touch="apps/hermes/main.py")
+    subdir = repo_root / "apps" / "hermes"
+
+    fleet = _fleet_yaml(
+        tmp_path / "subdir",
+        [{"id": "hermes", "name": "Hermes", "path": str(subdir)}],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+
+    cand = payload["candidates"][0]
+    assert cand["action"] == "create"
+    assert cand["recency_state"] == "fresh"
+    assert cand["recency_days"] is not None and cand["recency_days"] < 7
+    # Measured at the repo TOPLEVEL, not the subdirectory itself.
+    assert Path(cand["recency_source"]).resolve() == repo_root.resolve()
+
+
+def test_active_since_subdirectory_with_no_commits_is_unresolved(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A subdirectory that exists but that no commit has ever touched."""
+    repo_root = _make_git_repo(tmp_path / "monorepo2", days_ago=1, touch="root-file.txt")
+    untouched_subdir = repo_root / "apps" / "never-touched"
+    untouched_subdir.mkdir(parents=True)
+
+    fleet = _fleet_yaml(
+        tmp_path / "subdir-empty",
+        [
+            {
+                "id": "never-touched",
+                "name": "Never Touched",
+                "path": str(untouched_subdir),
+            }
+        ],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    cand = payload["candidates"][0]
+    assert cand["action"] == "unresolved"
+    assert "no commits touch" in cand["reason"]
+
+
+def test_stale_candidate_does_not_reserve_slug_for_a_later_fresh_entry(
+    tmp_path: Path, tmp_registry: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A STALE (or UNRESOLVED) exclusion must not block a later colliding slug.
+
+    Two fleet entries normalize to the same slug (twin_app / twin-app). The
+    FIRST is stale and gets excluded before it would reserve anything; the
+    recency gate runs immediately before the slug/id reservation for exactly
+    this reason. The SECOND must still plan as an ordinary CREATE — not a
+    false CONFLICT against a row that was never going to be written.
+    """
+    stale_repo = _make_git_repo(tmp_path / "twin-stale", days_ago=100)
+    fresh_repo = _make_git_repo(tmp_path / "twin-fresh", days_ago=1)
+
+    fleet = _fleet_yaml(
+        tmp_path / "twins",
+        [
+            {"id": "twin_app", "name": "Twin Stale", "path": str(stale_repo)},
+            {"id": "twin-app", "name": "Twin Fresh", "path": str(fresh_repo)},
+        ],
+    )
+
+    rc = _run(fleet, tmp_registry, "--active-since", "7", "--json")
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["summary"]["stale"] == 1
+    assert payload["summary"]["create"] == 1
+    assert payload["summary"]["conflict"] == 0
+
+    by_fleet_id = {c["fleet_id"]: c for c in payload["candidates"]}
+    assert by_fleet_id["twin_app"]["action"] == "stale"
+    assert by_fleet_id["twin-app"]["action"] == "create"
+    assert by_fleet_id["twin-app"]["slug"] == "twin-app"
+
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--apply") == 0
+    created = ProjectRepository(tmp_registry).get_by_slug("twin-app")
+    assert created is not None
+    assert created.name == "Twin Fresh"
+
+
+def test_active_since_stale_and_unresolved_together_never_trip_strict(
+    tmp_path: Path, tmp_registry: Path
+) -> None:
+    """Combined smoke test: a stale repo AND an unresolvable path, one run."""
+    stale_repo = _make_git_repo(tmp_path / "strict-stale", days_ago=50)
+    fleet = _fleet_yaml(
+        tmp_path / "strict-recency",
+        [
+            {"id": "stale-one", "name": "Stale One", "path": str(stale_repo)},
+            {
+                "id": "ghost-two",
+                "name": "Ghost Two",
+                "path": str(tmp_path / "missing-for-strict"),
+            },
+        ],
+    )
+
+    assert _run(fleet, tmp_registry, "--active-since", "7", "--strict") == 0
