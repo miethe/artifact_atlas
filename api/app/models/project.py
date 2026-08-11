@@ -36,6 +36,7 @@ class ProjectCreate(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    workspace_id: str | None = None
     name: str
     slug: str
     description: str | None = None
@@ -52,6 +53,7 @@ class ProjectUpdate(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    workspace_id: str | None = None
     name: str | None = None
     description: str | None = None
     status: ProjectStatus | None = None

@@ -14,8 +14,9 @@ Covers the load-bearing guarantees:
     a fleet app that would reuse its id *or* its slug, instead of appending a
     duplicate — including when the tombstoned row's id is NOT the derived form
     (id proj_legacy_id holding slug foo), where the id guard cannot help;
-  - workspace_id survives the create round trip even though it is an undeclared
-    extra field on ProjectCreate (the documented fragility);
+  - workspace_id is a declared field on ProjectCreate and survives the create
+    round trip (previously an undeclared extra; declared per
+    node_01KZRMMDB3YKT7T4FJTVVRMKG0);
   - without --tree-map, root_intenttree_node_id stays null (the fleet registry
     carries no node ids — only tree ids exist upstream, a different type).
   - the commit-recency filter (--active-since):
@@ -76,6 +77,37 @@ def _load_script_module() -> Any:
 
 
 seed = _load_script_module()
+
+
+@pytest.fixture(autouse=True)
+def _reset_projects_to_atlas_baseline(request: pytest.FixtureRequest) -> None:
+    """Trim the copied ``projects.jsonl`` back to the single hand-authored
+    ``proj_artifact_atlas`` row these tests were written against.
+
+    ``tmp_registry`` (conftest) copies the real ``registry/*.jsonl`` as seed
+    data. Once the fleet seed has been applied to ``registry/projects.jsonl``
+    (PF4-2b), that copy carries ~24 real fleet rows whose slugs (e.g.
+    ``signal-to-system``, ``research-foundry``) collide with this module's fake
+    fleet fixtures — flipping their expected CREATE to SKIP. These tests only
+    need the ``artifact-atlas`` row to pre-exist (to exercise the skip guard);
+    resetting to that baseline restores their original precondition without
+    coupling them to how many real projects the canonical registry now holds.
+    """
+    if "tmp_registry" not in request.fixturenames:
+        return
+    reg = request.getfixturevalue("tmp_registry")
+    projects = reg / "projects.jsonl"
+    if not projects.exists():
+        return
+    rows = [
+        json.loads(line)
+        for line in projects.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    keep = [r for r in rows if r.get("slug") == "artifact-atlas"]
+    projects.write_text(
+        "".join(json.dumps(r) + "\n" for r in keep), encoding="utf-8"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -895,29 +927,27 @@ def test_workspace_id_defaults_to_settings_and_is_overridable(
     assert rows["signal-to-system"]["workspace_id"] == "ws_test"
 
 
-def test_workspace_id_persists_although_undeclared_on_projectcreate(
+def test_workspace_id_is_declared_and_survives_the_seed_round_trip(
     tmp_registry: Path, fleet_registry: Path
 ) -> None:
-    """Pin the fragility documented in the script's module warning.
+    """``workspace_id`` is now a declared field, and still lands on every row.
 
-    ``workspace_id`` is NOT a declared field on ``ProjectCreate`` and is absent
-    from the OpenAPI ``ProjectCreate`` schema. It reaches the JSONL row only via
-    ``model_config = ConfigDict(extra="allow")`` plus
-    ``ProjectRepository.create``'s ``model_dump()`` spread. If ``ProjectCreate``
-    ever tightens to ``extra="forbid"`` (or the repository stops spreading
-    extras) workspace scoping would vanish from every seeded row with no error —
-    this test is the thing that would catch it.
+    node_01KZRMMDB3YKT7T4FJTVVRMKG0: ``workspace_id`` used to reach the JSONL row
+    only via ``ConfigDict(extra="allow")`` + ``ProjectRepository.create``'s
+    ``model_dump()`` spread — an undeclared field that would have vanished
+    silently from every seeded row if the repository ever narrowed its spread to
+    declared fields. It is now declared on ``ProjectCreate``, so it survives that
+    change; this test pins both the declaration and the seed round trip.
     """
-    # The precondition that makes the pass-through work at all.
-    assert "workspace_id" not in ProjectCreate.model_fields
-    assert ProjectCreate.model_config.get("extra") == "allow"
+    # It is a first-class declared field now, not an extras pass-through.
+    assert "workspace_id" in ProjectCreate.model_fields
 
     assert _run(fleet_registry, tmp_registry, "--apply") == 0
 
     # It survives the model -> repository -> JSONL round trip...
     rows = {r["slug"]: r for r in _read_rows(tmp_registry)}
     assert rows["signal-to-system"]["workspace_id"] == "ws_test"
-    # ...and reads back through the Project model, which DOES declare it.
+    # ...and reads back through the Project model, which also declares it.
     created = ProjectRepository(tmp_registry).get_by_slug("signal-to-system")
     assert created is not None and created.workspace_id == "ws_test"
 

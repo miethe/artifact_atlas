@@ -70,33 +70,23 @@ Known upstream mismatches (deliberately not papered over)
   misleading. It is therefore NOT mapped onto ``ProjectStatus``; every seeded row
   gets ``active`` and the maturity value is dropped rather than mistranslated.
 
-.. warning::
+.. note::
 
-   **``workspace_id`` persists only because ``ProjectCreate`` allows extras.**
-   ``workspace_id`` is NOT a declared field on ``ProjectCreate``
-   (api/app/models/project.py) and is absent from the OpenAPI ``ProjectCreate``
-   schema (shared/openapi.yaml). This script passes it anyway (see
-   :func:`apply_candidates`) and it reaches the JSONL row only through
-   ``model_config = ConfigDict(extra="allow")`` plus ``ProjectRepository.create``
-   spreading ``data.model_dump()`` into the record. That is deliberate — it
-   matches the hand-authored ``proj_artifact_atlas`` row and the ``Project`` READ
-   model, which does declare ``workspace_id`` — but it is load-bearing on an
-   undeclared field, and the two ways it can break are NOT equally loud:
+   **``workspace_id`` is now a declared field on ``ProjectCreate``.** It used to
+   reach the JSONL row only through ``model_config = ConfigDict(extra="allow")``
+   plus ``ProjectRepository.create`` spreading ``data.model_dump()`` into the
+   record — load-bearing on an *undeclared* field, which left one silent failure
+   mode: if ``ProjectRepository.create`` ever narrowed its ``model_dump()``
+   spread to declared fields, every seeded row would land with no
+   ``workspace_id``, no error raised, and the workspace-scoped reports lens this
+   seed exists to feed would stop resolving.
 
-   * Tightening ``ProjectCreate`` to ``extra="forbid"`` fails **loudly**. The
-     ``ProjectCreate(...)`` call in :func:`apply_candidates` passes
-     ``workspace_id=`` as an unexpected keyword, so pydantic raises a
-     ``ValidationError`` there and the seed aborts before writing anything.
-   * Extras ceasing to reach the stored record fails **silently** — e.g. if
-     ``ProjectRepository.create`` narrowed its ``model_dump()`` spread to
-     declared fields. Every seeded row would then land with no ``workspace_id``,
-     no error raised, and the workspace-scoped reports lens this seed exists to
-     feed would stop resolving.
-
-   The durable fix for both is to declare ``workspace_id`` on ``ProjectCreate``
-   and in the OpenAPI schema; until then
-   ``api/tests/test_seed_fleet_projects.py`` asserts the field lands on written
-   rows, so either regression fails a test instead of shipping quietly.
+   That durable fix has landed — ``workspace_id`` is declared on both
+   ``ProjectCreate`` and ``ProjectUpdate`` (api/app/models/project.py) and is
+   present in the OpenAPI ``ProjectCreate``/``ProjectUpdate`` schemas
+   (shared/openapi.yaml), so the field now survives a narrowed ``model_dump()``.
+   ``api/tests/test_seed_fleet_projects.py`` still asserts the field lands on
+   written rows, so a regression fails a test rather than shipping quietly.
 
 Usage
 -----
@@ -840,18 +830,14 @@ def apply_candidates(
 
     Returns the list of created project ids, in order.
 
-    .. warning::
+    .. note::
 
-       ``workspace_id`` below is an **undeclared extra field** on
-       ``ProjectCreate`` — see the module-level warning. It persists only via
+       ``workspace_id`` below is a **declared field** on ``ProjectCreate`` — see
+       the module-level note. It used to persist only via
        ``ConfigDict(extra="allow")`` + ``ProjectRepository.create``'s
-       ``model_dump()`` spread. Tightening ``ProjectCreate`` to
-       ``extra="forbid"`` would make the ``ProjectCreate(...)`` call below raise
-       a pydantic ``ValidationError`` for an unexpected keyword — loud, and
-       nothing gets written. The *silent* half is extras no longer reaching the
-       stored record, which would land rows with no ``workspace_id`` and no
-       error. Declaring ``workspace_id`` on ``ProjectCreate`` (and in the
-       OpenAPI schema) is the durable fix for both.
+       ``model_dump()`` spread, which meant extras no longer reaching the stored
+       record would have landed rows with no ``workspace_id`` and no error. Now
+       that the field is declared it survives a narrowed ``model_dump()``.
     """
     created: list[str] = []
     for cand in candidates:

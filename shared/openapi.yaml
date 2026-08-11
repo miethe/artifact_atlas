@@ -2481,6 +2481,9 @@ components:
       type: object
       required: [name, slug]
       properties:
+        workspace_id:
+          type: string
+          nullable: true
         name:
           type: string
         slug:
@@ -2514,6 +2517,9 @@ components:
       type: object
       description: All fields optional for PATCH
       properties:
+        workspace_id:
+          type: string
+          nullable: true
         name:
           type: string
         description:

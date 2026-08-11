@@ -9,6 +9,7 @@ Verifies:
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,23 @@ def load_jsonl(filename: str) -> list[dict[str, Any]]:
     return records
 
 
+def _iso_datetime_equal(a: Any, b: Any) -> bool:
+    """True if *a* and *b* are the same instant in ISO-8601 form.
+
+    Pydantic serialises an aware UTC datetime with a ``Z`` suffix, while the
+    repository stores ``datetime.now(tz=timezone.utc).isoformat()`` as
+    ``+00:00`` — the same instant, different spelling. A naive string compare
+    fails on that suffix, so seeded rows (which carry created_at/updated_at)
+    would spuriously fail round-trip. Compare parsed instants instead.
+    """
+    try:
+        pa = datetime.fromisoformat(str(a).replace("Z", "+00:00"))
+        pb = datetime.fromisoformat(str(b).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return pa == pb
+
+
 def assert_round_trip(model_instance: Any, original: dict[str, Any]) -> None:
     """Assert that re-serialising a model preserves all original fields."""
     serialized = model_instance.model_dump(mode="json")
@@ -48,9 +66,11 @@ def assert_round_trip(model_instance: Any, original: dict[str, Any]) -> None:
                     f"Sub-field '{key}.{sub_key}' lost after round-trip"
                 )
         else:
-            assert str(serialized_val) == str(value) or serialized_val == value, (
-                f"Field '{key}': expected {value!r}, got {serialized_val!r}"
-            )
+            assert (
+                str(serialized_val) == str(value)
+                or serialized_val == value
+                or _iso_datetime_equal(serialized_val, value)
+            ), f"Field '{key}': expected {value!r}, got {serialized_val!r}"
 
 
 # ---------------------------------------------------------------------------

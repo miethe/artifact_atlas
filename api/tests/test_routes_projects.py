@@ -174,3 +174,51 @@ def test_list_projects_includes_asset_count(tmp_registry) -> None:
     resp = client.get("/api/projects")
     item = next(p for p in resp.json()["items"] if p["id"] == pid)
     assert item["asset_count"] == 1
+
+
+def test_create_project_persists_workspace_id(tmp_registry) -> None:
+    """POST /api/projects accepts a declared workspace_id and round-trips it.
+
+    Regression guard for node_01KZRMMDB3YKT7T4FJTVVRMKG0: workspace_id is now a
+    declared field on ProjectCreate (not a mere extra="allow" passthrough), so
+    it survives even if ProjectRepository.create narrowed its model_dump()
+    spread to declared fields.
+    """
+    payload = {
+        "name": "WS Project",
+        "slug": "ws-project",
+        "status": "active",
+        "workspace_id": "ws_regression_test",
+    }
+    resp = client.post("/api/projects", json=payload)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["workspace_id"] == "ws_regression_test"
+
+    # Round-trips on GET, not just the create echo.
+    resp = client.get(f"/api/projects/{body['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["workspace_id"] == "ws_regression_test"
+
+
+def test_patch_project_reassigns_workspace_id(tmp_registry) -> None:
+    """PATCH /api/projects/{id} can change a declared workspace_id."""
+    resp = client.post(
+        "/api/projects",
+        json={"name": "Reassign", "slug": "reassign-ws", "status": "active",
+              "workspace_id": "ws_old"},
+    )
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    resp = client.patch(f"/api/projects/{pid}", json={"workspace_id": "ws_new"})
+    assert resp.status_code == 200
+    assert resp.json()["workspace_id"] == "ws_new"
+
+
+def test_project_create_schema_declares_workspace_id() -> None:
+    """workspace_id is visible in the generated OpenAPI, not hidden behind extras."""
+    from app.models.project import ProjectCreate, ProjectUpdate
+
+    assert "workspace_id" in ProjectCreate.model_json_schema()["properties"]
+    assert "workspace_id" in ProjectUpdate.model_json_schema()["properties"]

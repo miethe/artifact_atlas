@@ -1144,3 +1144,31 @@ Excluded: 9 STALE (22.9d–333.0d: `meatywiki-portal`, `skillmeat-docs`, `ccusag
 **The seeded rows are ephemeral against a volume reset, not a redeploy.** They live in the `atlas-data` named volume, which survives container replacement (cf. D-016).
 
 **Widening the window is cheap and idempotent; narrowing it is not.** A later `--active-since 30` re-seed adds only the newly-included rows and reports the rest SKIP.
+
+---
+
+## D-021 — PF-4 follow-ups: declare `workspace_id` on the project write models + seed the canonical registry
+
+**Status**: Accepted
+**Date**: 2026-08-11
+**Phase**: PF-4 follow-up
+**Nodes**: `node_01KZRMMDB3YKT7T4FJTVVRMKG0`, `node_01KZRMQ1RS9N7SDCXNDGXVY16Y`
+
+### Context
+
+Two PF-4 loose ends surfaced after D-020. First, `workspace_id` was declared on the `Project` READ model but not on `ProjectCreate`/`ProjectUpdate`; both ride `model_config = ConfigDict(extra="allow")` (a codebase-wide convention). Measured 2026-08-11: `workspace_id` was **not** dropped — extras persist through `model_dump()` into the JSONL row — so the originally-filed "silently dropped" premise was wrong. The real defects were narrower: (a) the field was invisible in the generated OpenAPI and in `shared/openapi.yaml` (a CLAUDE.md alignment gate), and (b) because extras are accepted silently, a typo'd key persisted as junk with no error. Second, D-020's fleet seed had been applied only to the live node; this checkout's canonical `registry/projects.jsonl` was still a single row.
+
+### Decision
+
+1. **Declare `workspace_id: str | None = None` on both `ProjectCreate` and `ProjectUpdate`**, mirroring `Project`, and add it to the OpenAPI `ProjectCreate`/`ProjectUpdate` schemas. `extra="allow"` is left intact (codebase convention); declaring the field makes it contract-visible and lets it survive a future narrowing of the repository's `model_dump()` spread. Regression tests pin persistence, PATCH reassignment, and schema visibility. The `seed_fleet_projects.py` module/call-site warnings that documented the old fragility, and the test that pinned "undeclared", were updated to the new invariant.
+
+2. **Applied the fleet seed to the canonical `registry/projects.jsonl`** at the D-020 PF4-2b scope (`--active-since 14 --apply --allow-real-registry`): 42 apps → **24 create / 1 skip / 9 stale / 8 unresolved**, taking the file from 1 → 25 rows, all `workspace_id: ws_artifact_atlas_local`, matching the live node exactly. Idempotent on re-run (0 create / 25 skip). Backup at `/tmp/aa-canonical-projects-backup.jsonl` during the run.
+
+### Consequences
+
+Seeding the canonical registry exposed two latent test couplings, both fixed in the same pass rather than worked around:
+
+- `tests/test_seed_fleet_projects.py` copies the canonical `registry/` as fixture seed data and its fake fleet reuses real slugs (`signal-to-system`, `research-foundry`); once those rows existed, expected CREATE flipped to SKIP. Added a module-local autouse fixture that trims the copied `projects.jsonl` back to the single `artifact-atlas` baseline these tests were written against.
+- `tests/test_models.py::test_projects_round_trip` round-trips every canonical row; seeded rows carry `created_at`/`updated_at` written as `+00:00`, which the `Project` model re-serialises as `Z` (same instant). The comparator's naive string compare failed on the suffix; made it instant-aware (`_iso_datetime_equal`). The hand-authored `artifact-atlas` row dodged this only because it has no datetime fields.
+
+Full API suite green afterward: 793 passed, 2 skipped.
