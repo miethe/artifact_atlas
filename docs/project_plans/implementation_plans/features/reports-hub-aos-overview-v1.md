@@ -277,11 +277,15 @@ contract, and the page tells you how old its numbers are instead of implying the
 > **OQ-7** — program M3 widens `SidebarNav`; this plan consumes that signature. All three are in
 > `decisions` with rationale. OQ-3/4/5/6 remain genuinely open and are non-blocking.
 >
-> **Premise correction (2026-08-09).** Sibling plans authored 2026-08-08 assumed D-018 was the latest
-> decision. **D-019 exists** at `docs/DECISIONS.md:989` (Reports Hub Foundations, Accepted, shipped in
-> `456fdf1`), and the PF-4 program claims **D-020**. When this plan is picked up, its M1/M4 decision
-> records must take the then-next-free number — **not** D-019, and not D-020. References to D-018
-> below are references to the *report-hosting* decision and remain correct.
+> **Premise correction (2026-08-09, re-corrected 2026-08-11).** Sibling plans authored 2026-08-08
+> assumed D-018 was the latest decision. **D-019 exists** at `docs/DECISIONS.md:989` (Reports Hub
+> Foundations, Accepted, shipped in `456fdf1`); the 2026-08-09 pass then had the PF-4 program claim
+> **D-020**, which has since been taken too. As of 2026-08-11 the **latest decision is D-021**
+> (project write-model `workspace_id` + canonical registry seed, `fc9809d`) — D-020 is fleet seeding
+> scope (`12a1fb3`) — and the PF-4 program now claims **D-022**. When this plan is picked up, its
+> M1/M4 decision records must take the then-next-free number: **re-check it, do not reuse a number
+> from this banner.** This number has already moved twice while the plan sat deferred. References to
+> D-018 below are references to the *report-hosting* decision and remain correct.
 
 ## Scope boundary
 

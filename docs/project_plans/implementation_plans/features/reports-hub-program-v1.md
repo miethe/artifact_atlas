@@ -19,6 +19,8 @@ spike_ref: null
 adr_refs:
 - docs/DECISIONS.md#D-018
 - docs/DECISIONS.md#D-019
+- docs/DECISIONS.md#D-020
+- docs/DECISIONS.md#D-021
 related_documents:
 - docs/project_plans/implementation_plans/features/reports-hub-per-project-surface-v1.md
 - docs/project_plans/implementation_plans/features/reports-hub-central-lens-v1.md
@@ -33,8 +35,19 @@ acceptance_criteria:
   all projects with grouping by project, epic/tracker node, route, and truth_status.'
 - 'NODE AC4 (verbatim): The 14 existing program-route reports are discoverable through
   the above, not only as loose files.'
-- 'M0: the live instance at 10.42.10.76:8042 reports >1 project AND >1 delivery_report
-  with non-null project_id, measured by command, with the pre-mutation counts recorded.'
+- 'M0 (PARTIALLY COMPLETE as of 2026-08-11): the projects half is MET — GET /api/projects
+  on 10.42.10.76:8042 returns total 25, applied by D-020 / 12a1fb3; the seeder MUST NOT
+  be re-run. Remaining: run ONLY scripts/backfill_reports.py --apply so every
+  delivery_report in the corpus carries a non-null project_id. Pre-state measured
+  2026-08-11: 25 projects, 1 delivery_report, 0 attributed (asset_c7c088ab3c8d4639 is
+  project_id: null, workspace_id: null, status: inbox; GET /api/projects/proj_artifact_atlas/assets?artifact_type_id=delivery_report
+  returns total 0). The backfill INGESTS rendered report HTML via ImportService.import_report
+  (scripts/backfill_reports.py --help: it scans a root for rendered HTML and requires --apply
+  PLUS --all or --select), so it creates new assets rather than merely attributing the existing
+  one — the post-state target is therefore >1 attributed, sourced from the ~14 ingestable
+  program-route reports, which is also what makes M2''s >=2-projects criterion and NODE AC4
+  satisfiable. Pre-mutation counts are re-measured and recorded at M0 start, and backfill is
+  re-run once to prove idempotency.'
 - 'M1: a per-project reports lens renders real reports from the API; an API failure renders
   an error, never fixtures.'
 - 'M2: GET /api/reports returns delivery_report assets across >=2 projects PLUS the
@@ -43,7 +56,7 @@ acceptance_criteria:
 - 'M3: /reports renders every report including unattributed; group-by project / route
   / truth_status / date all show server-authoritative counts; reachable from SidebarNav
   and the command palette.'
-- 'M4: D-020 records the API-shape and ownership decisions; every deferred item has a
+- 'M4: D-022 records the API-shape and ownership decisions; every deferred item has a
   DI row; the AOS-overview plan is marked deferred with its blocking OQs resolved.'
 open_questions:
 - 'OQ-1 (non-blocking, decide at M1): does a report row open in the house asset modal
@@ -72,10 +85,10 @@ decisions:
   rationale: "Resolves AOS-overview OQ-7, which the plan itself calls a sequencing call, not a design call. All three plans need the same widening of the same file; doing it twice is a merge conflict. M1 registers a project-scoped item only and needs no signature change."
   status: accepted
 - decision: "The foundations are applied to the live instance (M0) BEFORE any surface is built."
-  rationale: "456fdf1 shipped seed_fleet_projects.py and backfill_reports.py as code but neither was ever run --apply. Measured 2026-08-09: the live node holds 1 project and 1 report with project_id: null. Without M0 every surface ships structurally complete and demonstrably empty, and NODE AC4 is unverifiable."
+  rationale: "456fdf1 shipped seed_fleet_projects.py and backfill_reports.py as code but neither was ever run --apply; measured 2026-08-09 the live node held 1 project and 1 report with project_id: null. HALF DISCHARGED as of 2026-08-11: the seeder was applied under D-020 (12a1fb3) and GET /api/projects now returns total 25, so M0 reduces to the backfill alone. Without that backfill every surface ships structurally complete and demonstrably empty, and NODE AC4 is unverifiable."
   status: accepted
-- decision: "The next free decision number is D-020."
-  rationale: "All three sibling plans assert D-018 is the latest decision. FALSE as of 456fdf1 — D-019 exists at docs/DECISIONS.md:989 and is Accepted."
+- decision: "The next free decision number is D-022."
+  rationale: "D-019 was the latest decision when this plan was authored (2026-08-09), which is why the sibling plans' D-018 claim was already false. Two more landed afterward: D-020 (fleet seeding scope — commit recency, not layer or report history — AND fleet seeding applied to the live instance, 12a1fb3) and D-021 (project write models declare workspace_id + canonical registry seed, fc9809d). docs/DECISIONS.md now ends at D-021 (line 1150), so D-022 is the next free number. Re-verify at M4 start: this number has already moved twice."
   status: accepted
 - decision: "For the DEFERRED AOS-overview plan: its collector runs laptop-side where the checkouts are and pushes a versioned `fleet_snapshot` asset to Atlas over HTTP; Atlas never shells git."
   rationale: "Operator call, resolving AOS OQ-1. The prototype collector needs `git worktree list` / `status --porcelain` across 14 checkouts, impossible from the API container. Recorded now so the deferred plan is unblocked when picked up. AOS OQ-2 follows: a distinct `fleet_snapshot` type, precisely so fleet snapshots do NOT surface in the two lenses this program builds."
@@ -91,10 +104,10 @@ wave_plan:
   waves: [["M0"], ["M1"], ["M2"], ["M3"], ["M4"]]
   phases:
     - id: M0
-      title: "Apply the shipped foundations to the live instance"
+      title: "Apply the remaining foundation (report backfill) to the live instance — seeding already applied"
       depends_on: []
       exit_criteria:
-      - "Pre-mutation counts recorded; seed_fleet_projects.py --apply and backfill_reports.py --apply run against 10.42.10.76:8042; post counts show >1 project and >1 attributed delivery_report."
+      - "PARTIALLY COMPLETE 2026-08-11: seeding is DONE (GET /api/projects -> total 25, applied by D-020 / 12a1fb3) and seed_fleet_projects.py --apply MUST NOT be re-run. Remaining: re-measure and record pre-mutation counts (expected 25 projects, 1 delivery_report, 0 attributed), then run ONLY scripts/backfill_reports.py --apply (which needs --all or --select, and an explicit --collection since it has no default) against 10.42.10.76:8042. Post target: >1 delivery_report, every one carrying a non-null project_id, sourced from the ~14 ingestable program-route reports. Re-run the backfill once to prove it does not double-ingest."
       gate_lens: [security, validator]
       gate_lens_reason: irreversible-outward
     - id: M1
@@ -117,23 +130,30 @@ wave_plan:
       - "/reports renders all reports including unattributed (pinned last); group-by project / route / truth_status / date show server counts; reachable from SidebarNav and command palette; API 5xx renders an error, never fixtures."
       gate_lens: [validator]
     - id: M4
-      title: "Close-out — D-020, DI rows, backlog, AOS deferral"
+      title: "Close-out — D-022, DI rows, backlog, AOS deferral"
       depends_on: ["M3"]
       exit_criteria:
-      - "D-020 recorded; a DI row exists for every deferred item; docs/mvp-backlog.md updated; the AOS-overview plan is marked deferred carrying its resolved OQ-1/OQ-2."
+      - "D-022 recorded (re-verify it is still the next free number — D-020/D-021 landed after this plan was authored); a DI row exists for every deferred item; docs/mvp-backlog.md updated; the AOS-overview plan is marked deferred carrying its resolved OQ-1/OQ-2."
       gate_lens: [validator]
 ---
 
 # Implementation Plan — Reports Hub discovery surfaces
 
 `456fdf1` shipped the attribution/seeding/backfill code but never ran it, so measured 2026-08-09 the
-live node holds **1 project and 1 report with `project_id: null`**, reachable from no page of the app.
-Done means: foundations applied, a project page lists its own reports, and a top-level `/reports`
-lists every report across every project with server-authoritative grouping.
+live node held **1 project and 1 report with `project_id: null`**, reachable from no page of the app.
+**Re-measured 2026-08-11: fleet seeding HAS since been applied** — `GET /api/projects` returns
+**total 25** (D-020, `12a1fb3`) — **but the report backfill has NOT.** `GET /api/assets/asset_c7c088ab3c8d4639`
+still returns `project_id: null`, `workspace_id: null`, `status: inbox`, and
+`GET /api/projects/proj_artifact_atlas/assets?artifact_type_id=delivery_report` returns `total: 0`:
+exactly one `delivery_report` exists in the corpus and it is unattributed. So M0 is **partially
+complete** and reduces to the backfill alone. Done means: the backfill applied, a project page lists
+its own reports, and a top-level `/reports` lists every report across every project with
+server-authoritative grouping.
 
 ## Scope boundary
 
-**In:** the two foundation scripts applied live; the per-project reports lens; `GET /api/reports` with
+**In:** the remaining foundation script (`backfill_reports.py`) applied live — the seeder is already
+applied and is explicitly OUT; the per-project reports lens; `GET /api/reports` with
 an `include=links` expansion that avoids an N+1; the top-level `/reports` surface (mounting `AppShell`
 itself, outside the `(projects)` group) with grouping and facets; the `SidebarNav`/`CommandPalette`
 widening a non-project route requires. Milestone detail lives in `wave_plan`/`acceptance_criteria`.
@@ -166,7 +186,8 @@ facets come from the full filtered set (`_deps.py:57-94` already returns a full 
   depends on which checkout the path is reached through (ITT `node_01KZHNHBMQSR87X6D8ZX25T5MA`). Snapshot
   the `atlas-assets` volume first, record pre-counts, run seeding before backfill, and re-run backfill
   once to prove it does not double-ingest.
-- **Seeding creates ~41 project rows but only ~14 produce reports** (ITT `node_01KZHNGY48EVDTR4G814048QNX`),
+- **Seeding creates many project rows but few produce reports** (ITT `node_01KZHNGY48EVDTR4G814048QNX`;
+  the estimate here was ~41 — the applied D-020 scoping (commit recency) produced **25**),
   so group-by-project ships mostly-empty groups. That is a presentation decision, not a bug — decide
   at M3 whether empty project groups are hidden, collapsed, or shown.
 - **`AssetLink.target_id` stores a project SLUG while `asset.project_id` now stores a canonical `proj_*` id**
@@ -176,20 +197,34 @@ facets come from the full filtered set (`_deps.py:57-94` already returns a full 
   must not mean cross-policy — hence the `security` lens on M2.
 - **Three plans, one `SidebarNav.tsx`.** Ownership is assigned in `decisions`; violating it is a merge
   conflict, not a style issue.
+- **Main moved three commits while this plan sat unexecuted** — D-020 (`12a1fb3`, which also applied
+  fleet seeding), D-021 (`fc9809d`, which changed the project write models to declare `workspace_id`
+  and seeded `registry/projects.jsonl`), plus a workflows sync. Re-measure every live count at M0 start
+  rather than trusting any figure in this plan, because these numbers have already gone stale once.
 
 ## References
 
 - Detail for M1: `docs/project_plans/implementation_plans/features/reports-hub-per-project-surface-v1.md`
 - Detail for M2+M3: `docs/project_plans/implementation_plans/features/reports-hub-central-lens-v1.md`
 - Deferred, pickup-ready: `docs/project_plans/implementation_plans/features/reports-hub-aos-overview-v1.md`
-- Foundations shipped: `456fdf1`; decision `docs/DECISIONS.md#D-019`; scripts `scripts/seed_fleet_projects.py`, `scripts/backfill_reports.py`
+- Foundations shipped: `456fdf1`; decision `docs/DECISIONS.md#D-019`; scripts `scripts/seed_fleet_projects.py` (**already applied live** — D-020, `12a1fb3`), `scripts/backfill_reports.py` (**not applied** — this is M0's only remaining action)
+- Landed after this plan was authored: `docs/DECISIONS.md#D-020` (fleet seeding scope + applied seeding, `12a1fb3`), `docs/DECISIONS.md#D-021` (project write-model `workspace_id` + canonical registry seed, `fc9809d`)
 - Live instance: `http://10.42.10.76:8042` (health at `/health`, unprefixed — **not** `/api/health`); web `:3040`
+
+> **Two different list envelopes, measured 2026-08-11 — this shapes M2.** `GET /api/search` returns
+> `{results, total}` and its `total` **equals the returned page size**, not the full filtered count
+> (`limit=20` → `total` 20; `limit=200` → `total` 64). `GET /api/projects/{id}/assets` returns
+> `{items, total, next_cursor}` and its `total` IS the full filtered count (63 at every limit).
+> So `/api/search` cannot back a facet count, which is independent confirmation of the decision to
+> build `GET /api/reports`. `GET /api/reports` MUST use the `{items, total, next_cursor}` shape and a
+> full-set `total`; a third envelope would be a defect. Any snippet reaching for `.items[]` on
+> `/api/search` is wrong and will silently yield nothing.
 
 ## AC -> command -> evidence
 
 | AC | Command | Evidence of pass |
 |---|---|---|
-| M0 counts | `curl -s http://10.42.10.76:8042/api/projects \| jq .total` ; `curl -s "http://10.42.10.76:8042/api/search?q=&artifact_type=delivery_report&limit=200" \| jq '[.items[].project_id]'` | `total` > 1; the project_id array holds non-null values. Note `q=` is REQUIRED (422 without it). |
+| M0 counts | `curl -s http://10.42.10.76:8042/api/projects \| jq .total` ; `curl -s "http://10.42.10.76:8042/api/search?q=&artifact_type=delivery_report&limit=200" \| jq '[.results[].project_id]'` | `total` is 25 **already** (seeding applied, D-020 — do not re-run the seeder); the project_id array holds non-null values **only after the backfill** (pre-state 2026-08-11: one entry, `null`). Note `q=` is REQUIRED (422 without it) and the envelope key is **`results`**, not `items` — see the envelope warning in References. |
 | M0 idempotent | re-run `scripts/backfill_reports.py --apply` | report total unchanged between the two runs |
 | M1 no fixtures | stop the API, load the project reports lens | error state renders; no `FIXTURE_ASSETS` rows |
 | M2 cross-project | `curl -s http://10.42.10.76:8042/api/reports \| jq '[.items[].project_id] \| unique'` | >=2 distinct ids AND a `null` present |
@@ -197,7 +232,7 @@ facets come from the full filtered set (`_deps.py:57-94` already returns a full 
 | M2 contract | `grep -n "/api/reports" shared/openapi.yaml` | path present |
 | M3 groupings | load `/reports`, switch all four group-by modes | each renders; unattributed group last |
 | M3 reachable | click through from `SidebarNav`; open the command palette | both reach `/reports` |
-| M4 docs | `grep -nE "^## D-020" docs/DECISIONS.md` | decision present |
+| M4 docs | `grep -nE "^## D-022" docs/DECISIONS.md` | decision present (D-020/D-021 already exist — confirm D-022 is still free before writing) |
 
 ## Sequencing (load-bearing)
 

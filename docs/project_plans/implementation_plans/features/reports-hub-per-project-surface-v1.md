@@ -151,11 +151,15 @@ decisions:
     \ it twice is a merge conflict. A project-scoped route needs no widening, so this\
     \ plan has no reason to touch it."
   status: accepted
-- decision: "PROGRAM: the next free decision number is **D-020**, not D-019. Every D-019\
-    \ reference in this plan's M4 is corrected to D-020."
+- decision: "PROGRAM: the next free decision number is **D-022**, not D-019 and no longer\
+    \ D-020. Every such reference in this plan's M4 is corrected to D-022."
   rationale: "This plan was authored 2026-08-08 assuming D-018 was the latest. FALSE as\
     \ of `456fdf1`: D-019 exists at `docs/DECISIONS.md:989` (\"Reports Hub Foundations\"\
-    , Accepted), re-verified 2026-08-09."
+    , Accepted). Two more landed after the 2026-08-09 amendment pass: D-020 (fleet seeding\
+    \ scope + applied seeding, `12a1fb3`) and D-021 (project write-model `workspace_id`\
+    \ + canonical registry seed, `fc9809d`). `docs/DECISIONS.md` now ends at D-021 (line\
+    \ 1150), verified 2026-08-11 — so D-022 is next free. Re-verify at M4 start; this number\
+    \ has already moved twice."
   status: accepted
 routing_constraints:
 - "AC3's two-mode empty state and the probe's degradation rule (an unknown count must\
@@ -209,7 +213,8 @@ wave_plan:
     depends_on:
     - M1
     exit_criteria:
-    - "D-020 in `docs/DECISIONS.md` (D-019 is TAKEN — see the program decision); backlog\
+    - "D-022 in `docs/DECISIONS.md` (D-019, D-020 and D-021 are all TAKEN — see the program\
+      \ decision); backlog\
       \ row updated; `DI-` rows for the `searchApi`\
       \ POST bug, the empty-`q` contract reliance, and the fixture-fallback hazard."
 updated: '2026-08-09'
@@ -232,16 +237,21 @@ commit on the row, the hosted HTML one click away, and the tracker node(s) it is
 > `docs/project_plans/implementation_plans/features/reports-hub-program-v1.md` as **M1**, which runs
 > after program M0 applies the shipped foundations to the live instance.
 
-> **Premise corrections (2026-08-09, from the program plan — do not re-litigate).**
+> **Premise corrections (2026-08-09, re-verified and re-stated 2026-08-11 — do not re-litigate).**
 > **(1) Decision numbering.** This plan's M4 originally targeted D-019 on the assumption that D-018
-> was the latest decision. **CORRECTED:** D-019 already exists at `docs/DECISIONS.md:989` (Reports
-> Hub Foundations, Accepted, shipped in `456fdf1`). The next free number is **D-020**.
+> was the latest decision. **CORRECTED twice.** D-019 already exists at `docs/DECISIONS.md:989`
+> (Reports Hub Foundations, Accepted, shipped in `456fdf1`); the 2026-08-09 pass then claimed D-020,
+> which has ALSO since been taken. The latest decision is now **D-021** (`fc9809d`) — D-020 is fleet
+> seeding scope (`12a1fb3`) — so the next free number is **D-022**.
 > **(2) Live data state.** The sibling-dependency table below states that without seeding the only
-> browsable project is `proj_artifact_atlas` and there is ~1 report to show. **Still TRUE of the live
-> instance as measured 2026-08-09** (1 project; 1 delivery_report with `project_id: null`) — but
-> program **M0 changes it before this milestone starts** by running `scripts/seed_fleet_projects.py
-> --apply` and `scripts/backfill_reports.py --apply` against `10.42.10.76:8042`. Treat the two HARD
-> data dependencies as satisfied at M1 start, not as risks to design around.
+> browsable project is `proj_artifact_atlas` and there is ~1 report to show. **PARTLY SUPERSEDED as
+> measured 2026-08-11:** seeding IS applied (`GET /api/projects` -> total **25**, via D-020 /
+> `12a1fb3`), so the browsable-projects dependency is already satisfied; the **report backfill is
+> not** (`asset_c7c088ab3c8d4639` still carries `project_id: null`, and
+> `GET /api/projects/proj_artifact_atlas/assets?artifact_type_id=delivery_report` returns `total: 0`).
+> Program **M0 closes the remaining half before this milestone starts** by running ONLY
+> `scripts/backfill_reports.py --apply` against `10.42.10.76:8042` — the seeder must NOT be re-run.
+> Treat both HARD data dependencies as satisfied at M1 start, not as risks to design around.
 > **(3) DI-G4's "additive UI only".** D-019 supersedes that deferral's framing; see the central-lens
 > sibling plan for the detail. It does not change this plan's scope — this milestone still adds no
 > backend route.
@@ -252,7 +262,7 @@ commit on the row, the hosted HTML one click away, and the tracker node(s) it is
 report-metadata parser, a fixture-free `useProjectReports` hook, a reports table rendering the four
 report columns, a per-row hosted-HTML affordance, per-row tracker-link display from
 `GET /api/assets/{assetId}/links`, the two-mode empty state, nav + command-palette registration, and
-a D-020 decision record. All by **composing shipped primitives** — existing endpoints only, no new
+a D-022 decision record. All by **composing shipped primitives** — existing endpoints only, no new
 backend routes, no schema change, no ingest change.
 
 **Out (stated, not dropped):** the cross-project `/reports` lens and its real collection endpoint ->
@@ -502,7 +512,7 @@ unattributed claim (the "unknown is not zero" assertion); the backend contract t
 
 ### M4 — Decision record + docs + deferrals  (docs, C1)
 
-Record **D-020** in `docs/DECISIONS.md` (bespoke-route decision, the interim-probe decision and its
+Record **D-022** in `docs/DECISIONS.md` (bespoke-route decision, the interim-probe decision and its
 successor seam, links-over-metadata, no-flag, no-fixture-fallback), cross-referencing DI-G4 as
 partially discharged (per-project case only; the cross-project case stays open under
 `node_01KZH6T216V98DRSSRGTQRJ2ST`). Update `docs/mvp-backlog.md`. New `DI-` rows for: the
@@ -510,7 +520,7 @@ partially discharged (per-project case only; the cross-project case stays open u
 contract reliance; the `useAssets` fixture-fallback hazard as a repo-wide pattern risk, not just
 here. Worknotes ledger at `.claude/worknotes/reports-hub/implementation-notes.md`.
 
-**AC:** `grep D-020 docs/DECISIONS.md` hits; DI-G4 is annotated as partially discharged with the
+**AC:** `grep D-022 docs/DECISIONS.md` hits; DI-G4 is annotated as partially discharged with the
 successor node id; each deferred item is a tracked `DI-` row.
 
 ## AC -> command -> evidence
@@ -527,7 +537,7 @@ successor node id; each deferred item is a tracked `DI-` row.
 | M3 empty-state matrix | `cd web && npm run test -- reports-surface` | all four table rows asserted, including probe-failed -> banner absent |
 | M3 probe contract | `cd api && python3 -m pytest -q -k report_search_unattributed` | `?q=` + `artifact_type=delivery_report` spans projects and includes a `project_id=None` row |
 | M3 project scoping | `cd api && python3 -m pytest -q -k project_reports_scope` | `?artifact_type_id=delivery_report` returns only that project's reports |
-| M4 decision + deferrals | `grep -n "D-020" docs/DECISIONS.md` | D-020 present; DI- rows exist; DI-G4 annotated partially-discharged |
+| M4 decision + deferrals | `grep -n "D-022" docs/DECISIONS.md` | D-022 present; DI- rows exist; DI-G4 annotated partially-discharged |
 | Live smoke (once, before done) | `curl -s "$ATLAS_API/api/projects/proj_artifact_atlas/assets?artifact_type_id=delivery_report"` then load `/projects/proj_artifact_atlas/reports` | at least one real report row renders and its hosted URL returns `200` |
 
 Frontend commands run from `web/` (there is no root `package.json` and no pnpm workspace; `web/`

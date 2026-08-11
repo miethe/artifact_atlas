@@ -254,8 +254,9 @@ route, `truth_status`, date, and tracker node, with counts that are actually cor
 > **ANNOTATED 2026-08-09 — the finding stands, the tension does not.** D-019
 > (`docs/DECISIONS.md:989`, Accepted, shipped in `456fdf1`) **supersedes DI-G4's deferral**. The new
 > `GET /api/reports` path is therefore a **sanctioned** additive contract change, not a violation
-> being argued past. AC4 is satisfied by **recording** it at M4 (now **D-020** — D-019 is taken); no
-> further permission is outstanding.
+> being argued past. AC4 is satisfied by **recording** it at M4 (now **D-022** — D-019, D-020 and
+> D-021 are all taken; the latest decision as of 2026-08-11 is D-021, `fc9809d`); no further
+> permission is outstanding.
 
 ## Scope boundary
 
@@ -509,9 +510,12 @@ is not a modeled entity"). Amend the DI-G4 row to point at this plan and strike 
 server-side `group_by` if the report population outgrows one page; the deliberately-not-added generic
 `/api/assets` list. Correct the stale **ADR-7 -> ADR-8** citation in `web/lib/flags.ts:16-19`.
 
-**AC:** **D-020** is present in `docs/DECISIONS.md` — the next free number is settled, not to be
-re-derived: D-019 was taken by the Reports Hub foundations decision (`docs/DECISIONS.md:989`, shipped
-in `456fdf1`), so the earlier note here that "D-018 is the latest" is corrected. Each deferral is a
+**AC:** **D-022** is present in `docs/DECISIONS.md`. The number has moved twice and must be
+re-verified at M4 start, not assumed: D-019 was taken by the Reports Hub foundations decision
+(`docs/DECISIONS.md:989`, shipped in `456fdf1`), correcting the earlier note here that "D-018 is the
+latest"; D-020 (fleet seeding scope, `12a1fb3`) and D-021 (project write-model `workspace_id` +
+canonical registry seed, `fc9809d`) then landed, so as of 2026-08-11 the file ends at D-021 (line
+1150) and D-022 is next free. Each deferral is a
 tracked `DI-` row; `grep -n "ADR-8" web/lib/flags.ts` hits and `ADR-7` no longer appears as the
 default-on authority.
 
