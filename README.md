@@ -61,6 +61,25 @@ python3 scripts/validate_registry_exports.py
 # Checks JSONL/YAML format compliance and schema alignment
 ```
 
+## Canonical registry: the node is authoritative, git is a verified export
+
+**Direction (Nick, 2026-08-26):** the deployed node instance (`10.42.10.76:8042`, the one users
+and agents actually read) is the **canonical** registry. This laptop checkout's `registry/*.jsonl`
+is a **verified export** of that live state, refreshed on a cadence — the export IS the
+constraint-2 canonical file (files canonical; every derived store mechanically rebuildable from
+its authority), not an independent copy that can silently fork from it.
+
+```bash
+python3 scripts/check_registry_drift.py --verbose   # read-only: does git match the node?
+python3 scripts/export_node_registry.py --apply     # refresh git from the node's live registry
+```
+
+Run the drift check before trusting anything read from `registry/*.jsonl` directly (rather than
+through the API), and re-export whenever it reports drift. Both scripts read the node's registry
+files verbatim over `ssh agentic-nuc podman exec artifact-atlas_api_1 cat …` — the same
+reach-the-node pattern the atlas MCP stdio wiring already uses — never through the list APIs,
+which paginate and drop fields (e.g. `storage_uri`, `hash_sha256`) not needed for list rendering.
+
 ## Local-First Mode
 
 Artifact Atlas is **designed for single-user local operation**. By default:

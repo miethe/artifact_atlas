@@ -1,0 +1,10 @@
+{"id": "slot_7ae689072d44", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "current_state_architecture", "domain": "Architecture", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_607d2a74255c", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "target_state_architecture", "domain": "Architecture", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_7cb6c9a70423", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "technology_stack", "domain": "Architecture", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_1d184bcbb9c3", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "integration_diagram", "domain": "Architecture", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_eda19549a816", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "security_architecture", "domain": "Architecture", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_1df0d771f121", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "deployment_topology", "domain": "Architecture", "required": false, "status": "missing", "min_assets": 1}
+{"id": "slot_3b4427096122", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "adr_log", "domain": "Architecture", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_e53c40b209aa", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "decision_log", "domain": "Governance", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_32ac695d66b3", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "risk_register", "domain": "Governance", "required": true, "status": "missing", "min_assets": 1}
+{"id": "slot_930051c920c1", "bom_id": "bom_artifact_atlas_mvp", "artifact_type_id": "review_checklist", "domain": "Governance", "required": false, "status": "missing", "min_assets": 1}
