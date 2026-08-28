@@ -151,6 +151,27 @@ class TestImport:
         assert len(blobs) == 1
         assert blobs[0].read_bytes() == sample_file.read_bytes()
 
+    def test_import_url_creates_url_asset_with_tags(self, tmp_registry: Path) -> None:
+        from app.services.import_index import ImportService
+
+        url = "https://claude.ai/public/artifact-example"
+        code = run_cli(
+            "import-url",
+            url,
+            "--title",
+            "Claude Artifact",
+            "--tag",
+            "claude",
+            "--tag",
+            "artifact",
+        )
+
+        assert code == 0
+        asset = next(asset for asset in ImportService(tmp_registry)._assets.list() if asset.uri == url)
+        assert asset.source_kind is SourceKind.url
+        assert asset.title == "Claude Artifact"
+        assert asset.metadata["tags"] == ["claude", "artifact"]
+
 
 class TestAttach:
     def test_attach_populates_storage_uri(
