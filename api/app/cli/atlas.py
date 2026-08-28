@@ -8,6 +8,7 @@ All subcommands call the service layer — no parallel logic.
 Subcommands:
     init                    Initialise workspace config check.
     import <path>           Import a local file asset.
+    import-url <url>        Import a URL asset without fetching it.
     index <project-slug>    List indexed assets for a project.
     inbox list              List inbox assets.
     asset classify <id>     Set sensitivity/agent_access on an asset.
@@ -139,6 +140,27 @@ def cmd_import(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
     print(f"  Sensitivity: {result.asset.sensitivity.value if hasattr(result.asset.sensitivity, 'value') else result.asset.sensitivity}")
     if result.is_duplicate and result.duplicate_of:
         print(f"  Duplicate of: {result.duplicate_of}")
+    return 0
+
+
+def cmd_import_url(args: argparse.Namespace, svcs: dict[str, Any]) -> int:
+    """Import a URL asset into the registry without fetching remote content."""
+    metadata = {"tags": args.tags} if getattr(args, "tags", None) else None
+    result = svcs["import_svc"].import_url(
+        args.url,
+        title=args.title,
+        project_id=args.project or None,
+        artifact_type_id=getattr(args, "artifact_type_id", None),
+        sensitivity=getattr(args, "sensitivity", None),
+        agent_access=getattr(args, "agent_access", None),
+        actor_id="cli",
+        metadata=metadata,
+    )
+    print(f"Asset imported: {result.asset.id}")
+    print(f"  Title:       {result.asset.title}")
+    print(f"  Status:      {result.asset.status.value if hasattr(result.asset.status, 'value') else result.asset.status}")
+    print(f"  Sensitivity: {result.asset.sensitivity.value if hasattr(result.asset.sensitivity, 'value') else result.asset.sensitivity}")
+    print(f"  URI:         {result.asset.uri}")
     return 0
 
 
@@ -641,6 +663,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Copy file bytes into the managed content store.",
     )
 
+    # import-url
+    p_import_url = sub.add_parser("import-url", help="Import a URL asset.")
+    p_import_url.add_argument("url", help="URL to import.")
+    p_import_url.add_argument("--project", help="Project slug or ID to associate.")
+    p_import_url.add_argument("--title", help="Optional asset title.")
+    p_import_url.add_argument(
+        "--artifact-type", dest="artifact_type_id", help="Optional artifact type ID."
+    )
+    p_import_url.add_argument(
+        "--tag", action="append", dest="tags", help="Tag to store in asset metadata."
+    )
+    p_import_url.add_argument("--sensitivity", help="Override sensitivity label.")
+    p_import_url.add_argument(
+        "--agent-access", dest="agent_access", help="Override agent access level."
+    )
+
     # attach
     p_attach = sub.add_parser("attach", help="Attach file content to an existing asset.")
     p_attach.add_argument("asset_id", help="Asset ID to attach content to.")
@@ -795,6 +833,9 @@ def main(argv: list[str] | None = None) -> int:
 
     elif cmd == "import":
         return cmd_import(args, svcs)
+
+    elif cmd == "import-url":
+        return cmd_import_url(args, svcs)
 
     elif cmd == "attach":
         return cmd_attach(args, svcs)
