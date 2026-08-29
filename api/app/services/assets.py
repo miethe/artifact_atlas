@@ -331,20 +331,24 @@ class AssetService:
         sensitivity_filter: list[str] | None = None,
         source_kind_filter: list[str] | None = None,
         artifact_type_filter: list[str] | None = None,
+        tag_filter: list[str] | None = None,
         limit: int = 50,
     ) -> list[Asset]:
         """In-memory keyword + filter search over assets.
 
         Performs case-insensitive substring match on title/description.
-        Respects status, sensitivity, source_kind, and artifact_type filters.
+        Respects status, sensitivity, source_kind, artifact_type, and tag
+        filters. With no ``project_id``, searches across every project —
+        the cross-project browse surface (M4 AC2).
 
         Args:
-            project_id: Scope to a project.
+            project_id: Scope to a project. Omit to search all projects.
             query: Optional keyword to match against title and description.
             status_filter: Whitelist of AssetStatus values.
             sensitivity_filter: Whitelist of Sensitivity values.
             source_kind_filter: Whitelist of SourceKind values.
             artifact_type_filter: Whitelist of artifact_type_id values.
+            tag_filter: Whitelist of Asset.tags values (OR match — any one hit).
             limit: Maximum results.
 
         Returns:
@@ -384,6 +388,10 @@ class AssetService:
         if artifact_type_filter:
             at_set = set(artifact_type_filter)
             assets = [a for a in assets if a.artifact_type_id in at_set]
+
+        if tag_filter:
+            tag_set = set(tag_filter)
+            assets = [a for a in assets if tag_set.intersection(a.tags or [])]
 
         return assets[:limit]
 
