@@ -29,30 +29,38 @@ def _asset_to_result(asset, score: float = 1.0) -> SearchResult:
         source_kind=asset.source_kind,
         artifact_type_id=asset.artifact_type_id,
         project_id=asset.project_id,
+        tags=list(asset.tags or []),
         score=score,
     )
 
 
 @router.get("/search")
 def search_assets(
-    q: Annotated[str, Query()],
+    q: Annotated[str, Query()] = "",
     project_id: Annotated[str | None, Query()] = None,
     status: Annotated[list[AssetStatus] | None, Query()] = None,
     source_kind: Annotated[list[SourceKind] | None, Query()] = None,
     sensitivity: Annotated[list[Sensitivity] | None, Query()] = None,
     artifact_type: Annotated[list[str] | None, Query()] = None,
+    tag: Annotated[list[str] | None, Query()] = None,
     intenttree_node_id: Annotated[str | None, Query()] = None,
     bom_slot_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     include: Annotated[list[str] | None, Query()] = None,
 ) -> dict:
-    """Keyword/metadata search across assets."""
+    """Keyword/metadata search across assets.
+
+    ``q`` is optional (default: ``""``) so this endpoint doubles as the
+    cross-project browse surface (M4 AC2) when called with only filters
+    and no ``project_id`` — a blank query matches every title.
+    """
     svc = get_asset_service()
 
     status_filter = [s.value for s in status] if status else None
     sensitivity_filter = [s.value for s in sensitivity] if sensitivity else None
     source_kind_filter = [sk.value for sk in source_kind] if source_kind else None
     artifact_type_filter = list(artifact_type) if artifact_type else None
+    tag_filter = list(tag) if tag else None
 
     assets = svc.search_assets(
         project_id=project_id,
@@ -61,6 +69,7 @@ def search_assets(
         sensitivity_filter=sensitivity_filter,
         source_kind_filter=source_kind_filter,
         artifact_type_filter=artifact_type_filter,
+        tag_filter=tag_filter,
         limit=limit,
     )
 

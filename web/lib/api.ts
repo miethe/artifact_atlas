@@ -6,6 +6,7 @@
 
 import type {
   Asset,
+  AssetBrowseParams,
   AssetCreate,
   AssetFilters,
   AssetLink,
@@ -373,6 +374,18 @@ export const searchApi = {
     return apiFetch<{ results: SearchResult[]; total: number }>(
       "/api/search",
       { method: "POST", body: data },
+    );
+  },
+
+  /**
+   * Cross-project browse (M4 AC2): GET /api/search with q optional. Called
+   * with no project_id, this returns assets across every project — the
+   * backing query for the /assets browse page.
+   */
+  browse(params?: AssetBrowseParams) {
+    return apiFetch<{ results: SearchResult[]; total: number }>(
+      "/api/search",
+      { params: { q: "", ...params } },
     );
   },
 };

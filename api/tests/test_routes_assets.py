@@ -154,6 +154,32 @@ def test_create_asset(tmp_registry) -> None:
     assert "id" in asset
 
 
+def test_create_asset_with_tags(tmp_registry) -> None:
+    pid = _create_project("TagCreateTest")
+    asset = _create_asset(pid, title="Tagged Asset", tags=["alpha", "beta"])
+    assert asset["tags"] == ["alpha", "beta"]
+
+    resp = client.get(f"/api/assets/{asset['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["tags"] == ["alpha", "beta"]
+
+
+def test_create_asset_default_tags_empty(tmp_registry) -> None:
+    pid = _create_project("TagDefaultTest")
+    asset = _create_asset(pid, title="Untagged Asset")
+    assert asset["tags"] == []
+
+
+def test_update_asset_tags(tmp_registry) -> None:
+    pid = _create_project("TagUpdateTest")
+    asset = _create_asset(pid, title="Retag Me")
+    aid = asset["id"]
+
+    resp = client.patch(f"/api/assets/{aid}", json={"tags": ["gamma"]})
+    assert resp.status_code == 200
+    assert resp.json()["tags"] == ["gamma"]
+
+
 def test_get_asset(tmp_registry) -> None:
     pid = _create_project("GetTest")
     asset = _create_asset(pid)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.vocabulary import (
     AgentAccess,
@@ -55,6 +55,7 @@ class Asset(BaseModel):
     source_updated_at: datetime | None = None
     last_indexed_at: datetime | None = None
     metadata: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class AssetCreate(BaseModel):
@@ -75,6 +76,7 @@ class AssetCreate(BaseModel):
     agent_access: AgentAccess = AgentAccess.metadata_only
     generated_by: GeneratedBy | None = None
     metadata: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class AssetUpdate(BaseModel):
@@ -89,6 +91,7 @@ class AssetUpdate(BaseModel):
     sensitivity: Sensitivity | None = None
     agent_access: AgentAccess | None = None
     metadata: dict[str, Any] | None = None
+    tags: list[str] | None = None
 
 
 class AssetPromoteRequest(BaseModel):

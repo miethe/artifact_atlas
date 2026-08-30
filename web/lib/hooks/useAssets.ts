@@ -1,15 +1,17 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { assetsApi } from "../api";
+import { assetsApi, searchApi } from "../api";
 import { fixtureAssetsPage, FIXTURE_ASSETS } from "../fixtures";
 import type {
   Asset,
+  AssetBrowseParams,
   AssetCreate,
   AssetFilters,
   AssetLinkCreate,
   AssetPromoteRequest,
   AssetUpdate,
+  SearchResult,
   SlotAssignRequest,
 } from "../types";
 
@@ -65,6 +67,44 @@ export function useAssets(
 
 // Alias for search-oriented usage
 export const useAssetSearch = useAssets;
+
+// ============================================================
+// useAssetBrowse — cross-project browse view (M4 AC2)
+// Backed by GET /api/search with no project_id, so it spans every project.
+// ============================================================
+
+function fixtureBrowseResults(): SearchResult[] {
+  return FIXTURE_ASSETS.map((a) => ({
+    asset_id: a.id,
+    title: a.title,
+    score: 1,
+    status: a.status,
+    sensitivity: a.sensitivity,
+    source_kind: a.source_kind,
+    artifact_type_id: a.artifact_type_id ?? null,
+    project_id: a.project_id ?? null,
+    tags: a.tags ?? [],
+  }));
+}
+
+export const assetBrowseKeys = {
+  all: ["assets", "browse"] as const,
+  list: (params?: AssetBrowseParams) => [...assetBrowseKeys.all, params] as const,
+};
+
+export function useAssetBrowse(params?: AssetBrowseParams) {
+  return useQuery({
+    queryKey: assetBrowseKeys.list(params),
+    queryFn: async () => {
+      try {
+        return await searchApi.browse(params);
+      } catch {
+        return { results: fixtureBrowseResults(), total: FIXTURE_ASSETS.length };
+      }
+    },
+    staleTime: 15_000,
+  });
+}
 
 // ============================================================
 // useAsset — single asset detail

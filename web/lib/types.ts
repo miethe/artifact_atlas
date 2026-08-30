@@ -271,6 +271,7 @@ export interface Asset {
   source_updated_at?: string | null;
   last_indexed_at?: string | null;
   metadata?: Record<string, unknown> | null;
+  tags: string[];
 }
 
 export interface AssetCreate {
@@ -287,6 +288,7 @@ export interface AssetCreate {
   agent_access?: AgentAccess;
   generated_by?: GeneratedBy;
   metadata?: Record<string, unknown> | null;
+  tags?: string[];
 }
 
 export interface AssetUpdate {
@@ -297,6 +299,7 @@ export interface AssetUpdate {
   sensitivity?: Sensitivity;
   agent_access?: AgentAccess;
   metadata?: Record<string, unknown> | null;
+  tags?: string[] | null;
 }
 
 export interface AssetPromoteRequest {
@@ -501,11 +504,29 @@ export interface SearchRequest {
   limit?: number;
 }
 
+// GET /api/search query params — the cross-project browse surface (M4 AC2).
+// q is optional: an unset/blank q plus filters is a pure browse query.
+export interface AssetBrowseParams {
+  q?: string;
+  project_id?: string;
+  status?: AssetStatus[];
+  source_kind?: SourceKind[];
+  sensitivity?: Sensitivity[];
+  artifact_type?: string[];
+  tag?: string[];
+  limit?: number;
+}
+
 export interface SearchResult {
   asset_id: string;
   title: string;
   snippet?: string | null;
   score: number;
   status: AssetStatus;
+  sensitivity?: Sensitivity;
+  agent_access?: AgentAccess | null;
   source_kind: SourceKind;
+  artifact_type_id?: string | null;
+  project_id?: string | null;
+  tags: string[];
 }

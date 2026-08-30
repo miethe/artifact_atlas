@@ -25,6 +25,7 @@ import {
   Boxes,
   BarChart2,
   ArrowRightLeft,
+  Search,
 } from "lucide-react";
 import { useProject, useProjects } from "@/lib/hooks/useProjects";
 
@@ -44,6 +45,19 @@ interface NavSection {
 }
 
 const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Workspace",
+    items: [
+      {
+        // Not project-scoped — same target regardless of the current project
+        // (M4 AC2: cross-project asset browse view).
+        label: "Browse Assets",
+        href: () => `/assets`,
+        icon: Search,
+        exact: true,
+      },
+    ],
+  },
   {
     label: "Project",
     items: [

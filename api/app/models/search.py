@@ -22,6 +22,7 @@ class SearchFilters(BaseModel):
     source_kind: list[SourceKind] | None = None
     status: list[AssetStatus] | None = None
     artifact_type: list[str] | None = None
+    tags: list[str] | None = None
     intenttree_node_id: str | None = None
     bom_slot_id: str | None = None
     sensitivity: list[Sensitivity] | None = None
@@ -52,6 +53,7 @@ class SearchResult(BaseModel):
     source_kind: SourceKind | None = None
     artifact_type_id: str | None = None
     project_id: str | None = None
+    tags: list[str] = []
     thumbnail_uri: str | None = None
     bom_status: dict[str, Any] | None = None
     score: float
