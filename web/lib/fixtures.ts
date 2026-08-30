@@ -94,6 +94,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: "human",
     captured_at: "2026-06-17T10:00:00Z",
     metadata: { system_of_record: "MeatyWiki", created_at: "2026-06-17" },
+    tags: [],
   },
   {
     id: "asset_phase2_impl_plan",
@@ -112,6 +113,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: "agent",
     captured_at: "2026-06-18T09:00:00Z",
     metadata: {},
+    tags: [],
   },
   {
     id: "asset_openapi_yaml",
@@ -130,6 +132,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: "agent",
     captured_at: "2026-06-15T00:00:00Z",
     metadata: { version: "0.2.0" },
+    tags: [],
   },
   {
     id: "asset_cmd_center_mockup",
@@ -147,6 +150,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: "agent",
     captured_at: "2026-06-16T00:00:00Z",
     metadata: {},
+    tags: [],
   },
   {
     id: "asset_aos_arch_diagram",
@@ -164,6 +168,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: "agent",
     captured_at: "2026-05-20T00:00:00Z",
     metadata: {},
+    tags: [],
   },
   {
     id: "asset_inbox_screenshot",
@@ -181,6 +186,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: null,
     captured_at: "2026-06-20T08:30:00Z",
     metadata: {},
+    tags: [],
   },
   {
     id: "asset_context_pack_template",
@@ -198,6 +204,7 @@ export const FIXTURE_ASSETS: Asset[] = [
     generated_by: "agent",
     captured_at: "2026-06-19T15:00:00Z",
     metadata: {},
+    tags: [],
   },
 ];
 

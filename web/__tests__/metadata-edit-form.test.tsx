@@ -37,6 +37,7 @@ const FIXTURE_ASSET: Asset = {
   sensitivity: "public",
   agent_access: "metadata_only",
   captured_at: "2026-06-01T00:00:00Z",
+  tags: [],
 };
 
 // ============================================================

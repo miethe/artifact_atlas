@@ -293,6 +293,7 @@ function makeHtmlAsset(overrides: Partial<Asset> = {}): Asset {
     agent_access: "preview_allowed",
     mime_type: "text/html",
     captured_at: "2026-07-09T00:00:00Z",
+    tags: [],
     ...overrides,
   };
 }
@@ -358,6 +359,7 @@ const AUDIO_ASSET: Asset = {
   sensitivity: "public",
   agent_access: "preview_allowed",
   captured_at: "2026-07-09T00:00:00Z",
+  tags: [],
 };
 
 function makeQC() {
