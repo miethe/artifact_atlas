@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import all_routers
 from app.models.shared import HealthResponse
+from app.settings import get_settings
 
 app = FastAPI(title="Artifact Atlas API", version="0.2.0")
 
@@ -42,5 +43,21 @@ for _router in all_routers:
 
 @app.get("/health", response_model=HealthResponse, response_model_exclude_none=True, tags=["health"])
 def health() -> HealthResponse:
-    """Service health check."""
+    """Liveness check; ``storage_backend`` is a static deployment declaration."""
     return HealthResponse(status="ok", version="0.2.0", storage_backend="jsonl")
+
+
+@app.get("/readyz", tags=["health"])
+def readyz() -> dict[str, str]:
+    """Confirm that the configured JSONL registry is reachable.
+
+    This deliberately reads one byte rather than loading or parsing a registry:
+    deploy-time readiness must prove the data path without doing a full JSONL scan.
+    """
+    registry_file = get_settings().registry_dir / "projects.jsonl"
+    try:
+        with registry_file.open("rb") as fh:
+            fh.read(1)
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="Registry is unavailable") from exc
+    return {"status": "ok"}

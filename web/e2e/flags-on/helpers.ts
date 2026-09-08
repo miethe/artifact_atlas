@@ -163,7 +163,7 @@ export const FORMAT_ASSETS: FormatFixtureAsset[] = [
 function assetJson(a: FormatFixtureAsset) {
   return {
     id: a.id,
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: PROJECT_ID,
     title: a.title,
     description: `Fixture asset for the AssetViewer ${a.mime_type} format smoke (P6-009).`,

@@ -74,6 +74,27 @@ paths:
                     type: string
                     example: "jsonl"
 
+  /readyz:
+    get:
+      operationId: getReadiness
+      tags: [health]
+      summary: Registry readiness check
+      description: Performs a bounded read of the configured JSONL registry.
+      responses:
+        "200":
+          description: Registry is reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+        "503":
+          description: Registry is unavailable
+
   # ---------------------------------------------------------------------------
   # Projects
   # ---------------------------------------------------------------------------
