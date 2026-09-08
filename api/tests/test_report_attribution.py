@@ -755,7 +755,7 @@ class TestByteIdenticalDifferentReports:
         events_before = _link_event_count(tmp_registry, first.asset.id)
         # Guard the guard: the fixture must actually have produced a link, or a
         # "set unchanged" assertion would hold trivially (empty == empty).
-        assert links_before == {("project", PROJECT_SLUG)}
+        assert links_before == {("project", PROJECT_ID)}
         assert events_before == 1
 
         second = svc.import_report(

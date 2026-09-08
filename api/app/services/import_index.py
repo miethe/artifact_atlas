@@ -1206,7 +1206,7 @@ class ImportService:
                 else subject_project
             )
             if resolved is not None:
-                targets.append((AssetLinkTargetType.project, slug))
+                targets.append((AssetLinkTargetType.project, resolved.id))
             else:
                 targets.append((AssetLinkTargetType.feature, slug))
 

@@ -879,7 +879,7 @@ class TestSettings:
         from app.settings import Settings
 
         s = Settings()
-        assert s.workspace_id == "ws_artifact_atlas_local"
+        assert s.workspace_id == "ws_aos"
         assert s.registry_dir.name == "registry"
         assert s.default_sensitivity == "personal"
         assert s.default_agent_access == "metadata_only"

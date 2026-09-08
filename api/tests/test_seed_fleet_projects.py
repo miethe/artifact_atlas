@@ -916,8 +916,7 @@ def test_workspace_id_defaults_to_settings_and_is_overridable(
     # tmp_registry's patched settings carry workspace_id == "ws_test".
     assert rows["signal-to-system"]["workspace_id"] == "ws_test"
 
-    # A later seed can stamp a different workspace without editing the script
-    # (the ws_artifact_atlas_local -> ws_aos rename is a follow-up).
+    # A later seed can stamp a different workspace without editing the script.
     other = _fleet_yaml(tmp_path / "ws-override", [{"id": "late_app", "name": "Late"}])
     assert _run(other, tmp_registry, "--workspace-id", "ws_aos", "--apply") == 0
 

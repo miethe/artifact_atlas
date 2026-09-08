@@ -102,7 +102,7 @@ class TestReportLinkService:
         links = svc._assets.list_links(result.asset.id)
         pairs = {(link.target_type.value, link.target_id) for link in links}
 
-        assert ("project", "artifact-atlas") in pairs
+        assert ("project", "proj_artifact_atlas") in pairs
         assert ("feature", "artifact-atlas") not in pairs
 
     def test_report_link_tolerates_title_suffix_and_tree_prefix(

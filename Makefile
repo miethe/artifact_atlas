@@ -72,8 +72,13 @@ test-web: ## Run web unit/component tests (vitest)
 test-e2e: ## Run web E2E smoke tests (playwright)
 	cd $(WEB_DIR) && npm run test:e2e
 
-lint: ## Lint web (next lint)
+lint: lint-web lint-api ## Lint web; report API/scripts Ruff debt (advisory)
+
+lint-web: ## Lint the Next.js frontend
 	cd $(WEB_DIR) && npm run lint
+
+lint-api: ## Report Ruff findings in API and scripts without blocking the existing gate
+	cd $(API_DIR) && python3 -m ruff check app ../scripts || { rc=$$?; echo "Ruff advisory: $$rc (existing Python lint debt; see api/pyproject.toml)." >&2; }
 
 typecheck: ## Type-check web (tsc --noEmit)
 	cd $(WEB_DIR) && npm run typecheck

@@ -24,7 +24,7 @@ import type {
 export const FIXTURE_PROJECTS: Project[] = [
   {
     id: "proj_artifact_atlas",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     name: "Artifact Atlas",
     slug: "artifact-atlas",
     status: "active",
@@ -37,7 +37,7 @@ export const FIXTURE_PROJECTS: Project[] = [
   },
   {
     id: "proj_agentic_os",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     name: "Agentic OS",
     slug: "agentic-os",
     status: "active",
@@ -50,7 +50,7 @@ export const FIXTURE_PROJECTS: Project[] = [
   },
   {
     id: "proj_skillmeat",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     name: "SkillMeat",
     slug: "skillmeat",
     status: "active",
@@ -79,7 +79,7 @@ export function fixtureProjectsPage(): CursorPage<Project> {
 export const FIXTURE_ASSETS: Asset[] = [
   {
     id: "asset_prd_uiux_spec_v0_1",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_artifact_atlas",
     title: "Artifact Atlas PRD UIUX Implementation Spec",
     description: "Full product requirements and implementation spec for the Artifact Atlas web app.",
@@ -98,7 +98,7 @@ export const FIXTURE_ASSETS: Asset[] = [
   },
   {
     id: "asset_phase2_impl_plan",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_artifact_atlas",
     title: "Phase 2: Web Shell & Asset Workflows Implementation Plan",
     description: "Detailed task breakdown for Phase 2 frontend implementation.",
@@ -117,7 +117,7 @@ export const FIXTURE_ASSETS: Asset[] = [
   },
   {
     id: "asset_openapi_yaml",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_artifact_atlas",
     title: "Artifact Atlas OpenAPI Contract (Phase 0)",
     description: "Frozen API contract: 39 paths, 70 schemas.",
@@ -136,7 +136,7 @@ export const FIXTURE_ASSETS: Asset[] = [
   },
   {
     id: "asset_cmd_center_mockup",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_artifact_atlas",
     title: "Command Center Interface Mockup",
     description: "PNG mockup of the project command center dashboard.",
@@ -154,7 +154,7 @@ export const FIXTURE_ASSETS: Asset[] = [
   },
   {
     id: "asset_aos_arch_diagram",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_agentic_os",
     title: "AOS Architecture Diagram v3",
     description: "System architecture overview for the Agentic OS stack.",
@@ -172,7 +172,7 @@ export const FIXTURE_ASSETS: Asset[] = [
   },
   {
     id: "asset_inbox_screenshot",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_artifact_atlas",
     title: "Modern SaaS Dashboard Interface Screenshot",
     description: "Reference screenshot for inbox/triage UI patterns.",
@@ -190,7 +190,7 @@ export const FIXTURE_ASSETS: Asset[] = [
   },
   {
     id: "asset_context_pack_template",
-    workspace_id: "ws_artifact_atlas_local",
+    workspace_id: "ws_aos",
     project_id: "proj_artifact_atlas",
     title: "Agent Context Pack — Artifact Atlas MVP",
     description: "Context pack bundling key docs for agent handoff.",

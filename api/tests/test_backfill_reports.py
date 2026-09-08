@@ -922,8 +922,8 @@ def test_apply_creates_scope_links_from_the_envelope(
         )
         for lk in links
     }
-    # 'artifact-atlas' is a seeded Atlas project, so subject types as project.
-    assert ("project", "artifact-atlas") in targets
+    # 'artifact-atlas' is a seeded Atlas project, so its link uses the canonical id.
+    assert ("project", "proj_artifact_atlas") in targets
     assert ("intenttree_node", "node_01KYWGWKHF5BWAQYACK46NC1TC") in targets
     # A link is not attribution: the asset's own project_id is what every
     # projects/[projectId] route filters on, so assert it is the canonical id.

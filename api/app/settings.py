@@ -77,8 +77,8 @@ class Settings:
         workspace_cfg = cfg.get("workspace", {})
 
         # -- Workspace identity
-        self.workspace_id: str = workspace_cfg.get("id", "ws_artifact_atlas_local")
-        self.workspace_name: str = workspace_cfg.get("name", "Artifact Atlas Local")
+        self.workspace_id: str = workspace_cfg.get("id", "ws_aos")
+        self.workspace_name: str = workspace_cfg.get("name", "AOS Fleet")
 
         # Containment root for asset-file path resolution. Asset URIs are
         # repo-relative (or absolute under the repo); the preview proxy/convert
