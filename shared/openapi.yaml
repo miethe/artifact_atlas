@@ -1466,6 +1466,128 @@ paths:
           $ref: "#/components/responses/NotFound"
 
   # ---------------------------------------------------------------------------
+  # Fleet overview
+  # ---------------------------------------------------------------------------
+  /api/overview:
+    get:
+      operationId: getOverview
+      tags: [overview]
+      summary: Read the latest persisted AOS fleet overview
+      description: Reads persisted registry data only; performs no git, tracker, or LAN calls.
+      responses:
+        "200":
+          description: Latest fleet overview with report links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/overview/snapshot:
+    put:
+      operationId: putOverviewSnapshot
+      tags: [overview]
+      summary: Persist a laptop-collected fleet snapshot when it is newer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FleetSnapshot"
+      responses:
+        "200":
+          description: Current persisted snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetSnapshot"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ---------------------------------------------------------------------------
+  # Reports
+  # ---------------------------------------------------------------------------
+  /api/reports:
+    get:
+      operationId: listReports
+      tags: [reports]
+      summary: List delivery reports across projects
+      description: >
+        Returns delivery-report Asset metadata with actual links. Facets describe
+        the complete filtered set before cursor pagination; the project facet is
+        evaluated before project_id so unattributed reports remain discoverable.
+        Use __unattributed__ for reports without a project and __unlinked__ for
+        reports without an IntentTree node link.
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: route
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: truth_status
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: tracker_node_id
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: captured_after
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: captured_before
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          schema:
+            type: string
+        - $ref: "#/components/parameters/cursor"
+        - $ref: "#/components/parameters/limit"
+        - name: include
+          in: query
+          description: Extra fields to embed; links are included by default
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [links]
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Delivery-report collection and facets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportPage"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  # ---------------------------------------------------------------------------
   # Search
   # ---------------------------------------------------------------------------
   /api/search:
@@ -2757,6 +2879,185 @@ components:
           type: string
         relationship:
           $ref: "#/components/schemas/AssetLinkRelationship"
+
+    ReportAsset:
+      allOf:
+        - $ref: "#/components/schemas/Asset"
+        - type: object
+          required: [links]
+          properties:
+            links:
+              type: array
+              items:
+                $ref: "#/components/schemas/AssetLink"
+
+    ReportFacetValue:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+          minimum: 0
+
+    ReportFacets:
+      type: object
+      required: [project, route, truth_status, date_bucket, tracker_node]
+      properties:
+        project:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFacetValue"
+        route:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFacetValue"
+        truth_status:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFacetValue"
+        date_bucket:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFacetValue"
+        tracker_node:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportFacetValue"
+
+    ReportPage:
+      type: object
+      required: [items, has_more, total, facets]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportAsset"
+        has_more:
+          type: boolean
+        next_cursor:
+          type: string
+          nullable: true
+        total:
+          type: integer
+        facets:
+          $ref: "#/components/schemas/ReportFacets"
+
+    MeasuredMetric:
+      type: object
+      additionalProperties: false
+      required: [value, measured_by, provenance]
+      properties:
+        value:
+          nullable: true
+        measured_by:
+          type: string
+        provenance:
+          type: string
+
+    FleetDerivedProject:
+      type: object
+      additionalProperties: false
+      required: [project_id, slug, name, metrics]
+      properties:
+        project_id: {type: string}
+        slug: {type: string}
+        name: {type: string}
+        tree_id: {type: string, nullable: true}
+        metrics:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/MeasuredMetric"
+
+    FleetAuthoredProject:
+      type: object
+      additionalProperties: false
+      required: [summary, next_action]
+      properties:
+        summary: {type: string}
+        next_action: {type: string}
+        as_of: {type: string, format: date-time, nullable: true}
+        provenance: {type: string, nullable: true}
+
+    FleetSnapshot:
+      type: object
+      additionalProperties: false
+      required: [schema_version, generated_at, collector_version, derived, authored]
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        generated_at: {type: string, format: date-time}
+        collector_version: {type: string}
+        derived:
+          type: object
+          additionalProperties: false
+          required: [projects]
+          properties:
+            projects:
+              type: object
+              additionalProperties:
+                $ref: "#/components/schemas/FleetDerivedProject"
+        authored:
+          type: object
+          additionalProperties: false
+          required: [projects]
+          properties:
+            projects:
+              type: object
+              additionalProperties:
+                $ref: "#/components/schemas/FleetAuthoredProject"
+
+    LatestReport:
+      type: object
+      required: [asset_id, title, route, generated_at, href]
+      properties:
+        asset_id: {type: string}
+        title: {type: string}
+        route: {type: string}
+        generated_at: {type: string, format: date-time}
+        href: {type: string}
+
+    OverviewProject:
+      type: object
+      required: [id, slug, name, project_href, authored, derived, latest_report]
+      properties:
+        id: {type: string}
+        slug: {type: string}
+        name: {type: string}
+        project_href: {type: string, nullable: true}
+        authored:
+          $ref: "#/components/schemas/FleetAuthoredProject"
+        derived:
+          type: object
+          required: [tree_id, metrics]
+          properties:
+            tree_id: {type: string, nullable: true}
+            metrics:
+              type: object
+              additionalProperties:
+                $ref: "#/components/schemas/MeasuredMetric"
+        latest_report:
+          allOf:
+            - $ref: "#/components/schemas/LatestReport"
+          nullable: true
+
+    OverviewResponse:
+      type: object
+      required: [schema_version, generated_at, source, projects]
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        generated_at: {type: string, format: date-time}
+        source:
+          type: object
+          required: [name, collector_version, snapshot_id]
+          properties:
+            name: {type: string, enum: [fleet_snapshot]}
+            collector_version: {type: string}
+            snapshot_id: {type: string}
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/OverviewProject"
 
     AssetRelationship:
       type: object

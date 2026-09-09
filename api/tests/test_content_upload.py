@@ -10,12 +10,20 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.services.import_index import ImportService
 from app.settings import get_settings
 
 
 def _svc(reg: Path) -> ImportService:
     return ImportService(reg)
+
+
+def _blob_path(storage_uri: str) -> Path:
+    raw = Path(storage_uri.replace("file://", ""))
+    return raw if raw.is_absolute() else get_settings().workspace_root / raw
 
 
 def test_import_content_stores_blob_under_workspace(tmp_registry: Path) -> None:
@@ -31,7 +39,8 @@ def test_import_content_stores_blob_under_workspace(tmp_registry: Path) -> None:
     assert asset.size_bytes == len(b"hello world")
     assert asset.mime_type == "text/plain"
 
-    blob = Path(asset.storage_uri.replace("file://", ""))
+    assert asset.storage_uri.startswith("file://assets/content/")
+    blob = _blob_path(asset.storage_uri)
     assert blob.exists()
     assert blob.read_bytes() == b"hello world"
     # content-addressed: blob lives under the managed store, sharded by hash prefix
@@ -69,7 +78,23 @@ def test_import_content_accepts_binary_stream(tmp_registry: Path) -> None:
 
     assert result.asset.mime_type == "application/pdf"
     assert result.asset.size_bytes == len(b"%PDF-1.4 streamed")
-    assert Path(result.asset.storage_uri.replace("file://", "")).exists()
+    assert _blob_path(result.asset.storage_uri).exists()
+
+
+def test_managed_html_uri_is_portable_and_previewable(tmp_registry: Path) -> None:
+    result = _svc(tmp_registry).import_content(
+        "report.html",
+        b"<!doctype html><title>Portable report</title>",
+        project_id="proj_artifact_atlas",
+        artifact_type_id="delivery_report",
+        agent_access="preview_allowed",
+        mime_type="text/html",
+    )
+
+    assert result.asset.storage_uri.startswith("file://assets/content/")
+    response = TestClient(app).get(f"/api/preview/asset/{result.asset.id}/html")
+    assert response.status_code == 200
+    assert "Portable report" in response.text
 
 
 def test_attach_content_to_metadata_only_asset(tmp_registry: Path) -> None:
@@ -87,7 +112,7 @@ def test_attach_content_to_metadata_only_asset(tmp_registry: Path) -> None:
     assert updated.storage_uri is not None
     assert updated.mime_type == "application/pdf"
     assert updated.size_bytes == len(b"%PDF-1.4 fake")
-    blob = Path(updated.storage_uri.replace("file://", ""))
+    blob = _blob_path(updated.storage_uri)
     assert blob.exists() and blob.read_bytes() == b"%PDF-1.4 fake"
 
 

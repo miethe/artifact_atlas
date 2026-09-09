@@ -1172,3 +1172,96 @@ Seeding the canonical registry exposed two latent test couplings, both fixed in 
 - `tests/test_models.py::test_projects_round_trip` round-trips every canonical row; seeded rows carry `created_at`/`updated_at` written as `+00:00`, which the `Project` model re-serialises as `Z` (same instant). The comparator's naive string compare failed on the suffix; made it instant-aware (`_iso_datetime_equal`). The hand-authored `artifact-atlas` row dodged this only because it has no datetime fields.
 
 Full API suite green afterward: 793 passed, 2 skipped.
+
+---
+
+## D-022 — AOS overview uses a laptop-collected, typed fleet snapshot
+
+**Status**: Accepted
+**Date**: 2026-09-08
+**Phase**: PF-4 overview (`node_01KZH6VA1PKE7C6NDERQPRKNCC`)
+
+### Decision
+
+The git-before-tracker premise was re-measured with the rerunnable
+`scripts/measure_tracker_divergence.py`; the recorded figures and command-level provenance are in
+`docs/measurements/tracker-divergence-2026-09-08.md`. At 2026-09-08 ET the prototype map resolved
+to **14 rows / 13 unique repositories** (Hermes shares the launchpad): **3,183** all-ref and
+**1,339** HEAD commits in 30 days against **6,499 total / 3,864 open** tracker nodes. KnitWit alone
+measured **25 all-ref / 9 HEAD commits** versus **102 total / 79 open nodes**. The current registry
+had **45 apps**, with only `meatywiki-portal` unmapped among the original 14. These replace the
+prototype's older 1,880/735 and KnitWit 609/1 observations; the units remain intentionally
+side-by-side, not collapsed into a misleading ratio. The collector remains necessary, but no one
+lane is promoted beyond its authority: the fleet registry owns membership/topology, IntentTree
+owns declared status, git owns code activity, and Atlas owns latest program/dossier reports.
+
+Collection runs on the laptop that holds the working checkouts. It publishes a versioned,
+secret-screened `fleet_snapshot` record to Atlas. The accepted “distinct artifact type” requirement
+is implemented as the strict `FleetSnapshot` model plus its own atomic `fleet_snapshots.jsonl`
+repository and typed ingest/read routes—not as a `delivery_report` Asset—so it cannot pollute either
+report lens. This dedicated derived-state record avoids pretending the operational snapshot is a
+user-browsable canonical artifact while reusing Atlas's atomic JSONL primitive. The payload keeps
+`derived` and `authored` as
+top-level siblings and every numeric derived value carries `measured_by` and `provenance`.
+`GET /api/overview` reads only the persisted snapshot and Atlas registries; it makes zero git,
+IntentTree, or LAN calls and resolves each project's newest program/dossier report in one scan.
+
+The canonical seed snapshot was collected on 2026-09-09 from all 14 prototype projects after
+following KnitWit's archived-tree migration to `tree_01KWZ1A0PEZCGAQZFZNR77YA5Y`: **3,190**
+all-ref / **1,339** HEAD commits and **6,512 total / 3,868 open** tracker nodes, including KnitWit's
+**102 / 79**. The measurement now rejects any tracker export explicitly marked `archived`, and the
+snapshot contains no host checkout paths. The August reviewed narrative is retained with its own
+`as_of` and provenance—not presented under the fresh measurement timestamp. This is a current
+activation sample, not a replacement for the recurring laptop publisher. The exact path-free
+measurement receipt is `docs/measurements/fleet-snapshot-2026-09-09.json`; its per-project source
+refs name the fleet registry and each full `itt tree graph` input.
+
+The served `:8099` surface is retired: `lsof -nP -iTCP:8099 -sTCP:LISTEN` found no listener on
+2026-09-09. Upstream `serve.sh`, `build_home.py`, `home.css`, `home.js`, and generated `index.html`
+should be removed in a coordinated `agentic_meta_dev` change. Keep and
+promote `_build/collect.py`'s collector contract; keep `_build/build_reports.py` because it produces
+the program reports linked by the replacement. This repository does not mutate that sibling.
+
+### Consequences
+
+Snapshots can become stale while the laptop is off, so the UI must disclose generation time and
+age. An absent snapshot is an explicit 404, never fixture data. Older pushes cannot replace a newer
+snapshot. The static report generator remains useful while the duplicate homepage/server retires.
+
+The sibling DI-G4 work necessarily adds `GET /api/reports`; its “additive UI only” premise was
+incorrect because no cross-project collection API existed. V1 uses actual `intenttree_node` links
+as the tracker-node/epic proxy. First-class epic semantics remain blocked by DI-G6 and the
+DI-LinkTarget policy review; the overview does not infer or invent epic hierarchy.
+
+Report backfill metadata now stores managed content paths relative to `workspace_root` rather than
+persisting the linked worktree's absolute path. Content bytes remain runtime data in the gitignored,
+persistent `atlas-assets` volume per D-013/D-016. Re-ingesting an unchanged report repairs a missing
+blob instead of treating matching registry metadata as a complete no-op; deployment activation must
+therefore run the idempotent backfill against the deployed registry/content volume after code lands.
+
+### Deferred items
+
+### DI-OverviewViews — Interactive seams, streams, telemetry views and the 23-edge seam map
+
+Deferred from v1; promote when each view has a server-owned, provenance-preserving query contract.
+IntentTree: `node_01M226V9JNKYEWQM9EK3BPBT54`.
+
+### DI-OverviewRefresh — In-app collector refresh
+
+Deferred because Atlas cannot reach laptop checkouts; consider a separately authenticated scheduler.
+IntentTree: `node_01M226V9XHMK632XAB69FA4AFD`.
+
+### DI-OverviewRoot — Promote `/overview` to `/`
+
+Deferred until the additive route is proven against the shipped projects index.
+IntentTree: `node_01M226VABZ5749NV44GRFQ3HA9`.
+
+### DI-FleetSensitivity — Fleet snapshot sensitivity policy
+
+The payload is secret-screened and local/LAN scoped; a stricter multi-user policy needs security review.
+IntentTree: `node_01M226VANCGSVK605A4VYNZBVT`.
+
+### DI-AuthoredYAML — Replace upstream `atlas_data.py` with reviewed YAML
+
+Deferred refactor; the authored layer remains file-canonical and outside Atlas editing.
+IntentTree: `node_01M226VB254G3QGVV950E79SVC`.

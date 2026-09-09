@@ -517,6 +517,85 @@ export interface AssetBrowseParams {
   limit?: number;
 }
 
+export interface ReportFacetValue {
+  value: string;
+  count: number;
+}
+
+export interface ReportFacets {
+  project: ReportFacetValue[];
+  route: ReportFacetValue[];
+  truth_status: ReportFacetValue[];
+  date_bucket: ReportFacetValue[];
+  tracker_node: ReportFacetValue[];
+}
+
+export interface ReportAsset extends Asset {
+  links: AssetLink[];
+}
+
+export interface ReportsPage {
+  items: ReportAsset[];
+  has_more: boolean;
+  next_cursor?: string | null;
+  total: number;
+  facets: ReportFacets;
+}
+
+export interface ReportsParams {
+  project_id?: string[];
+  route?: string[];
+  truth_status?: string[];
+  tracker_node_id?: string[];
+  captured_after?: string;
+  captured_before?: string;
+  q?: string;
+  cursor?: string;
+  limit?: number;
+  include?: string[];
+}
+
+export interface OverviewLatestReport {
+  asset_id: string;
+  title: string;
+  route: string | null;
+  generated_at: string;
+  href: string;
+}
+
+export interface OverviewProject {
+  id: string;
+  slug: string;
+  name: string;
+  project_href: string | null;
+  authored: {
+    summary: string | null;
+    next_action: string | null;
+    as_of: string | null;
+    provenance: string | null;
+  };
+  derived: {
+    tree_id: string | null;
+    metrics: Record<string, {
+      value: string | number | boolean | null;
+      measured_by: string;
+      provenance: string;
+    }>;
+  };
+  latest_report: OverviewLatestReport | null;
+}
+
+export interface OverviewResponse {
+  generated_at: string;
+  source: {
+    name: string;
+    collector_version: string;
+    snapshot_id: string;
+  };
+  schema_version: string | number;
+  projects: OverviewProject[];
+}
+
 export interface SearchResult {
   asset_id: string;
   title: string;

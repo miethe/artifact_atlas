@@ -1,0 +1,456 @@
+{
+  "fleet_registry": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)",
+  "generated_at": "2026-09-09T05:13:38+00:00",
+  "projects": [
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/agentic_meta_dev:git",
+        "value": 1739
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/agentic_meta_dev:git",
+        "value": 746
+      },
+      "name": "agentic_meta_dev \u2014 the Launchpad & Operator",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95ETM8YRYCV2ENHVR124",
+        "value": 1653
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95ETM8YRYCV2ENHVR124",
+        "value": 2426
+      },
+      "project_id": "proj_agentic_meta_dev",
+      "shares_repo_with": null,
+      "slug": "agentic_meta_dev",
+      "tree_id": "tree_01KVTH95ETM8YRYCV2ENHVR124",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95ETM8YRYCV2ENHVR124",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/intenttree:git",
+        "value": 441
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/intenttree:git",
+        "value": 187
+      },
+      "name": "IntentTree \u2014 the work-graph substrate",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FEG7Y23CA39T7BBSZJ",
+        "value": 781
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FEG7Y23CA39T7BBSZJ",
+        "value": 1351
+      },
+      "project_id": "proj_intenttree",
+      "shares_repo_with": null,
+      "slug": "intenttree",
+      "tree_id": "tree_01KVTH95FEG7Y23CA39T7BBSZJ",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FEG7Y23CA39T7BBSZJ",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/skillmeat:git",
+        "value": 634
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/skillmeat:git",
+        "value": 269
+      },
+      "name": "SkillMeat \u2014 the artifact supply chain",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95G6YKGYVMVRF1SBT2BR",
+        "value": 945
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95G6YKGYVMVRF1SBT2BR",
+        "value": 1684
+      },
+      "project_id": "proj_skillmeat",
+      "shares_repo_with": null,
+      "slug": "skillmeat",
+      "tree_id": "tree_01KVTH95G6YKGYVMVRF1SBT2BR",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95G6YKGYVMVRF1SBT2BR",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/ccdash:git",
+        "value": 106
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/ccdash:git",
+        "value": 65
+      },
+      "name": "CCDash \u2014 telemetry, AAR & forensics",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95F7P7CXK3QH9ZMECM5T",
+        "value": 171
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95F7P7CXK3QH9ZMECM5T",
+        "value": 485
+      },
+      "project_id": "proj_ccdash",
+      "shares_repo_with": null,
+      "slug": "ccdash",
+      "tree_id": "tree_01KVTH95F7P7CXK3QH9ZMECM5T",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95F7P7CXK3QH9ZMECM5T",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/research-foundry:git",
+        "value": 46
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/research-foundry:git",
+        "value": 16
+      },
+      "name": "Research Foundry (rf) \u2014 evidence-first research",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95G09FX26HCRPBV77DAE",
+        "value": 101
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95G09FX26HCRPBV77DAE",
+        "value": 169
+      },
+      "project_id": "proj_research_foundry",
+      "shares_repo_with": null,
+      "slug": "research-foundry",
+      "tree_id": "tree_01KVTH95G09FX26HCRPBV77DAE",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95G09FX26HCRPBV77DAE",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatywiki:git",
+        "value": 13
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatywiki:git",
+        "value": 4
+      },
+      "name": "MeatyWiki \u2014 the knowledge vault",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FT20ET50T9A8FD0YXD",
+        "value": 71
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FT20ET50T9A8FD0YXD",
+        "value": 203
+      },
+      "project_id": "proj_meatywiki",
+      "shares_repo_with": null,
+      "slug": "meatywiki",
+      "tree_id": "tree_01KVTH95FT20ET50T9A8FD0YXD",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FT20ET50T9A8FD0YXD",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/arc:git",
+        "value": 24
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/arc:git",
+        "value": 13
+      },
+      "name": "ARC \u2014 the Agent Review Council",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KY85NZCG0BCA3BQ7N6X56DW0",
+        "value": 47
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KY85NZCG0BCA3BQ7N6X56DW0",
+        "value": 55
+      },
+      "project_id": "proj_arc",
+      "shares_repo_with": null,
+      "slug": "arc",
+      "tree_id": "tree_01KY85NZCG0BCA3BQ7N6X56DW0",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KY85NZCG0BCA3BQ7N6X56DW0",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatyskills:git",
+        "value": 86
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatyskills:git",
+        "value": 8
+      },
+      "name": "MeatySkills \u2014 the canonical artifact library",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#meatyskills",
+        "value": null
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#meatyskills",
+        "value": null
+      },
+      "project_id": "proj_meatyskills",
+      "shares_repo_with": null,
+      "slug": "meatyskills",
+      "tree_id": null,
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#meatyskills",
+        "value": null
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/knitwit:git",
+        "value": 25
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/knitwit:git",
+        "value": 9
+      },
+      "name": "KnitWit / LoopNest \u2014 the product build",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KWZ1A0PEZCGAQZFZNR77YA5Y",
+        "value": 79
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KWZ1A0PEZCGAQZFZNR77YA5Y",
+        "value": 102
+      },
+      "project_id": "proj_knitwit",
+      "shares_repo_with": null,
+      "slug": "knitwit",
+      "tree_id": "tree_01KWZ1A0PEZCGAQZFZNR77YA5Y",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KWZ1A0PEZCGAQZFZNR77YA5Y",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/artifact-atlas:git",
+        "value": 24
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/artifact-atlas:git",
+        "value": 9
+      },
+      "name": "Artifact Atlas \u2014 the asset graph & report host",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KYWGV76XTEM7B11GYWD7Q93Y",
+        "value": 15
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KYWGV76XTEM7B11GYWD7Q93Y",
+        "value": 29
+      },
+      "project_id": "proj_artifact_atlas",
+      "shares_repo_with": null,
+      "slug": "artifact-atlas",
+      "tree_id": "tree_01KYWGV76XTEM7B11GYWD7Q93Y",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KYWGV76XTEM7B11GYWD7Q93Y",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/signal-to-system:git",
+        "value": 48
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/signal-to-system:git",
+        "value": 9
+      },
+      "name": "signal_to_system \u2014 the publishing lane",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#signal-to-system",
+        "value": null
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#signal-to-system",
+        "value": null
+      },
+      "project_id": "proj_signal_to_system",
+      "shares_repo_with": null,
+      "slug": "signal-to-system",
+      "tree_id": null,
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#signal-to-system",
+        "value": null
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatycapture:git",
+        "value": 4
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatycapture:git",
+        "value": 4
+      },
+      "name": "MeatyCapture \u2014 capture inbox (being sunset)",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FMQEQE5EZB53CCYAT2",
+        "value": 5
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FMQEQE5EZB53CCYAT2",
+        "value": 8
+      },
+      "project_id": "proj_meatycapture",
+      "shares_repo_with": null,
+      "slug": "meatycapture",
+      "tree_id": "tree_01KVTH95FMQEQE5EZB53CCYAT2",
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#tree_01KVTH95FMQEQE5EZB53CCYAT2",
+        "value": "in_progress"
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatywiki-portal:git",
+        "value": 0
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/meatywiki-portal:git",
+        "value": 0
+      },
+      "name": "meatywiki-portal \u2014 the vault frontend",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#meatywiki-portal",
+        "value": null
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#meatywiki-portal",
+        "value": null
+      },
+      "project_id": "proj_meatywiki_portal",
+      "shares_repo_with": null,
+      "slug": "meatywiki-portal",
+      "tree_id": null,
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#meatywiki-portal",
+        "value": null
+      }
+    },
+    {
+      "commits_30d_all": {
+        "measured_by": "git log --all --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/hermes:git",
+        "value": null
+      },
+      "commits_30d_head": {
+        "measured_by": "git log HEAD --since=30 days ago --format=%H",
+        "provenance": "agentic_meta_dev/docs/05-app-registry.yaml (14 prototype slugs)#apps/hermes:git",
+        "value": null
+      },
+      "name": "Hermes \u2014 the autonomous operator",
+      "nodes_open": {
+        "measured_by": "IntentTree exported statuses excluding completed/archived",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#hermes",
+        "value": null
+      },
+      "nodes_total": {
+        "measured_by": "IntentTree exported full node set",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#hermes",
+        "value": null
+      },
+      "project_id": "proj_hermes",
+      "shares_repo_with": "agentic_meta_dev",
+      "slug": "hermes",
+      "tree_id": null,
+      "tree_status": {
+        "measured_by": "IntentTree tree metadata export",
+        "provenance": "itt tree get + tree graph (full) @ 2026-09-09#hermes",
+        "value": null
+      }
+    }
+  ],
+  "schema_version": 1,
+  "tracker_export": "itt tree get + tree graph (full) @ 2026-09-09"
+}

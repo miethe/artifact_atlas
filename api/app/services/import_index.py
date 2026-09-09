@@ -190,6 +190,12 @@ class ImportService:
         self._default_sensitivity = default_sensitivity or settings.default_sensitivity
         self._default_agent_access = default_agent_access or settings.default_agent_access
         self._content_store_dir: Path = settings.content_store_dir
+        # Some embedders/tests construct the Settings object minimally. The
+        # default managed store is <workspace>/assets/content, so its second
+        # parent is the compatible fallback for those legacy settings objects.
+        self._workspace_root: Path = getattr(
+            settings, "workspace_root", self._content_store_dir.parent.parent
+        )
         # Workspace scope, stamped onto ingested reports so a future
         # workspace-scoped lens can span them (getattr: test fixtures build
         # Settings via __new__ and may not set every attribute).
@@ -441,7 +447,7 @@ class ImportService:
         # Preserve the original (bare) filename in ``uri`` for display; point
         # ``storage_uri`` at the managed blob so the proxy can serve bytes.
         uri = f"file://{display_name}"
-        storage_uri = f"file://{blob_path}"
+        storage_uri = self._managed_storage_uri(blob_path)
 
         create_data = AssetCreate(
             title=file_title,
@@ -528,7 +534,7 @@ class ImportService:
             if eff_mime is None:
                 eff_mime = "application/octet-stream"
 
-        storage_uri = f"file://{blob_path}"
+        storage_uri = self._managed_storage_uri(blob_path)
         _jl.update_record(
             self._assets._assets_path,
             asset_id,
@@ -1112,7 +1118,7 @@ class ImportService:
         a report a human already promoted back to ``candidate``.
         """
         new_hash = _sha256_file(html_path)
-        if new_hash == existing.hash_sha256:
+        if new_hash == existing.hash_sha256 and self._asset_storage_exists(existing):
             return ImportResult(asset=existing, is_duplicate=True, duplicate_of=existing.id)
 
         with html_path.open("rb") as fh:
@@ -1154,6 +1160,21 @@ class ImportService:
             },
         )
         return ImportResult(asset=revised, is_duplicate=False, duplicate_of=existing.id)
+
+    def _asset_storage_exists(self, asset: Asset) -> bool:
+        """Whether an asset's managed file URI currently resolves to bytes.
+
+        Registry state and the gitignored content volume have independent
+        lifecycles. Treat matching metadata with a missing blob as a repairable
+        revision, so an idempotent report backfill can recover a rebuilt or
+        newly activated content store.
+        """
+        raw_uri = asset.storage_uri
+        if not raw_uri or not raw_uri.startswith("file://"):
+            return False
+        raw_path = Path(raw_uri.removeprefix("file://"))
+        path = raw_path if raw_path.is_absolute() else self._workspace_root / raw_path
+        return path.is_file()
 
     # ------------------------------------------------------------------
     # Report scope linking (PF-1 M2)
@@ -1426,6 +1447,21 @@ class ImportService:
             if asset.hash_sha256 == hash_sha256:
                 return asset
         return None
+
+    def _managed_storage_uri(self, blob_path: Path) -> str:
+        """Return a clone/deployment-portable URI for a managed blob.
+
+        The preview resolver already anchors relative file URIs at
+        ``workspace_root`` and enforces containment there. Persisting the
+        relative path avoids coupling registry metadata to whichever linked
+        worktree performed an import. An out-of-root content-store override
+        remains absolute so the existing preview policy rejects it explicitly.
+        """
+        try:
+            stored_path = blob_path.resolve().relative_to(self._workspace_root.resolve())
+        except ValueError:
+            stored_path = blob_path.resolve()
+        return f"file://{stored_path.as_posix()}"
 
     def _spool_to_temp(self, content: bytes | IO[bytes]) -> tuple[Path, str, int]:
         """Stream *content* to a temp file in the store, returning

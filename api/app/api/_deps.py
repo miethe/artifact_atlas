@@ -13,6 +13,8 @@ from app.services.audit import AuditService
 from app.services.coverage import calculate_coverage
 from app.services.policy import PolicyService
 from app.services.projects import ProjectService
+from app.services.overview import OverviewService
+from app.services.reports import ReportService
 from app.settings import get_settings
 
 
@@ -29,6 +31,16 @@ def get_asset_service() -> AssetService:
 def get_project_service() -> ProjectService:
     settings = get_settings()
     return ProjectService(settings.registry_dir, audit_service=get_audit_service())
+
+
+def get_report_service() -> ReportService:
+    settings = get_settings()
+    return ReportService(settings.registry_dir)
+
+
+def get_overview_service() -> OverviewService:
+    settings = get_settings()
+    return OverviewService(settings.registry_dir)
 
 
 def get_audit_service() -> AuditService:
