@@ -28,6 +28,9 @@ import type {
   Project,
   ProjectCreate,
   ProjectUpdate,
+  OverviewResponse,
+  ReportsPage,
+  ReportsParams,
   SearchRequest,
   SearchResult,
   SlotAssignRequest,
@@ -196,6 +199,12 @@ export const assetsApi = {
 
   get(assetId: string) {
     return apiFetch<Asset>(`/api/assets/${assetId}`);
+  },
+
+  links(assetId: string) {
+    return apiFetch<CursorPage<AssetLink>>(`/api/assets/${assetId}/links`, {
+      params: { limit: 200 },
+    });
   },
 
   create(projectId: string, data: AssetCreate) {
@@ -387,6 +396,31 @@ export const searchApi = {
       "/api/search",
       { params: { q: "", ...params } },
     );
+  },
+};
+
+// ============================================================
+// Reports API
+// ============================================================
+
+export const reportsApi = {
+  list(params?: ReportsParams) {
+    return apiFetch<ReportsPage>("/api/reports", {
+      params: params as Record<
+        string,
+        string | string[] | number | boolean | undefined | null
+      > | undefined,
+    });
+  },
+};
+
+// ============================================================
+// AOS overview API
+// ============================================================
+
+export const overviewApi = {
+  get() {
+    return apiFetch<OverviewResponse>("/api/overview");
   },
 };
 

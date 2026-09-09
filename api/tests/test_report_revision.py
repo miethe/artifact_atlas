@@ -29,6 +29,7 @@ from fastapi.testclient import TestClient
 from app.cli.atlas import main as cli_main
 from app.main import app
 from app.services.import_index import ImportService
+from app.settings import get_settings
 
 client = TestClient(app)
 
@@ -127,6 +128,25 @@ class TestReportRevisionService:
         assert second.duplicate_of == first.asset.id
         assert first.asset.hash_sha256 == second.asset.hash_sha256
         assert _delivery_report_count(svc) == 1
+
+    def test_report_reingest_repairs_missing_managed_blob(
+        self, tmp_registry: Path, tmp_path: Path
+    ) -> None:
+        """Registry metadata may outlive its separate runtime content volume."""
+        svc = ImportService(tmp_registry)
+        html = _write_html(tmp_path, "recover.html", "recoverable content")
+        first = svc.import_report(html, _envelope())
+        storage_path = Path(first.asset.storage_uri.removeprefix("file://"))
+        blob = get_settings().workspace_root / storage_path
+        blob.unlink()
+
+        repaired = svc.import_report(html, _envelope())
+
+        assert repaired.asset.id == first.asset.id
+        assert repaired.is_duplicate is False
+        assert blob.read_text(encoding="utf-8").endswith(
+            "<body>recoverable content</body></html>"
+        )
 
     def test_report_revision_preserves_sensitivity_and_access(
         self, tmp_registry: Path, tmp_path: Path

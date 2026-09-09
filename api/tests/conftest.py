@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import app.settings as _settings_mod
+from app.repositories import jsonl as _jl
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_DIR = REPO_ROOT / "registry"
@@ -28,6 +29,40 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Copy seed JSONL files so the registry is not empty
     for jsonl in REGISTRY_DIR.glob("*.jsonl"):
         shutil.copy(jsonl, reg / jsonl.name)
+
+    # Canonical registry data evolves, but report-ingest tests assert deltas
+    # from an empty report corpus. Keep those tests deterministic while still
+    # retaining the non-report seed data used throughout the suite.
+    asset_path = reg / "assets.jsonl"
+    assets = _jl.read_all(asset_path, include_deleted=True)
+    report_ids = {
+        record["id"]
+        for record in assets
+        if record.get("artifact_type_id") == "delivery_report"
+    }
+    if report_ids:
+        _jl._atomic_write_lines(
+            asset_path,
+            [record for record in assets if record.get("id") not in report_ids],
+        )
+        for name, id_field in (("asset_links.jsonl", "asset_id"), ("events.jsonl", "target_id")):
+            path = reg / name
+            _jl._atomic_write_lines(
+                path,
+                [
+                    record
+                    for record in _jl.read_all(path, include_deleted=True)
+                    if record.get(id_field) not in report_ids
+                ],
+            )
+
+    # A canonical fleet snapshot is a runtime seed for the product surface,
+    # but overview route tests own their snapshot chronology explicitly.
+    # Start those isolated registries empty so newer/older and missing-state
+    # assertions do not inherit today's canonical snapshot.
+    fleet_snapshot_path = reg / "fleet_snapshots.jsonl"
+    if fleet_snapshot_path.exists():
+        _jl._atomic_write_lines(fleet_snapshot_path, [])
 
     # Build a minimal settings object pointing to the temp dir
     settings = _settings_mod.Settings.__new__(_settings_mod.Settings)

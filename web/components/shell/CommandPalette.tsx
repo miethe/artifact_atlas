@@ -60,6 +60,20 @@ export function CommandPalette({
 
   const navItems: PaletteItem[] = [
     {
+      id: "nav-aos-overview",
+      label: "Go to AOS Overview",
+      group: "navigate",
+      icon: LayoutDashboard,
+      action: () => router.push("/overview"),
+    },
+    {
+      id: "nav-workspace-reports",
+      label: "Go to Workspace Reports",
+      group: "navigate",
+      icon: FileText,
+      action: () => router.push("/reports"),
+    },
+    {
       id: "nav-overview",
       label: "Go to Overview",
       group: "navigate",
