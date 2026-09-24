@@ -1,0 +1,71 @@
+{
+  "run_id": "op_run_20260909_033637_implement-atlas-m4-porta",
+  "request": "Implement Atlas M4 portal projection and document/link ledger capture/backfill in existing artifact_atlas project",
+  "route": "tasks",
+  "tier": 3,
+  "created_at": "2026-09-09T03:36:37.508452+00:00",
+  "updated_at": "2026-09-09T03:36:37.510064+00:00",
+  "budget": {
+    "max_tokens": 250000,
+    "max_hops": 8,
+    "fan_out": 6
+  },
+  "plan": [
+    {
+      "tool": "intenttree",
+      "action": "capture_idea",
+      "args": {
+        "text": "Implement Atlas M4 portal projection and document/link ledger capture/backfill in existing artifact_atlas project"
+      },
+      "gate": null
+    }
+  ],
+  "status": "awaiting_plan_approval",
+  "hops": [],
+  "pending": {
+    "gate": "plan",
+    "action": {
+      "plan": [
+        {
+          "tool": "intenttree",
+          "action": "capture_idea",
+          "args": {
+            "text": "Implement Atlas M4 portal projection and document/link ledger capture/backfill in existing artifact_atlas project"
+          },
+          "gate": null
+        }
+      ]
+    },
+    "requested_at": "2026-09-09T03:36:37.509913+00:00"
+  },
+  "completion_flag": false,
+  "intenttree_node": null,
+  "writeback_targets": [],
+  "correlation": {
+    "schema_version": 1,
+    "kind": "run",
+    "aos_run_uuid": "8d17efa6-afe3-4ab5-b80f-2b8a07a40719",
+    "urn": "urn:aos:run:8d17efa6-afe3-4ab5-b80f-2b8a07a40719",
+    "created_at": "2026-09-09T03:36:37.508452+00:00",
+    "aliases": {
+      "op_run_id": "op_run_20260909_033637_implement-atlas-m4-porta"
+    },
+    "native": {
+      "op_run_id": "op_run_20260909_033637_implement-atlas-m4-porta"
+    }
+  },
+  "manifest_ref": null,
+  "manifest_hash": null,
+  "har": null,
+  "hop_index": null,
+  "hop_gate_claimed_at": null,
+  "hop_artifacts_basedir": null,
+  "hop_replays": null,
+  "hop_refusals": null,
+  "dispatch_cwd": null,
+  "dispatch_worktree": null,
+  "dispatch_isolation": null,
+  "hop_ratchet": null,
+  "auto_approvals": null,
+  "generation": 3
+}

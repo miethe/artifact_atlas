@@ -8,6 +8,7 @@ Provides a ``tmp_registry`` fixture that:
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -28,6 +29,41 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Copy seed JSONL files so the registry is not empty
     for jsonl in REGISTRY_DIR.glob("*.jsonl"):
         shutil.copy(jsonl, reg / jsonl.name)
+
+    # Report/backfill tests describe the transition from an empty report
+    # cohort. The canonical seed now intentionally contains backfilled
+    # delivery reports, so preserve the ordinary project fixtures while
+    # removing only that pre-existing cohort from each isolated test registry.
+    # Otherwise a test's first ingest is no longer its first report and its
+    # idempotency/no-partial-write assertions measure seed history instead.
+    assets_path = reg / "assets.jsonl"
+    report_asset_ids: set[str] = set()
+    retained_assets: list[dict[str, object]] = []
+    for line in assets_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        asset = json.loads(line)
+        if asset.get("artifact_type_id") == "delivery_report":
+            report_asset_ids.add(str(asset["id"]))
+        else:
+            retained_assets.append(asset)
+    assets_path.write_text(
+        "".join(json.dumps(asset) + "\n" for asset in retained_assets), encoding="utf-8"
+    )
+
+    for filename in ("asset_links.jsonl", "events.jsonl"):
+        path = reg / filename
+        retained = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            asset_id = record.get("asset_id") or (
+                record.get("target_id") if record.get("target_type") == "asset" else None
+            )
+            if str(asset_id) not in report_asset_ids:
+                retained.append(record)
+        path.write_text("".join(json.dumps(record) + "\n" for record in retained), encoding="utf-8")
 
     # Build a minimal settings object pointing to the temp dir
     settings = _settings_mod.Settings.__new__(_settings_mod.Settings)
