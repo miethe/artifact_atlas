@@ -476,8 +476,9 @@ export interface AuditEvent {
   project_id?: string | null;
   target_type?: string | null;
   target_id?: string | null;
-  detail?: Record<string, unknown> | null;
-  created_at: string;
+  payload?: Record<string, unknown> | null;
+  /** ISO-8601 event time — the API field is `timestamp` (not `created_at`). */
+  timestamp: string;
 }
 
 // ============================================================

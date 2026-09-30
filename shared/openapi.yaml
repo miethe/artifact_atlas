@@ -1595,12 +1595,18 @@ paths:
       operationId: searchAssets
       tags: [search]
       summary: Keyword/metadata search across assets
+      description: >
+        A blank or omitted `q` matches every title, so this endpoint doubles
+        as the cross-project browse surface. `results` holds at most `limit`
+        rows; `total` is the size of the whole filtered population, computed
+        before the `limit` cap.
       parameters:
         - name: q
           in: query
-          required: true
+          required: false
           schema:
             type: string
+            default: ""
         - name: project_id
           in: query
           schema:
@@ -1637,6 +1643,15 @@ paths:
               type: string
           style: form
           explode: true
+        - name: tag
+          in: query
+          description: Match assets carrying any one of these tags
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
         - name: intenttree_node_id
           in: query
           schema:
@@ -1667,10 +1682,15 @@ paths:
                 properties:
                   results:
                     type: array
+                    description: At most `limit` matching rows
                     items:
                       $ref: "#/components/schemas/SearchResult"
                   total:
                     type: integer
+                    minimum: 0
+                    description: >
+                      Filtered population size before the `limit` cap (may
+                      exceed `results` length). 0 means no asset matched.
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -1681,7 +1701,9 @@ paths:
       summary: Semantic similarity search across assets
       description: >
         Uses local embeddings (no external model calls). Falls back to
-        keyword search when vector index is unavailable.
+        keyword search when vector index is unavailable. `total` has the
+        same semantics as GET /api/search: the filtered population size
+        before the `limit` cap.
       requestBody:
         required: true
         content:
@@ -1699,10 +1721,15 @@ paths:
                 properties:
                   results:
                     type: array
+                    description: At most `limit` matching rows
                     items:
                       $ref: "#/components/schemas/SearchResult"
                   total:
                     type: integer
+                    minimum: 0
+                    description: >
+                      Filtered population size before the `limit` cap (may
+                      exceed `results` length). 0 means no asset matched.
         "422":
           $ref: "#/components/responses/ValidationError"
 

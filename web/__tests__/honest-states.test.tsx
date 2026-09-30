@@ -20,8 +20,11 @@ import { ProjectsIndexView } from "@/features/projects/ProjectsIndexView";
 import { AgentActivityPanel } from "@/features/dashboard/components/AgentActivityPanel";
 import { ActiveNodesPanel } from "@/features/dashboard/components/ActiveNodesPanel";
 import { KPIRow } from "@/features/dashboard/components/KPIRow";
+import { CanonicalArtifactsPanel } from "@/features/dashboard/components/CanonicalArtifactsPanel";
 import { DemoDataBanner } from "@/components/shell/DemoDataBanner";
-import type { DashboardStats } from "@/lib/types";
+import { AssetBrowseView, browseCountLabel } from "@/features/assets/AssetBrowseView";
+import { relativeTime } from "@/lib/relativeTime";
+import type { AuditEvent, DashboardStats, SearchResult } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
@@ -217,7 +220,7 @@ describe("KPI row", () => {
     expect(screen.getByText("BOM unavailable")).toBeInTheDocument();
   });
 
-  it("renders verified live values on success", () => {
+  it("renders verified live values on success (KPI)", () => {
     renderWithQuery(
       <KPIRow stats={STATS} isLoading={false} projectId="proj_live" openTaskCount={4} />,
     );
@@ -225,5 +228,134 @@ describe("KPI row", () => {
     expect(screen.getByText("11")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.queryByText("unavailable")).not.toBeInTheDocument();
+  });
+});
+
+describe("dashboard panel counts", () => {
+  it("does not print a zero count when the asset query failed", () => {
+    renderWithQuery(
+      <CanonicalArtifactsPanel projectId="proj_live" assets={undefined} isLoading={false} isError />,
+    );
+    expect(screen.queryByText("0 promoted")).not.toBeInTheDocument();
+    expect(screen.getByText("count unavailable")).toBeInTheDocument();
+  });
+
+  it("prints the verified count when assets loaded", () => {
+    renderWithQuery(
+      <CanonicalArtifactsPanel projectId="proj_live" assets={[]} isLoading={false} />,
+    );
+    expect(screen.getByText("0 promoted")).toBeInTheDocument();
+  });
+});
+
+// ============================================================
+// T2 — Browse Assets: page vs population
+// ============================================================
+
+function searchRow(i: number, projectId = "proj_live"): SearchResult {
+  return {
+    asset_id: `asset_${i}`,
+    title: `Browse Asset ${i}`,
+    score: 1,
+    status: "candidate",
+    source_kind: "local",
+    project_id: projectId,
+    tags: [],
+  } as SearchResult;
+}
+
+describe("browse assets count", () => {
+  const PAGE = [searchRow(1), searchRow(2, "proj_other")];
+
+  it("says N of TOTAL when the page is a subset, and tracks the API total", async () => {
+    let apiTotal = 2559;
+    stubFetch({
+      "/api/search": () => jsonResponse({ results: PAGE, total: apiTotal }),
+      "/api/projects": () => jsonResponse({ items: [], next_cursor: null, total: 0 }),
+    });
+    const { unmount } = renderWithQuery(<AssetBrowseView />);
+    expect(await screen.findByText("Showing 2 of 2,559 assets")).toBeInTheDocument();
+    // No project count is inferred from a partial page.
+    expect(screen.queryByText(/across/)).not.toBeInTheDocument();
+    unmount();
+
+    // Same page, different population → the displayed total changes.
+    apiTotal = 312;
+    renderWithQuery(<AssetBrowseView />);
+    expect(await screen.findByText("Showing 2 of 312 assets")).toBeInTheDocument();
+  });
+
+  it("states the whole population when the page holds all of it", () => {
+    expect(browseCountLabel(PAGE, 2)).toBe("2 assets across 2 projects");
+    expect(browseCountLabel(PAGE, 7)).toBe("Showing 2 of 7 assets");
+  });
+
+  it("renders an empty filtered result as empty, not an unknown catalog count", async () => {
+    stubFetch({
+      "/api/search": () => jsonResponse({ results: [], total: 0 }),
+      "/api/projects": () => jsonResponse({ items: [], next_cursor: null, total: 0 }),
+    });
+    renderWithQuery(<AssetBrowseView />);
+    expect(await screen.findByText("No assets found")).toBeInTheDocument();
+    expect(screen.getByText("0 assets across 0 projects")).toBeInTheDocument();
+  });
+});
+
+// ============================================================
+// T3 — no NaN dates
+// ============================================================
+
+describe("shared relativeTime", () => {
+  const NOW = Date.parse("2026-09-30T12:00:00Z");
+
+  it("never returns NaN for missing or invalid dates", () => {
+    for (const bad of [undefined, null, "", "not-a-date", "2026-13-45T99:99:99Z"]) {
+      const label = relativeTime(bad as string | null | undefined, { now: NOW });
+      expect(label).not.toMatch(/NaN/);
+      expect(label).toBe("—");
+    }
+    expect(relativeTime("garbage", { fallback: "" })).toBe("");
+  });
+
+  it("still labels valid timestamps", () => {
+    expect(relativeTime("2026-09-30T11:55:00Z", { now: NOW })).toBe("5m ago");
+    expect(relativeTime("2026-09-30T09:00:00Z", { now: NOW })).toBe("3h ago");
+    expect(relativeTime("2026-09-27T12:00:00Z", { now: NOW })).toBe("3d ago");
+    expect(relativeTime("2026-10-01T00:00:00Z", { now: NOW })).toBe("just now");
+  });
+});
+
+describe("agent activity dates", () => {
+  const baseEvent = {
+    id: "evt_live",
+    event_type: "asset_added",
+    actor_type: "agent",
+    actor_id: "live-agent",
+    project_id: "proj_live",
+    target_type: "asset",
+    target_id: "asset_1",
+  };
+
+  it("reads the API `timestamp` field and renders a relative label", async () => {
+    const ts = new Date(Date.now() - 5 * 60_000).toISOString();
+    const evt: AuditEvent = { ...baseEvent, timestamp: ts } as AuditEvent;
+    stubFetch({
+      "/api/audit/events": () => jsonResponse({ items: [evt], next_cursor: null, total: 1 }),
+    });
+    renderWithQuery(<AgentActivityPanel projectId="proj_live" />);
+    expect(await screen.findByText("5m ago")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/NaN/);
+  });
+
+  it("shows — (not NaN) when an event carries no usable time", async () => {
+    // Legacy shape: `created_at` only — the field the panel used to read.
+    const evt = { ...baseEvent, created_at: "2026-09-30T00:00:00Z" };
+    stubFetch({
+      "/api/audit/events": () => jsonResponse({ items: [evt], next_cursor: null, total: 1 }),
+    });
+    renderWithQuery(<AgentActivityPanel projectId="proj_live" />);
+    expect(await screen.findByText("live-agent", { exact: false })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/NaN/);
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 });

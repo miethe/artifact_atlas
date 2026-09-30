@@ -53,6 +53,9 @@ def search_assets(
     ``q`` is optional (default: ``""``) so this endpoint doubles as the
     cross-project browse surface (M4 AC2) when called with only filters
     and no ``project_id`` — a blank query matches every title.
+
+    ``total`` is the filtered population size BEFORE the ``limit`` cap;
+    ``results`` holds at most ``limit`` rows.
     """
     svc = get_asset_service()
 
@@ -62,7 +65,7 @@ def search_assets(
     artifact_type_filter = list(artifact_type) if artifact_type else None
     tag_filter = list(tag) if tag else None
 
-    assets = svc.search_assets(
+    assets, total = svc.search_assets_page(
         project_id=project_id,
         query=q,
         status_filter=status_filter,
@@ -74,12 +77,16 @@ def search_assets(
     )
 
     results = [_asset_to_result(a, score=1.0).model_dump(mode="json") for a in assets]
-    return {"results": results, "total": len(results)}
+    return {"results": results, "total": total}
 
 
 @router.post("/search/semantic")
 def semantic_search(data: SearchRequest) -> dict:
-    """Semantic similarity search (falls back to keyword search in MVP)."""
+    """Semantic similarity search (falls back to keyword search in MVP).
+
+    Same ``total`` semantics as ``GET /api/search``: the filtered population
+    size before the ``limit`` cap.
+    """
     svc = get_asset_service()
 
     filters = data.filters
@@ -88,7 +95,7 @@ def semantic_search(data: SearchRequest) -> dict:
     source_kind_filter = [sk.value for sk in filters.source_kind] if filters and filters.source_kind else None
     artifact_type_filter = list(filters.artifact_type) if filters and filters.artifact_type else None
 
-    assets = svc.search_assets(
+    assets, total = svc.search_assets_page(
         project_id=data.project_id,
         query=data.query,
         status_filter=status_filter,
@@ -99,7 +106,7 @@ def semantic_search(data: SearchRequest) -> dict:
     )
 
     results = [_asset_to_result(a, score=1.0).model_dump(mode="json") for a in assets]
-    return {"results": results, "total": len(results)}
+    return {"results": results, "total": total}
 
 
 @router.post("/search/similar-assets")

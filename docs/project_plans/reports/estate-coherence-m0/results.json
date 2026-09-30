@@ -1,0 +1,137 @@
+[
+  {
+    "name": "01-browse-live-total",
+    "url": "/assets",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N All projects Artifact Atlas IntentTree MeatyWiki SkillMeat MeatySkills CCDash Research Foundry (rf) Agent Review Council (ARC) MeatyCapture Hermes Agent Dock agentic_meta_d"
+  },
+  {
+    "name": "02-browse-empty-filter",
+    "url": "/assets",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N All projects Artifact Atlas IntentTree MeatyWiki SkillMeat MeatySkills CCDash Research Foundry (rf) Agent Review Council (ARC) MeatyCapture Hermes Agent Dock agentic_meta_d"
+  },
+  {
+    "name": "03-browse-loading",
+    "url": "/assets",
+    "mode": "loading",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas P proj_artifact_atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N All projects Loading… Connecting… / search · ⌘K palette"
+  },
+  {
+    "name": "04-browse-forced-error",
+    "url": "/assets",
+    "mode": "error",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 2,
+    "excerpt": "Artifact Atlas P proj_artifact_atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N All projects Asset count unavailable Failed to load assets The API is unavailable. No fallback data is being shown. Retry API offline / search · ⌘K palette"
+  },
+  {
+    "name": "05-command-center-live",
+    "url": "/projects/proj_artifact_atlas",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_artifact_atlas PROJECT OVERVIEW Command Center Artifact graph, BOM status, and agent activity for: proj_artifact_atlas Projects Artifact Atlas Artifact Atlas "
+  },
+  {
+    "name": "06-agent-activity-dates",
+    "url": "/projects/proj_artifact_atlas",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_artifact_atlas PROJECT OVERVIEW Command Center Artifact graph, BOM status, and agent activity for: proj_artifact_atlas Projects Artifact Atlas Artifact Atlas ",
+    "elementText": "Agent Activity Recent audit events Asset linked System · backfill 21d ago Asset added System · backfill 21d ago Asset added System · web 2mo ago Asset added System · web 2mo ago Asset added System · web 2mo ago Asset added System · web 2mo ago Asset added System · web 2mo ago Asset added System · web 2mo ago Asset added System · web 2mo ago Asset added System · web 2mo ago"
+  },
+  {
+    "name": "07-command-center-forced-error",
+    "url": "/projects/proj_artifact_atlas",
+    "mode": "error",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 7,
+    "excerpt": "Artifact Atlas P proj_artifact_atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_artifact_atlas PROJECT OVERVIEW Command Center Artifact graph, BOM status, and agent activity for: proj_artifact_atlas Projects … Command Center Add Asse"
+  },
+  {
+    "name": "08-command-center-loading",
+    "url": "/projects/proj_artifact_atlas",
+    "mode": "loading",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas P proj_artifact_atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_artifact_atlas PROJECT OVERVIEW Command Center Artifact graph, BOM status, and agent activity for: proj_artifact_atlas Projects … Command Center Add Asse"
+  },
+  {
+    "name": "09-bom-404-no-bom",
+    "url": "/projects/proj_knitwit/bom",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 2,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_knitwit Artifact BOM BILL OF MATERIALS Artifact BOM Coverage matrix, slot assignments, and gap analysis. No BOM found for this project API returned 404 (not_f"
+  },
+  {
+    "name": "10-bom-live",
+    "url": "/projects/proj_artifact_atlas/bom",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_artifact_atlas Artifact BOM BILL OF MATERIALS Artifact BOM Coverage matrix, slot assignments, and gap analysis. Artifact Atlas MVP BOM Visually track required"
+  },
+  {
+    "name": "11-projects-forced-error",
+    "url": "/",
+    "mode": "error",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 2,
+    "excerpt": "Artifact Atlas P proj_artifact_atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects Each project owns its asset graph, Artifact BOM, and context packs. New Project Couldn't load projects The API is unavailable. No fallback data is being shown"
+  },
+  {
+    "name": "12-projects-live",
+    "url": "/",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 1,
+    "excerpt": "Artifact Atlas A Artifact Atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects Each project owns its asset graph, Artifact BOM, and context packs. New Project Artifact Atlas Active No description yet. 198 assets Updated — IntentTree Active Ag"
+  },
+  {
+    "name": "13-intent-nodes-not-connected",
+    "url": "/projects/proj_artifact_atlas/intent-nodes",
+    "mode": "live",
+    "ok": true,
+    "nan": false,
+    "demoBanner": 0,
+    "alerts": 0,
+    "excerpt": "Artifact Atlas P proj_artifact_atlas WORKSPACE AOS Overview Browse Assets Reports PROJECT Overview CONTENT Assets Reports Inbox Intent Nodes Board TOOLS Artifact BOM Templates Coverage & Gaps Inbox → BOM Context Packs Collapse ⌘ K N Projects proj_artifact_atlas Intent Nodes INTENTTREE Intent Nodes IntentTree not connected Atlas has no live IntentTree node feed yet. No nodes are shown. Connecting… "
+  },
+  {
+    "name": "browse-count-label",
+    "text": "Showing 200 of 479 assets"
+  }
+]

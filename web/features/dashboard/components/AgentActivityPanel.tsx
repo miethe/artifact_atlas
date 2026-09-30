@@ -16,6 +16,7 @@ import { auditApi } from "@/lib/api";
 import { FIXTURE_AUDIT_EVENTS } from "@/lib/fixtures";
 import { liveOrDemo } from "@/lib/demoData";
 import type { AuditEvent, AuditEventType, ActorType } from "@/lib/types";
+import { relativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Audit events hook (fixtures only in demo builds)
@@ -58,17 +59,6 @@ const ACTOR_LABELS: Record<ActorType, string> = {
   agent: "Agent",
   system: "System",
 };
-
-function relativeTime(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 function actorDotColor(type: ActorType): string {
   return {
@@ -140,7 +130,7 @@ export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
                   </p>
                 </div>
                 <span className="text-[10px] text-[var(--ink-faint)] shrink-0 tabular-nums">
-                  {relativeTime(evt.created_at)}
+                  {relativeTime(evt.timestamp)}
                 </span>
               </div>
             </li>

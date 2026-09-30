@@ -134,9 +134,9 @@ export function RightRail({ asset, projectId, notify, className }: RightRailProp
                     </p>
                     <p
                       className="text-[10px] text-[var(--ink-faint)]"
-                      title={formatDateTime(e.created_at) ?? undefined}
+                      title={formatDateTime(e.timestamp) ?? undefined}
                     >
-                      {relativeTime(e.created_at) ?? e.created_at}
+                      {relativeTime(e.timestamp) ?? "—"}
                     </p>
                   </div>
                 </li>
