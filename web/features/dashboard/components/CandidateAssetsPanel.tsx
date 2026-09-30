@@ -126,7 +126,13 @@ export function CandidateAssetsPanel({
   return (
     <PanelShell
       title="Candidate Assets"
-      subtitle={`${candidates.length} in pipeline`}
+      subtitle={
+        assets
+          ? `${candidates.length} in pipeline`
+          : isError
+            ? "count unavailable"
+            : "loading…"
+      }
       icon={<Sparkles className="w-3.5 h-3.5" />}
       ariaLabel="Candidate assets in promotion pipeline"
       viewAllHref={viewAllHref}

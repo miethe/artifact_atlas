@@ -69,6 +69,67 @@ def test_search_tag_filter(tmp_registry) -> None:
     assert ids == {tagged["id"]}
 
 
+# ---------------------------------------------------------------------------
+# Estate-coherence M0 / T2 — ``total`` is the population, not the page
+# ---------------------------------------------------------------------------
+
+
+def _seed_population(name: str, n: int, tag: str) -> str:
+    pid = _create_project(name)
+    for i in range(n):
+        _create_asset(pid, title=f"Population {i}", tags=[tag])
+    return pid
+
+
+def test_search_total_counts_population_before_cap(tmp_registry) -> None:
+    """Page fixed at 2 rows; the total tracks the filtered population."""
+    _seed_population("TotalBeforeCap", 5, "pop-five")
+    resp = client.get("/api/search", params={"tag": "pop-five", "limit": 2})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["results"]) == 2
+    assert body["total"] == 5
+
+    # Grow the population, keep the page size fixed — only the total moves.
+    pid = _create_project("TotalBeforeCapMore")
+    _create_asset(pid, title="Population extra", tags=["pop-five"])
+    body = client.get("/api/search", params={"tag": "pop-five", "limit": 2}).json()
+    assert len(body["results"]) == 2
+    assert body["total"] == 6
+
+
+def test_search_total_equals_page_when_population_fits(tmp_registry) -> None:
+    """Allow side: under the cap, total == page length (no inflation)."""
+    _seed_population("TotalFits", 3, "pop-three")
+    body = client.get("/api/search", params={"tag": "pop-three", "limit": 50}).json()
+    assert len(body["results"]) == 3
+    assert body["total"] == 3
+
+
+def test_search_empty_filter_reports_zero_total(tmp_registry) -> None:
+    """An empty filtered result is empty (0), not a whole-catalog count."""
+    body = client.get("/api/search", params={"tag": "no-such-tag-anywhere"}).json()
+    assert body["results"] == []
+    assert body["total"] == 0
+
+
+def test_semantic_search_total_semantics_match_get(tmp_registry) -> None:
+    """POST /api/search/semantic uses the same before-cap total as GET."""
+    pid = _seed_population("SemanticTotal", 4, "pop-sem")
+    sem = client.post(
+        "/api/search/semantic",
+        json={"query": "Population", "project_id": pid, "limit": 1},
+    )
+    assert sem.status_code == 200
+    sem_body = sem.json()
+    get_body = client.get(
+        "/api/search", params={"q": "Population", "project_id": pid, "limit": 1}
+    ).json()
+    assert len(sem_body["results"]) == 1
+    assert sem_body["total"] == 4
+    assert get_body["total"] == sem_body["total"]
+
+
 def test_search_result_includes_tags(tmp_registry) -> None:
     pid = _create_project("SearchTagsField")
     asset = _create_asset(pid, title="Carries Tags", tags=["one", "two"])

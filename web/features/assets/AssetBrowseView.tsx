@@ -18,6 +18,29 @@ import { useAssetBrowse } from "@/lib/hooks/useAssets";
 import { useProjects } from "@/lib/hooks/useProjects";
 import type { AssetBrowseParams } from "@/lib/types";
 
+const plural = (n: number, word: string) =>
+  `${n.toLocaleString("en-US")} ${word}${n !== 1 ? "s" : ""}`;
+
+/**
+ * Header count for the browse page (estate-coherence M0 / T2).
+ *
+ * `total` is the API's filtered population size, computed before the
+ * 200-row cap. When the page is a subset, say "N of TOTAL" — never present
+ * the page length as the catalog size, and never infer a project count from
+ * a partial page.
+ */
+export function browseCountLabel(
+  results: { project_id?: string | null }[],
+  total: number,
+): string {
+  const shown = results.length;
+  if (shown < total) {
+    return `Showing ${shown.toLocaleString("en-US")} of ${plural(total, "asset")}`;
+  }
+  const projects = new Set(results.map((r) => r.project_id).filter(Boolean)).size;
+  return `${plural(total, "asset")} across ${plural(projects, "project")}`;
+}
+
 export function AssetBrowseView() {
   const [q, setQ] = React.useState("");
   const [tag, setTag] = React.useState("");
@@ -43,7 +66,7 @@ export function AssetBrowseView() {
   }, [projectsData?.items]);
 
   const results = data?.results ?? [];
-  const distinctProjects = new Set(results.map((r) => r.project_id).filter(Boolean));
+  const countLabel = data ? browseCountLabel(results, data.total) : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -92,7 +115,7 @@ export function AssetBrowseView() {
             ? "Loading…"
             : isError && !data
               ? "Asset count unavailable"
-              : `${results.length} asset${results.length !== 1 ? "s" : ""} across ${distinctProjects.size} project${distinctProjects.size !== 1 ? "s" : ""}`}
+              : countLabel}
         </span>
       </div>
 

@@ -389,7 +389,8 @@ export const searchApi = {
   /**
    * Cross-project browse (M4 AC2): GET /api/search with q optional. Called
    * with no project_id, this returns assets across every project — the
-   * backing query for the /assets browse page.
+   * backing query for the /assets browse page. `total` is the filtered
+   * population size before the `limit` cap; `results` is one page.
    */
   browse(params?: AssetBrowseParams) {
     return apiFetch<{ results: SearchResult[]; total: number }>(

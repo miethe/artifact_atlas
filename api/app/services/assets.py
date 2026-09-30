@@ -334,7 +334,40 @@ class AssetService:
         tag_filter: list[str] | None = None,
         limit: int = 50,
     ) -> list[Asset]:
-        """In-memory keyword + filter search over assets.
+        """In-memory keyword + filter search over assets (first ``limit`` hits).
+
+        See :meth:`search_assets_page` for the page plus the uncapped
+        population total.
+        """
+        page, _total = self.search_assets_page(
+            project_id=project_id,
+            query=query,
+            status_filter=status_filter,
+            sensitivity_filter=sensitivity_filter,
+            source_kind_filter=source_kind_filter,
+            artifact_type_filter=artifact_type_filter,
+            tag_filter=tag_filter,
+            limit=limit,
+        )
+        return page
+
+    def search_assets_page(
+        self,
+        *,
+        project_id: str | None = None,
+        query: str | None = None,
+        status_filter: list[str] | None = None,
+        sensitivity_filter: list[str] | None = None,
+        source_kind_filter: list[str] | None = None,
+        artifact_type_filter: list[str] | None = None,
+        tag_filter: list[str] | None = None,
+        limit: int = 50,
+    ) -> tuple[list[Asset], int]:
+        """In-memory keyword + filter search returning ``(page, total)``.
+
+        ``total`` is the size of the whole filtered population, computed
+        BEFORE the ``limit`` cap (estate-coherence M0 / T2) — so a caller can
+        render "N of TOTAL" instead of mistaking one page for the catalog.
 
         Performs case-insensitive substring match on title/description.
         Respects status, sensitivity, source_kind, artifact_type, and tag
@@ -352,7 +385,7 @@ class AssetService:
             limit: Maximum results.
 
         Returns:
-            Filtered list of matching assets.
+            ``(first limit matches, total matches before the cap)``.
         """
         assets = self._assets.list(project_id=project_id)
 
@@ -393,7 +426,7 @@ class AssetService:
             tag_set = set(tag_filter)
             assets = [a for a in assets if tag_set.intersection(a.tags or [])]
 
-        return assets[:limit]
+        return assets[:limit], len(assets)
 
     # ------------------------------------------------------------------
     # Links

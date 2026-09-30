@@ -4,7 +4,7 @@ it_schema: 1
 doc_type: implementation_plan
 title: "Estate coherence M0 — Atlas honest states"
 description: "Make live Atlas loading, error, count, and activity states report what their sources establish."
-status: not_started
+status: in_progress
 created: 2026-09-30
 updated: 2026-09-30
 feature_slug: estate-coherence-m0-atlas-honest-states
@@ -40,7 +40,7 @@ wave_plan:
 tasks:
   - id: T1
     title: "Remove silent fixture substitution from live Atlas reader queries"
-    status: backlog
+    status: waiting_review
     node_type: atomic_task
     itt_node_id: node_01M3QYTMSR2DYGWBB3T9Q424P9
     assigned_to: codex
@@ -49,7 +49,7 @@ tasks:
     acceptance_criteria: ["Live server HTML and hydrated routes present loading, error, empty, or API-backed values; no unlabelled fixture project or asset counts appear as catalog truth.", "Forced API errors, including BOM 404, show a visible error or explicitly stale state with retry and never resolve to fixture records; successful queries still show verified live data."]
   - id: T2
     title: "Make global Browse Assets distinguish the page from the population"
-    status: backlog
+    status: waiting_review
     node_type: atomic_task
     itt_node_id: node_01M3R0FSV30836Y4819H81D9VS
     assigned_to: codex
@@ -58,7 +58,7 @@ tasks:
     acceptance_criteria: ["Global Browse Assets uses the API's filtered population total, or says 'N of TOTAL'; a test changes the API total while keeping one page fixed and asserts the displayed total changes.", "The search API returns a total computed before its 200-row cap for the same filters; GET and semantic search keep consistent total semantics, and an empty filtered result is displayed as empty rather than as an unknown whole-catalog count."]
   - id: T3
     title: "Remove NaN dates from Agent Activity and shared relative-time displays"
-    status: backlog
+    status: waiting_review
     node_type: atomic_task
     itt_node_id: node_01M3R0HN9XWBCEVAN1FVNTYBEZ
     assigned_to: ica

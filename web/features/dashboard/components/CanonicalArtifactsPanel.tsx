@@ -13,6 +13,7 @@ import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
 import type { Asset } from "@/lib/types";
+import { relativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Helpers
@@ -31,17 +32,6 @@ function sourceLabel(kind: string): string {
     notion: "Notion",
   };
   return MAP[kind] ?? kind;
-}
-
-function relativeTime(isoDate: string | null | undefined): string {
-  if (!isoDate) return "";
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${Math.max(minutes, 1)}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 // ============================================================
@@ -150,7 +140,11 @@ export function CanonicalArtifactsPanel({
   const footer = (
     <div className="flex items-center justify-between gap-2">
       <span className="text-[10px] text-[var(--ink-faint)] tabular-nums">
-        {canonical.length} canonical asset{canonical.length !== 1 ? "s" : ""}
+        {assets
+          ? `${canonical.length} canonical asset${canonical.length !== 1 ? "s" : ""}`
+          : isError
+            ? "Canonical count unavailable"
+            : "Loading…"}
       </span>
       {viewAllHref && (
         <a
@@ -166,7 +160,13 @@ export function CanonicalArtifactsPanel({
   return (
     <PanelShell
       title="Canonical Artifacts"
-      subtitle={`${canonical.length} promoted`}
+      subtitle={
+        assets
+          ? `${canonical.length} promoted`
+          : isError
+            ? "count unavailable"
+            : "loading…"
+      }
       icon={<CheckCircle2 className="w-3.5 h-3.5" />}
       ariaLabel="Canonical artifacts"
       viewAllHref={viewAllHref}

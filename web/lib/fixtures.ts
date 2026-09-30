@@ -428,8 +428,8 @@ export const FIXTURE_AUDIT_EVENTS: AuditEvent[] = [
     project_id: "proj_artifact_atlas",
     target_type: "asset",
     target_id: "asset_prd_uiux_spec_v0_1",
-    detail: { title: "Artifact Atlas PRD UIUX Implementation Spec" },
-    created_at: "2026-06-17T10:00:00Z",
+    payload: { title: "Artifact Atlas PRD UIUX Implementation Spec" },
+    timestamp: "2026-06-17T10:00:00Z",
   },
   {
     id: "evt_002",
@@ -439,8 +439,8 @@ export const FIXTURE_AUDIT_EVENTS: AuditEvent[] = [
     project_id: "proj_artifact_atlas",
     target_type: "asset",
     target_id: "asset_openapi_yaml",
-    detail: { from: "selected", to: "canonical" },
-    created_at: "2026-06-15T12:30:00Z",
+    payload: { from: "selected", to: "canonical" },
+    timestamp: "2026-06-15T12:30:00Z",
   },
   {
     id: "evt_003",
@@ -450,7 +450,7 @@ export const FIXTURE_AUDIT_EVENTS: AuditEvent[] = [
     project_id: "proj_artifact_atlas",
     target_type: "context_pack",
     target_id: "pack_artifact_atlas_mvp_v1",
-    detail: {},
-    created_at: "2026-06-19T15:00:00Z",
+    payload: {},
+    timestamp: "2026-06-19T15:00:00Z",
   },
 ];
