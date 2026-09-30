@@ -229,7 +229,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
               <span role="status" aria-live="polite">
                 {meatyWikiQuery.isLoading
                   ? "Checking MeatyWiki…"
-                  : isWikiConnected
+                  : meatyWikiQuery.isError
+                    ? "MeatyWiki status unavailable (integrations API error)"
+                    : isWikiConnected
                     ? `Last synced ${lastSync ? relativeTime(lastSync) : "never"} with MeatyWiki`
                     : integration?.status === "error"
                       ? `MeatyWiki sync error${integration?.error_message ? `: ${integration.error_message}` : ""}`
@@ -259,8 +261,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
       <KPIRow
         stats={dashboardQuery.data}
         isLoading={dashboardQuery.isLoading}
+        isError={dashboardQuery.isError}
         projectId={projectId}
-        openTaskCount={bomGapsQuery.data?.length ?? 0}
+        openTaskCount={bomGapsQuery.data ? bomGapsQuery.data.length : null}
       />
 
       {/* === Primary Panel Grid ===
@@ -281,6 +284,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
             projectId={projectId}
             assets={assets}
             isLoading={assetsQuery.isLoading}
+            isError={assetsQuery.isError}
+            error={assetsQuery.error}
+            onRetry={() => assetsQuery.refetch()}
             viewAllHref={assetsHref}
             onOpenAsset={openAsset}
           />
@@ -292,6 +298,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
             projectId={projectId}
             assets={assets}
             isLoading={assetsQuery.isLoading}
+            isError={assetsQuery.isError}
+            error={assetsQuery.error}
+            onRetry={() => assetsQuery.refetch()}
             viewAllHref={assetsHref}
             onOpenAsset={openAsset}
           />
@@ -304,6 +313,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
             projectId={projectId}
             assets={assets}
             isLoading={assetsQuery.isLoading}
+            isError={assetsQuery.isError}
+            error={assetsQuery.error}
+            onRetry={() => assetsQuery.refetch()}
             viewAllHref={assetsHref}
             onOpenAsset={openAsset}
           />
@@ -311,6 +323,9 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
             projectId={projectId}
             packs={contextPacksQuery.data?.items}
             isLoading={contextPacksQuery.isLoading}
+            isError={contextPacksQuery.isError}
+            error={contextPacksQuery.error}
+            onRetry={() => contextPacksQuery.refetch()}
             viewAllHref={contextPacksHref}
           />
           <AgentActivityPanel projectId={projectId} />

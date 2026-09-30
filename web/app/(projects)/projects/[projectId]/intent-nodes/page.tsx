@@ -1,12 +1,15 @@
 /**
  * IntentTree Node List — /projects/[projectId]/intent-nodes
- * Lists demo nodes; links to individual node context pages.
+ * Atlas has no live IntentTree node feed yet: demo nodes are listed only in
+ * demo builds (NEXT_PUBLIC_ATLAS_DEMO_DATA=1); otherwise "not connected".
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { DEMO_NODES } from "@/features/node/NodeDemoFixtures";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { demoOnly } from "@/lib/demoData";
 
 interface Props {
   params: Promise<{ projectId: string }>;
@@ -26,7 +29,7 @@ const STATUS_CLASSES: Record<string, string> = {
 
 export default async function IntentNodesPage({ params }: Props) {
   const { projectId } = await params;
-  const nodes = DEMO_NODES.filter((n) => n.project_id === projectId || true);
+  const nodes = demoOnly(() => DEMO_NODES);
 
   return (
     <div className="flex flex-col h-full">
@@ -41,6 +44,12 @@ export default async function IntentNodesPage({ params }: Props) {
       />
 
       <div className="flex-1 overflow-y-auto p-5">
+        {nodes === null ? (
+          <EmptyState
+            title="IntentTree not connected"
+            description="Atlas has no live IntentTree node feed yet. No nodes are shown."
+          />
+        ) : (
         <div className="space-y-2">
           {nodes.map((node) => (
             <Link
@@ -69,6 +78,7 @@ export default async function IntentNodesPage({ params }: Props) {
             </Link>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

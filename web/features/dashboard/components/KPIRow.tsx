@@ -5,8 +5,9 @@
  * (artifact_atlas_command_center_interface.png):
  *   All Assets · Candidate Assets · Canonical Assets ·
  *   Linked Intent Nodes · Open Tasks
- * No hard-coded counts; values come from useDashboard / useBomGaps /
- * the shared IntentTree fixture module.
+ * No hard-coded counts; values come from useDashboard / useBomGaps.
+ * A card whose source failed or is not connected shows "—" with a reason,
+ * never a zero or fixture value presented as catalog truth.
  */
 
 import * as React from "react";
@@ -28,16 +29,24 @@ import { linkedIntentNodeCount } from "../intentNodes";
 interface KPIRowProps {
   stats: DashboardStats | undefined;
   isLoading: boolean;
+  /** Dashboard stats query failed — asset cards render "—" / "unavailable". */
+  isError?: boolean;
   projectId: string;
-  /** Open Tasks — count of missing/partial BOM slots (from useBomGaps) */
-  openTaskCount?: number;
+  /**
+   * Open Tasks — count of missing/partial BOM slots (from useBomGaps).
+   * `null` means the BOM source is unavailable (renders "—").
+   */
+  openTaskCount?: number | null;
 }
+
+const UNKNOWN = "—";
 
 export function KPIRow({
   stats,
   isLoading,
+  isError = false,
   projectId: _projectId,
-  openTaskCount = 0,
+  openTaskCount = null,
 }: KPIRowProps) {
   if (isLoading && !stats) {
     return (
@@ -49,15 +58,19 @@ export function KPIRow({
     );
   }
 
-  const totalAssets = stats?.total_assets ?? 0;
-  const canonicalCount = stats?.canonical_count ?? 0;
+  const statsKnown = !!stats && !(isError && !stats);
+  const statsSublabel = (label: string) => (statsKnown ? label : "unavailable");
+
+  const totalAssets = stats?.total_assets;
+  const canonicalCount = stats?.canonical_count;
 
   // Candidate pipeline — matches CandidateAssetsPanel's filter
-  const candidateCount =
-    (stats?.assets_by_status?.candidate ?? 0) +
-    (stats?.assets_by_status?.selected ?? 0) +
-    (stats?.assets_by_status?.in_review ?? 0) +
-    (stats?.assets_by_status?.in_progress ?? 0);
+  const candidateCount = stats
+    ? (stats.assets_by_status?.candidate ?? 0) +
+      (stats.assets_by_status?.selected ?? 0) +
+      (stats.assets_by_status?.in_review ?? 0) +
+      (stats.assets_by_status?.in_progress ?? 0)
+    : null;
 
   const intentNodeCount = linkedIntentNodeCount();
 
@@ -69,38 +82,40 @@ export function KPIRow({
     >
       <MetricCard
         label="All Assets"
-        value={totalAssets}
+        value={totalAssets ?? UNKNOWN}
         icon={<FolderOpen className="w-3.5 h-3.5" />}
-        accent="blue"
-        sublabel="tracked"
+        accent={statsKnown ? "blue" : "default"}
+        sublabel={statsSublabel("tracked")}
       />
       <MetricCard
         label="Candidate Assets"
-        value={candidateCount}
+        value={candidateCount ?? UNKNOWN}
         icon={<Sparkles className="w-3.5 h-3.5" />}
-        accent={candidateCount > 0 ? "amber" : "default"}
-        sublabel="in pipeline"
+        accent={candidateCount ? "amber" : "default"}
+        sublabel={statsSublabel("in pipeline")}
       />
       <MetricCard
         label="Canonical Assets"
-        value={canonicalCount}
+        value={canonicalCount ?? UNKNOWN}
         icon={<CheckCircle2 className="w-3.5 h-3.5" />}
-        accent="green"
-        sublabel="promoted"
+        accent={statsKnown ? "green" : "default"}
+        sublabel={statsSublabel("promoted")}
       />
       <MetricCard
         label="Linked Intent Nodes"
-        value={intentNodeCount}
+        value={intentNodeCount ?? UNKNOWN}
         icon={<Waypoints className="w-3.5 h-3.5" />}
-        accent="purple"
-        sublabel="IntentTree"
+        accent={intentNodeCount === null ? "default" : "purple"}
+        sublabel={
+          intentNodeCount === null ? "IntentTree not connected" : "IntentTree (demo)"
+        }
       />
       <MetricCard
         label="Open Tasks"
-        value={openTaskCount}
+        value={openTaskCount ?? UNKNOWN}
         icon={<ListChecks className="w-3.5 h-3.5" />}
-        accent={openTaskCount > 0 ? "red" : "default"}
-        sublabel="BOM gaps"
+        accent={openTaskCount ? "red" : "default"}
+        sublabel={openTaskCount === null ? "BOM unavailable" : "BOM gaps"}
       />
     </div>
   );

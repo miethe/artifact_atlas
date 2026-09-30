@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import { Plus, Layers, Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { RightDrawer } from "@/components/shell/RightDrawer";
 import { ContextPackBuilder } from "./ContextPackBuilder";
 import { PackCard, PackCardSkeleton } from "./components/PackCard";
@@ -45,7 +46,8 @@ export function ContextPacksView({ projectId }: ContextPacksViewProps) {
   const [statusFilter, setStatusFilter] = React.useState<ContextPackStatus | "all">("all");
   const [query, setQuery] = React.useState("");
 
-  const { data: packs = [], isLoading, refetch, isFetching } = useContextPacks(projectId);
+  const { data: packs = [], isLoading, isError, error, refetch, isFetching } =
+    useContextPacks(projectId);
 
   const filtered = React.useMemo(() => {
     let result = packs;
@@ -180,6 +182,13 @@ export function ContextPacksView({ projectId }: ContextPacksViewProps) {
               <PackCardSkeleton key={i} />
             ))}
           </div>
+        ) : isError ? (
+          <QueryErrorState
+            size="md"
+            title="Couldn't load context packs"
+            error={error}
+            onRetry={() => refetch()}
+          />
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={

@@ -3,7 +3,9 @@
 /**
  * NodeContextView — IntentTree node context scaffold
  * UI-NODE-001
- * Renders from demo node refs + linked assets (backend optional)
+ * Atlas has no live IntentTree node API yet. Outside a demo build
+ * (NEXT_PUBLIC_ATLAS_DEMO_DATA=1) this view says "not connected" instead of
+ * substituting a demo node for whatever id was requested.
  */
 
 import * as React from "react";
@@ -24,6 +26,7 @@ import { useAssetModal } from "@/features/assets/hooks/useAssetModal";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import type { Asset } from "@/lib/types";
+import { isDemoDataEnabled } from "@/lib/demoData";
 
 // ============================================================
 // Tab types
@@ -52,12 +55,15 @@ export function NodeContextView({ nodeId, projectId }: NodeContextViewProps) {
   // Asset modal — mounted once per view, URL-driven (?item=)
   const { openAsset, assetModal } = useAssetModal(projectId);
 
-  // Use demo node (extend to real API when available)
-  const node = getDemoNode(nodeId);
-  const linkedEntities = getDemoLinkedEntities(nodeId);
+  // Demo node only in demo builds (extend to real API when available)
+  const demo = isDemoDataEnabled();
+  const node = demo ? getDemoNode(nodeId) : undefined;
+  const linkedEntities = demo ? getDemoLinkedEntities(nodeId) : [];
 
   // Assets from the project (filter those linked to this node)
-  const { data: assetsPage, isLoading: assetsLoading } = useAssets(projectId);
+  const { data: assetsPage, isLoading: assetsLoading } = useAssets(
+    demo ? projectId : null,
+  );
   const linkedAssetIds = new Set(
     linkedEntities.filter((e) => e.kind === "asset").map((e) => e.id),
   );
@@ -65,12 +71,22 @@ export function NodeContextView({ nodeId, projectId }: NodeContextViewProps) {
     linkedAssetIds.has(a.id),
   );
 
+  if (!demo) {
+    return (
+      <EmptyState
+        icon={<Workflow className="h-5 w-5" />}
+        title="IntentTree not connected"
+        description={`Atlas has no live IntentTree node API yet, so node ${nodeId} cannot be shown. No demo node is substituted.`}
+      />
+    );
+  }
+
   if (!node) {
     return (
       <EmptyState
         icon={<Workflow className="h-5 w-5" />}
         title="Node not found"
-        description="This IntentTree node does not exist or was not found in fixtures."
+        description="This IntentTree node does not exist or was not found in the demo fixtures."
       />
     );
   }

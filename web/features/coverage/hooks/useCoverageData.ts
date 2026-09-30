@@ -33,7 +33,8 @@ export interface GapRecommendation {
 }
 
 // ============================================================
-// Fixture gaps (fallback when API unreachable)
+// Gap recommendations derived from BOM slots (live /gaps response, or the
+// live BOM's own slots when the /gaps endpoint fails). Never fixture slots.
 // ============================================================
 
 function buildFixtureGaps(slots: BomSlot[]): GapRecommendation[] {
@@ -105,6 +106,7 @@ export function useCoverageData(projectId: string | null | undefined) {
     gaps: gapsQuery.data ?? [],
     isLoading: bomQuery.isLoading || coverageQuery.isLoading,
     isError: bomQuery.isError || coverageQuery.isError,
+    error: bomQuery.error ?? coverageQuery.error,
     refetch: () => {
       bomQuery.refetch();
       coverageQuery.refetch();

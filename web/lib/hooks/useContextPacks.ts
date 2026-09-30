@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contextPacksApi } from "../api";
 import { fixtureContextPacksPage } from "../fixtures";
+import { liveOrDemo } from "../demoData";
 import type { ContextPackCreate } from "../types";
 
 // ============================================================
@@ -33,16 +34,14 @@ export function useContextPacks(
   return useQuery({
     queryKey: contextPackKeys.list(projectId ?? "", params),
     queryFn: async () => {
-      if (!projectId) return fixtureContextPacksPage();
-      try {
-        return await contextPacksApi.list(projectId, params);
-      } catch {
-        return fixtureContextPacksPage(projectId);
-      }
+      if (!projectId) throw new Error("No projectId");
+      return liveOrDemo(
+        () => contextPacksApi.list(projectId, params),
+        () => fixtureContextPacksPage(projectId),
+      );
     },
     enabled: !!projectId,
     staleTime: 30_000,
-    placeholderData: () => fixtureContextPacksPage(projectId ?? undefined),
   });
 }
 

@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { inboxApi, assetsApi } from "../api";
 import { fixtureInboxPage } from "../fixtures";
+import { liveOrDemo } from "../demoData";
 import type { AssetStatus, InboxImportRequest } from "../types";
 
 // ============================================================
@@ -30,16 +31,14 @@ export function useInboxItems(
   return useQuery({
     queryKey: inboxKeys.list(projectId ?? "", params),
     queryFn: async () => {
-      if (!projectId) return fixtureInboxPage();
-      try {
-        return await inboxApi.list(projectId, params);
-      } catch {
-        return fixtureInboxPage(projectId);
-      }
+      if (!projectId) throw new Error("No projectId");
+      return liveOrDemo(
+        () => inboxApi.list(projectId, params),
+        () => fixtureInboxPage(projectId),
+      );
     },
     enabled: !!projectId,
     staleTime: 15_000,
-    placeholderData: () => fixtureInboxPage(projectId ?? undefined),
   });
 }
 

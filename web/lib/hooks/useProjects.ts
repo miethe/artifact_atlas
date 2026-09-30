@@ -6,6 +6,7 @@ import {
   fixtureProjectsPage,
   FIXTURE_PROJECTS,
 } from "../fixtures";
+import { liveOrDemo } from "../demoData";
 import type { Project, ProjectCreate, ProjectUpdate } from "../types";
 
 // ============================================================
@@ -30,15 +31,10 @@ export function useProjects(params?: {
 }) {
   return useQuery({
     queryKey: projectKeys.list(params),
-    queryFn: async () => {
-      try {
-        return await projectsApi.list(params);
-      } catch {
-        return fixtureProjectsPage();
-      }
-    },
+    // No placeholderData: first paint is "loading", never fixture projects.
+    queryFn: () =>
+      liveOrDemo(() => projectsApi.list(params), fixtureProjectsPage),
     staleTime: 30_000,
-    placeholderData: fixtureProjectsPage,
   });
 }
 
@@ -51,13 +47,14 @@ export function useProject(projectId: string | null | undefined) {
     queryKey: projectKeys.detail(projectId ?? ""),
     queryFn: async () => {
       if (!projectId) throw new Error("No projectId");
-      try {
-        return await projectsApi.get(projectId);
-      } catch {
-        const fixture = FIXTURE_PROJECTS.find((p) => p.id === projectId);
-        if (fixture) return fixture;
-        throw new Error(`Project ${projectId} not found in fixtures`);
-      }
+      return liveOrDemo(
+        () => projectsApi.get(projectId),
+        () => {
+          const fixture = FIXTURE_PROJECTS.find((p) => p.id === projectId);
+          if (fixture) return fixture;
+          throw new Error(`Project ${projectId} not found in demo fixtures`);
+        },
+      );
     },
     enabled: !!projectId,
     staleTime: 30_000,

@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { FolderOpen, Plus } from "lucide-react";
-import { Button, EmptyState, SkeletonCard } from "@/components/ui";
+import { Button, EmptyState, QueryErrorState, SkeletonCard } from "@/components/ui";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { ProjectCard } from "./components/ProjectCard";
 import { CreateProjectDialog } from "./components/CreateProjectDialog";
@@ -49,6 +49,13 @@ export function ProjectsIndexView() {
             <SkeletonCard key={i} />
           ))}
         </div>
+      ) : projectsQuery.isError && !projects ? (
+        <QueryErrorState
+          size="md"
+          title="Couldn't load projects"
+          error={projectsQuery.error}
+          onRetry={() => projectsQuery.refetch()}
+        />
       ) : !projects || projects.length === 0 ? (
         <EmptyState
           title="No projects yet"

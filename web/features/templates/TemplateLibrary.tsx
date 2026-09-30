@@ -14,7 +14,7 @@
 import * as React from "react";
 import { clsx } from "clsx";
 import { Search, X, Plus, Wrench, LayoutTemplate } from "lucide-react";
-import { Button, EmptyState, Skeleton } from "@/components/ui";
+import { Button, EmptyState, QueryErrorState, Skeleton } from "@/components/ui";
 import { isFlagEnabled } from "@/lib/flags";
 import { useTemplates } from "./hooks";
 import { TemplateCard } from "./components/TemplateCard";
@@ -105,7 +105,7 @@ export function TemplateLibrary({
   onOpenInBuilder,
   className,
 }: TemplateLibraryProps) {
-  const { data: templatesRaw, isLoading } = useTemplates();
+  const { data: templatesRaw, isLoading, isError, error, refetch } = useTemplates();
   const templates: ArtifactTemplate[] = (templatesRaw ?? []) as ArtifactTemplate[];
 
   // Feature flag: EntityModal (P2b) vs legacy persistent aside.
@@ -293,6 +293,8 @@ export function TemplateLibrary({
           <div className="px-4 py-2 text-[10px] font-semibold text-[var(--ink-faint)] uppercase tracking-wider border-b border-[var(--border)] bg-[var(--surface-sunken)] shrink-0">
             {isLoading ? (
               "Loading…"
+            ) : isError && !templatesRaw ? (
+              "Templates unavailable"
             ) : (
               <>
                 {filtered.length} template{filtered.length !== 1 ? "s" : ""}
@@ -308,6 +310,13 @@ export function TemplateLibrary({
                   <Skeleton key={i} className="h-20 rounded-lg" />
                 ))}
               </div>
+            ) : isError && !templatesRaw ? (
+              <QueryErrorState
+                title="Couldn't load templates"
+                error={error}
+                onRetry={() => refetch()}
+                className="py-12"
+              />
             ) : filtered.length === 0 ? (
               <EmptyState
                 icon={

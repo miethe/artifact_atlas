@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchDashboard } from "../api";
 import { FIXTURE_DASHBOARD } from "../fixtures";
+import { liveOrDemo } from "../demoData";
 
 // ============================================================
 // Query Keys
@@ -22,15 +23,10 @@ export function useDashboard(projectId: string | null | undefined) {
   return useQuery({
     queryKey: dashboardKeys.project(projectId ?? ""),
     queryFn: async () => {
-      if (!projectId) return FIXTURE_DASHBOARD;
-      try {
-        return await fetchDashboard(projectId);
-      } catch {
-        return FIXTURE_DASHBOARD;
-      }
+      if (!projectId) throw new Error("No projectId");
+      return liveOrDemo(() => fetchDashboard(projectId), () => FIXTURE_DASHBOARD);
     },
     enabled: !!projectId,
     staleTime: 30_000,
-    placeholderData: FIXTURE_DASHBOARD,
   });
 }

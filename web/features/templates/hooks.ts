@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { templatesApi } from "@/lib/api";
 import { FIXTURE_TEMPLATES, getTemplatePreview } from "./fixtures";
+import { liveOrDemo } from "@/lib/demoData";
 import type { ArtifactTemplate, TemplatePreview } from "./types";
 
 // ============================================================
@@ -51,16 +52,13 @@ export const templateKeys = {
 export function useTemplates() {
   return useQuery({
     queryKey: templateKeys.list(),
-    queryFn: async (): Promise<ArtifactTemplate[]> => {
-      try {
-        const data = await templatesApi.list();
-        return (data as ArtifactTemplate[]).map(normalizeTemplate);
-      } catch {
-        return FIXTURE_TEMPLATES.map(normalizeTemplate);
-      }
-    },
+    queryFn: (): Promise<ArtifactTemplate[]> =>
+      liveOrDemo(
+        async () =>
+          ((await templatesApi.list()) as ArtifactTemplate[]).map(normalizeTemplate),
+        () => FIXTURE_TEMPLATES.map(normalizeTemplate),
+      ),
     staleTime: 60_000,
-    placeholderData: FIXTURE_TEMPLATES,
   });
 }
 
@@ -73,13 +71,14 @@ export function useTemplate(templateId: string | null | undefined) {
     queryKey: templateKeys.detail(templateId ?? ""),
     queryFn: async (): Promise<ArtifactTemplate | null> => {
       if (!templateId) return null;
-      try {
-        const data = await templatesApi.get(templateId);
-        return normalizeTemplate(data as ArtifactTemplate);
-      } catch {
-        const fixture = FIXTURE_TEMPLATES.find((t) => t.id === templateId);
-        return fixture ? normalizeTemplate(fixture) : null;
-      }
+      return liveOrDemo(
+        async () =>
+          normalizeTemplate((await templatesApi.get(templateId)) as ArtifactTemplate),
+        () => {
+          const fixture = FIXTURE_TEMPLATES.find((t) => t.id === templateId);
+          return fixture ? normalizeTemplate(fixture) : null;
+        },
+      );
     },
     enabled: !!templateId,
     staleTime: 60_000,
@@ -95,13 +94,13 @@ export function useTemplatePreview(templateId: string | null | undefined) {
     queryKey: templateKeys.preview(templateId ?? ""),
     queryFn: async (): Promise<TemplatePreview | null> => {
       if (!templateId) return null;
-      try {
-        const data = await templatesApi.preview(templateId);
-        return data as TemplatePreview;
-      } catch {
-        const t = FIXTURE_TEMPLATES.find((t) => t.id === templateId);
-        return t ? getTemplatePreview(t) : null;
-      }
+      return liveOrDemo(
+        async () => (await templatesApi.preview(templateId)) as TemplatePreview,
+        () => {
+          const t = FIXTURE_TEMPLATES.find((t) => t.id === templateId);
+          return t ? getTemplatePreview(t) : null;
+        },
+      );
     },
     enabled: !!templateId,
     staleTime: 30_000,

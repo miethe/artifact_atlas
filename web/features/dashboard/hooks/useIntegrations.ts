@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { integrationsApi } from "@/lib/api";
 import { FIXTURE_INTEGRATIONS } from "@/lib/fixtures";
+import { liveOrDemo } from "@/lib/demoData";
 import type { IntegrationStatus } from "@/lib/types";
 
 // ============================================================
@@ -14,22 +15,18 @@ export const integrationKeys = {
 };
 
 // ============================================================
-// useIntegrations — live integration status with fixture fallback
+// useIntegrations — live integration status (fixtures only in demo builds)
 // ============================================================
 
 export function useIntegrations() {
   return useQuery({
     queryKey: integrationKeys.all,
-    queryFn: async (): Promise<IntegrationStatus[]> => {
-      try {
-        const res = await integrationsApi.list();
-        return res.integrations;
-      } catch {
-        return FIXTURE_INTEGRATIONS;
-      }
-    },
+    queryFn: (): Promise<IntegrationStatus[]> =>
+      liveOrDemo(
+        async () => (await integrationsApi.list()).integrations,
+        () => FIXTURE_INTEGRATIONS,
+      ),
     staleTime: 60_000,
-    placeholderData: FIXTURE_INTEGRATIONS,
   });
 }
 
