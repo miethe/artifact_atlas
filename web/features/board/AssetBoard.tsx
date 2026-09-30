@@ -416,7 +416,7 @@ export function AssetBoard({ projectId, groupBy: groupByProp }: AssetBoardProps)
         <EmptyState
           icon={<Kanban className="w-10 h-10" aria-hidden />}
           title="Failed to load board"
-          description="Could not fetch assets. Using demo fixtures if available."
+          description="Could not fetch assets from the API. No fallback data is being shown."
           action={
             <Button size="sm" variant="secondary" onClick={() => refetch()}>
               Retry

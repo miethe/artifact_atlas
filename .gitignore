@@ -9,6 +9,7 @@ venv/
 node_modules/
 .next/
 .next-flags-on/
+.next-demo/
 dist/
 # Test-coverage report output only — anchored so it does not match the
 # web/features/coverage/ feature directory (see findings F-001).

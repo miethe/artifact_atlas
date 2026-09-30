@@ -9,34 +9,29 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { clsx } from "clsx";
 import { Activity } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, QueryErrorState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
 import { PanelShell } from "./PanelShell";
 import { auditApi } from "@/lib/api";
 import { FIXTURE_AUDIT_EVENTS } from "@/lib/fixtures";
+import { liveOrDemo } from "@/lib/demoData";
 import type { AuditEvent, AuditEventType, ActorType } from "@/lib/types";
 
 // ============================================================
-// Audit events hook with fixture fallback
+// Audit events hook (fixtures only in demo builds)
 // ============================================================
 
 function useAuditEvents(projectId: string, limit = 10) {
   return useQuery({
     queryKey: ["audit", projectId, limit],
-    queryFn: async (): Promise<AuditEvent[]> => {
-      try {
-        const res = await auditApi.list({
-          project_id: projectId,
-          limit,
-        });
-        return res.items;
-      } catch {
-        return FIXTURE_AUDIT_EVENTS;
-      }
-    },
+    queryFn: (): Promise<AuditEvent[]> =>
+      liveOrDemo(
+        async () =>
+          (await auditApi.list({ project_id: projectId, limit })).items,
+        () => FIXTURE_AUDIT_EVENTS,
+      ),
     enabled: !!projectId,
     staleTime: 20_000,
-    placeholderData: FIXTURE_AUDIT_EVENTS,
   });
 }
 
@@ -92,7 +87,8 @@ interface AgentActivityPanelProps {
 }
 
 export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
-  const { data: events, isLoading } = useAuditEvents(projectId, 10);
+  const { data: events, isLoading, isError, error, refetch } =
+    useAuditEvents(projectId, 10);
 
   return (
     <PanelShell
@@ -107,6 +103,12 @@ export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !events ? (
+        <QueryErrorState
+          title="Couldn't load agent activity"
+          error={error}
+          onRetry={() => refetch()}
+        />
       ) : !events || events.length === 0 ? (
         <EmptyState
           size="sm"

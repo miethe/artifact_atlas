@@ -10,7 +10,7 @@
 import * as React from "react";
 import { clsx } from "clsx";
 import { AlertTriangle } from "lucide-react";
-import { EmptyState, SkeletonRow } from "@/components/ui";
+import { EmptyState, QueryErrorState, SkeletonRow } from "@/components/ui";
 import { PanelShell } from "./PanelShell";
 import { useBomGaps } from "../hooks/useBomGaps";
 import type { BomSlot, BomSlotStatus } from "@/lib/types";
@@ -116,7 +116,8 @@ export function MissingContextPanel({
   projectId,
   viewAllHref,
 }: MissingContextPanelProps) {
-  const { data: gaps, isLoading } = useBomGaps(projectId);
+  const { data: gaps, isLoading, isError, error, refetch } =
+    useBomGaps(projectId);
   const gapList = gaps ?? [];
   const preview = gapList.slice(0, 6);
 
@@ -153,6 +154,12 @@ export function MissingContextPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !gaps ? (
+        <QueryErrorState
+          title="Couldn't load BOM gaps"
+          error={error}
+          onRetry={() => refetch()}
+        />
       ) : gapList.length === 0 ? (
         <EmptyState
           size="sm"

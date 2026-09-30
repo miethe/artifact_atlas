@@ -34,6 +34,8 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { describeQueryError } from "@/components/ui/QueryErrorState";
+import { ApiRequestError } from "@/lib/api";
 import type { BomSlot } from "@/lib/types";
 import { useTemplates } from "@/features/templates/hooks";
 import { SlotCardSkeleton } from "./components/SlotCard";
@@ -349,19 +351,45 @@ export function BomOverview({ projectId }: BomOverviewProps) {
   }
 
   // ---- Error state ----
+  // A 404 means the API has no BOM for this project; any other failure means
+  // the API could not be read. Neither ever falls back to fixture slots.
   if (error && !bom) {
+    const notFound = error instanceof ApiRequestError && error.status === 404;
     return (
-      <div className="flex-1 p-5">
+      <div className="flex-1 p-5" role="alert">
         <EmptyState
           icon={<Package className="w-10 h-10" aria-hidden />}
-          title="Failed to load BOM"
-          description="Could not retrieve the artifact BOM for this project. Check the API connection."
+          title={notFound ? "No BOM found for this project" : "Failed to load BOM"}
+          description={`${describeQueryError(error)} ${
+            notFound
+              ? "This project has no artifact BOM yet."
+              : "Could not retrieve the artifact BOM for this project."
+          } No fallback data is being shown.`}
           action={
-            <Button variant="secondary" size="sm" onClick={() => refetch()}>
-              Retry
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => refetch()}>
+                Retry
+              </Button>
+              {notFound && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  iconLeft={<LayoutTemplate className="w-3.5 h-3.5" aria-hidden />}
+                  onClick={() => setApplyOpen(true)}
+                >
+                  Apply template
+                </Button>
+              )}
+            </div>
           }
         />
+        {notFound && (
+          <ApplyTemplateDialog
+            projectId={projectId}
+            open={applyOpen}
+            onClose={() => setApplyOpen(false)}
+          />
+        )}
       </div>
     );
   }

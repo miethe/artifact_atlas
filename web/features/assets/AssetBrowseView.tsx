@@ -11,6 +11,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TagChip } from "@/components/ui/TagChip";
 import { useAssetBrowse } from "@/lib/hooks/useAssets";
@@ -32,7 +33,7 @@ export function AssetBrowseView() {
     return p;
   }, [q, tag, artifactType, projectId]);
 
-  const { data, isLoading, isError } = useAssetBrowse(params);
+  const { data, isLoading, isError, error, refetch } = useAssetBrowse(params);
   const { data: projectsData } = useProjects({ limit: 100 });
 
   const projectsById = React.useMemo(() => {
@@ -89,18 +90,21 @@ export function AssetBrowseView() {
         <span className="ml-auto text-xs text-[var(--ink-muted)] tabular-nums whitespace-nowrap">
           {isLoading
             ? "Loading…"
-            : `${results.length} asset${results.length !== 1 ? "s" : ""} across ${distinctProjects.size} project${distinctProjects.size !== 1 ? "s" : ""}`}
+            : isError && !data
+              ? "Asset count unavailable"
+              : `${results.length} asset${results.length !== 1 ? "s" : ""} across ${distinctProjects.size} project${distinctProjects.size !== 1 ? "s" : ""}`}
         </span>
       </div>
 
       {/* Results */}
       <div className="flex-1 overflow-y-auto">
-        {isError && (
+        {isError && !data && (
           <div className="p-8 text-center">
-            <EmptyState
-              icon={<Search className="w-10 h-10" aria-hidden />}
+            <QueryErrorState
+              size="md"
               title="Failed to load assets"
-              description="The API may be unavailable. Demo data shown below."
+              error={error}
+              onRetry={() => refetch()}
             />
           </div>
         )}

@@ -4,7 +4,10 @@
  *
  * Phase 1 does not expose an IntentTree node-list endpoint; when one lands,
  * replace this module with a query hook and keep the exported shape.
+ * Fixtures are returned ONLY in demo builds (NEXT_PUBLIC_ATLAS_DEMO_DATA=1).
  */
+
+import { demoOnly } from "@/lib/demoData";
 
 export interface IntentNode {
   id: string;
@@ -65,12 +68,23 @@ export const FIXTURE_INTENT_NODES: IntentNode[] = [
   },
 ];
 
-/** Nodes shown as "active" in the panel (everything not completed). */
-export function activeIntentNodes(): IntentNode[] {
-  return FIXTURE_INTENT_NODES.filter((n) => n.status !== "completed");
+/**
+ * All linked nodes, or `null` when there is no live IntentTree source.
+ * Atlas has no IntentTree node feed yet, so outside a demo build this is
+ * always `null` and callers must render "not connected", never fixtures.
+ */
+export function linkedIntentNodes(): IntentNode[] | null {
+  return demoOnly(() => FIXTURE_INTENT_NODES);
 }
 
-/** Total linked nodes for the KPI card. */
-export function linkedIntentNodeCount(): number {
-  return FIXTURE_INTENT_NODES.length;
+/** Nodes shown as "active" in the panel (everything not completed), or null. */
+export function activeIntentNodes(): IntentNode[] | null {
+  const nodes = linkedIntentNodes();
+  return nodes ? nodes.filter((n) => n.status !== "completed") : null;
+}
+
+/** Total linked nodes for the KPI card, or null when not connected. */
+export function linkedIntentNodeCount(): number | null {
+  const nodes = linkedIntentNodes();
+  return nodes ? nodes.length : null;
 }

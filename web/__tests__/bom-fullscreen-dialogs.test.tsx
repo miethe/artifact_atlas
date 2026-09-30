@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BomOverview } from "@/features/bom/BomOverview";
+import { FIXTURE_BOM } from "@/lib/fixtures";
 
 // ============================================================
 // Mocks
@@ -58,9 +59,22 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-// Offline API: every fetch rejects so all hooks fall back to fixtures
-// (FIXTURE_BOM includes missing slots: "Test Plan", "Deployment Runbook").
-const fetchMock = vi.fn(() => Promise.reject(new Error("offline (test)")));
+// The BOM endpoint serves FIXTURE_BOM as the live response (it includes
+// missing slots: "Test Plan", "Deployment Runbook"). Every other fetch
+// rejects. Hooks no longer fall back to fixtures outside demo builds
+// (estate-coherence M0), so the BOM must arrive via the API stub.
+const fetchMock = vi.fn((input: RequestInfo | URL) => {
+  const path = new URL(String(input)).pathname;
+  if (path === "/api/projects/proj_test/bom") {
+    return Promise.resolve(
+      new Response(JSON.stringify({ ...FIXTURE_BOM, project_id: "proj_test" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  }
+  return Promise.reject(new Error("offline (test)"));
+});
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);

@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { CheckCircle2 } from "lucide-react";
-import { StatusBadge, EmptyState, SkeletonRow } from "@/components/ui";
+import { StatusBadge, EmptyState, QueryErrorState, SkeletonRow } from "@/components/ui";
 import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
@@ -122,6 +122,10 @@ interface CanonicalArtifactsPanelProps {
   projectId: string;
   assets: Asset[] | undefined;
   isLoading: boolean;
+  /** Source query failed — render an error with retry, not an empty state. */
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   viewAllHref?: string;
   onOpenAsset?: (id: string) => void;
 }
@@ -130,6 +134,9 @@ export function CanonicalArtifactsPanel({
   projectId: _projectId,
   assets,
   isLoading,
+  isError = false,
+  error,
+  onRetry,
   viewAllHref,
   onOpenAsset,
 }: CanonicalArtifactsPanelProps) {
@@ -174,6 +181,12 @@ export function CanonicalArtifactsPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !assets ? (
+        <QueryErrorState
+          title="Couldn't load canonical artifacts"
+          error={error}
+          onRetry={onRetry}
+        />
       ) : preview.length === 0 ? (
         <EmptyState
           size="sm"

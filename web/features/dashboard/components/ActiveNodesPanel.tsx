@@ -4,8 +4,8 @@
  * ActiveNodesPanel — active IntentTree nodes for the project, per the
  * command-center mockup: node-code chip + title/subtitle + task count +
  * status chip, with an "IntentTree: N linked nodes / Open in IntentTree"
- * footer. Uses the shared fixture module (IntentTree API not yet
- * implemented in Phase 1).
+ * footer. Atlas has no live IntentTree node feed yet: outside a demo build
+ * the panel says "not connected" instead of showing fixture nodes.
  */
 
 import * as React from "react";
@@ -14,7 +14,7 @@ import { EmptyState, SkeletonRow } from "@/components/ui";
 import { PanelShell } from "./PanelShell";
 import {
   activeIntentNodes,
-  FIXTURE_INTENT_NODES,
+  linkedIntentNodes,
   linkedIntentNodeCount,
   type IntentNode,
 } from "../intentNodes";
@@ -100,12 +100,15 @@ export function ActiveNodesPanel({
   viewAllHref,
 }: ActiveNodesPanelProps) {
   const nodes = activeIntentNodes();
+  const allNodes = linkedIntentNodes();
   const linkedCount = linkedIntentNodeCount();
 
   const footer = (
     <div className="flex items-center justify-between gap-2">
       <span className="text-[10px] text-[var(--ink-faint)]">
-        IntentTree: {linkedCount} linked node{linkedCount !== 1 ? "s" : ""}
+        {linkedCount === null
+          ? "IntentTree: not connected"
+          : `IntentTree: ${linkedCount} linked node${linkedCount !== 1 ? "s" : ""} (demo)`}
       </span>
       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600">
         <ExternalLink aria-hidden className="w-2.5 h-2.5" />
@@ -122,7 +125,7 @@ export function ActiveNodesPanel({
       ariaLabel="Active IntentTree nodes"
       viewAllHref={viewAllHref}
       footer={footer}
-      expandedContent={<NodeList nodes={FIXTURE_INTENT_NODES} />}
+      expandedContent={allNodes ? <NodeList nodes={allNodes} /> : undefined}
     >
       {isLoading ? (
         <div className="p-2 flex flex-col gap-0.5">
@@ -130,6 +133,13 @@ export function ActiveNodesPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : nodes === null ? (
+        <EmptyState
+          size="sm"
+          title="IntentTree not connected"
+          description="Atlas has no live IntentTree node feed yet. No nodes are shown."
+          icon={<GitBranch className="w-8 h-8" />}
+        />
       ) : nodes.length === 0 ? (
         <EmptyState
           size="sm"

@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contextPacksApi, assetsApi } from "@/lib/api";
 import { FIXTURE_CONTEXT_PACKS } from "./fixtures";
+import { liveOrDemo } from "@/lib/demoData";
 import type { ContextPack, ContextPackCreate, Asset } from "@/lib/types";
 import type { BuilderDraft, PublishGate, TokenEstimate, BuilderItem } from "./types";
 
@@ -35,20 +36,12 @@ export const cpKeys = {
 export function useContextPacks(projectId: string) {
   return useQuery({
     queryKey: cpKeys.list(projectId),
-    queryFn: async (): Promise<ContextPack[]> => {
-      try {
-        const page = await contextPacksApi.list(projectId, { limit: 200 });
-        return page.items;
-      } catch {
-        return FIXTURE_CONTEXT_PACKS.filter(
-          (p) => p.project_id === projectId,
-        );
-      }
-    },
+    queryFn: (): Promise<ContextPack[]> =>
+      liveOrDemo(
+        async () => (await contextPacksApi.list(projectId, { limit: 200 })).items,
+        () => FIXTURE_CONTEXT_PACKS.filter((p) => p.project_id === projectId),
+      ),
     staleTime: 30_000,
-    placeholderData: FIXTURE_CONTEXT_PACKS.filter(
-      (p) => p.project_id === projectId,
-    ),
   });
 }
 
