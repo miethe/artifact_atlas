@@ -9,6 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { bomApi } from "@/lib/api";
 import { FIXTURE_BOM } from "@/lib/fixtures";
+import { liveOrDemo } from "@/lib/demoData";
 import type { BomSlot } from "@/lib/types";
 
 function filterGaps(slots: BomSlot[] | undefined | null): BomSlot[] {
@@ -20,16 +21,12 @@ function filterGaps(slots: BomSlot[] | undefined | null): BomSlot[] {
 export function useBomGaps(projectId: string) {
   return useQuery({
     queryKey: ["bom", projectId, "gaps"],
-    queryFn: async () => {
-      try {
-        const bom = await bomApi.get(projectId);
-        return filterGaps(bom.slots);
-      } catch {
-        return filterGaps(FIXTURE_BOM.slots);
-      }
-    },
+    queryFn: () =>
+      liveOrDemo(
+        async () => filterGaps((await bomApi.get(projectId)).slots),
+        () => filterGaps(FIXTURE_BOM.slots),
+      ),
     enabled: !!projectId,
     staleTime: 30_000,
-    placeholderData: filterGaps(FIXTURE_BOM.slots),
   });
 }

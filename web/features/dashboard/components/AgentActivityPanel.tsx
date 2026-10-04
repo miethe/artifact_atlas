@@ -9,34 +9,30 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { clsx } from "clsx";
 import { Activity } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, QueryErrorState } from "@/components/ui";
 import { SkeletonRow } from "@/components/ui";
 import { PanelShell } from "./PanelShell";
 import { auditApi } from "@/lib/api";
 import { FIXTURE_AUDIT_EVENTS } from "@/lib/fixtures";
+import { liveOrDemo } from "@/lib/demoData";
 import type { AuditEvent, AuditEventType, ActorType } from "@/lib/types";
+import { relativeTime } from "@/lib/relativeTime";
 
 // ============================================================
-// Audit events hook with fixture fallback
+// Audit events hook (fixtures only in demo builds)
 // ============================================================
 
 function useAuditEvents(projectId: string, limit = 10) {
   return useQuery({
     queryKey: ["audit", projectId, limit],
-    queryFn: async (): Promise<AuditEvent[]> => {
-      try {
-        const res = await auditApi.list({
-          project_id: projectId,
-          limit,
-        });
-        return res.items;
-      } catch {
-        return FIXTURE_AUDIT_EVENTS;
-      }
-    },
+    queryFn: (): Promise<AuditEvent[]> =>
+      liveOrDemo(
+        async () =>
+          (await auditApi.list({ project_id: projectId, limit })).items,
+        () => FIXTURE_AUDIT_EVENTS,
+      ),
     enabled: !!projectId,
     staleTime: 20_000,
-    placeholderData: FIXTURE_AUDIT_EVENTS,
   });
 }
 
@@ -64,17 +60,6 @@ const ACTOR_LABELS: Record<ActorType, string> = {
   system: "System",
 };
 
-function relativeTime(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
 function actorDotColor(type: ActorType): string {
   return {
     user: "bg-blue-400",
@@ -92,7 +77,8 @@ interface AgentActivityPanelProps {
 }
 
 export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
-  const { data: events, isLoading } = useAuditEvents(projectId, 10);
+  const { data: events, isLoading, isError, error, refetch } =
+    useAuditEvents(projectId, 10);
 
   return (
     <PanelShell
@@ -107,6 +93,12 @@ export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !events ? (
+        <QueryErrorState
+          title="Couldn't load agent activity"
+          error={error}
+          onRetry={() => refetch()}
+        />
       ) : !events || events.length === 0 ? (
         <EmptyState
           size="sm"
@@ -138,7 +130,7 @@ export function AgentActivityPanel({ projectId }: AgentActivityPanelProps) {
                   </p>
                 </div>
                 <span className="text-[10px] text-[var(--ink-faint)] shrink-0 tabular-nums">
-                  {relativeTime(evt.created_at)}
+                  {relativeTime(evt.timestamp)}
                 </span>
               </div>
             </li>

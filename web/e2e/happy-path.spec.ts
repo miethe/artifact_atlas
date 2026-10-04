@@ -1,9 +1,11 @@
 /**
  * TEST-005: E2E Smoke — Local-First Happy Path
  *
- * Tests the web app against its built-in fixture fallback — no backend required.
- * The playwright webServer config in playwright.config.ts starts `npm run start`
- * (production build). All hooks fall back to fixtures when the backend is offline.
+ * Tests the web app against its fixture fallback — no backend required.
+ * Fixture fallback is opt-in (estate-coherence M0): the playwright webServer
+ * config builds with NEXT_PUBLIC_ATLAS_DEMO_DATA=1 into `.next-demo` and then
+ * starts it. A build without that flag never substitutes fixtures — failed
+ * reads render error states (covered by __tests__/honest-states.test.tsx).
  *
  * Happy path covered:
  *   1. Root → redirect to Command Center
@@ -15,16 +17,15 @@
  *
  * Run commands (from repo root):
  *   cd web
- *   npm run build          # required before start
  *   npx playwright install chromium
- *   npx playwright test
+ *   npx playwright test    # webServer builds the demo bundle itself
  *
  * Or for headed debug:
  *   npx playwright test --headed --slowMo=300
  *
  * Environment notes:
- *   - No backend required; fixture fallback activates automatically when
- *     http://localhost:8000 is unreachable.
+ *   - No backend required; in the demo build fixture fallback activates when
+ *     http://localhost:8000 is unreachable, and a DEMO DATA banner is shown.
  *   - ATLAS_REGISTRY_DIR is not needed for the web-only smoke test.
  *   - CI: set PLAYWRIGHT_BASE_URL to override baseURL if needed.
  */
@@ -53,7 +54,17 @@ async function waitForPageReady(page: Page, timeout = 20_000) {
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-test.describe("Local-first happy path (fixture fallback)", () => {
+test.describe("Local-first happy path (demo build, fixture fallback)", () => {
+  /**
+   * Step 0: the demo build labels itself — fixtures are never unlabelled.
+   */
+  test("demo build shows the DEMO DATA banner", async ({ page }) => {
+    await page.goto(CMD_CENTER_URL);
+    await waitForPageReady(page);
+    await expect(page.getByTestId("demo-data-banner")).toBeVisible();
+    await expect(page.getByTestId("demo-data-banner")).toContainText("DEMO DATA");
+  });
+
   /**
    * Step 1: Root page redirects to the command center.
    */

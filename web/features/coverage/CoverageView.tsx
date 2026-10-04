@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { describeQueryError } from "@/components/ui/QueryErrorState";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { isFlagEnabled } from "@/lib/flags";
 import { ReadinessScore } from "./components/ReadinessScore";
@@ -48,7 +49,7 @@ interface CoverageViewProps {
 }
 
 export function CoverageView({ projectId }: CoverageViewProps) {
-  const { bom, coverage, gaps, isLoading, isError, refetch } =
+  const { bom, coverage, gaps, isLoading, isError, error, refetch } =
     useCoverageData(projectId);
 
   // Feature flag: EntityModal (P2b) vs legacy inline sidebar slot-detail card.
@@ -108,11 +109,11 @@ export function CoverageView({ projectId }: CoverageViewProps) {
 
   if (isError || !bom) {
     return (
-      <div className="flex items-center justify-center p-12">
+      <div className="flex items-center justify-center p-12" role="alert">
         <EmptyState
           icon={<Layout className="w-10 h-10" aria-hidden />}
           title="Failed to load coverage data"
-          description="Could not fetch BOM or coverage from the API."
+          description={`${describeQueryError(error)} Could not fetch BOM or coverage from the API. No fallback data is being shown.`}
           action={
             <Button variant="secondary" size="sm" onClick={refetch}>
               Retry

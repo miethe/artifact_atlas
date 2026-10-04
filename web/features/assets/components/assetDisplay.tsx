@@ -27,6 +27,7 @@ import {
   User,
 } from "lucide-react";
 import type { Asset } from "@/lib/types";
+import { relativeTime as sharedRelativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Bytes
@@ -44,20 +45,7 @@ export function formatBytes(bytes: number | null | undefined): string {
 // ============================================================
 
 export function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const diffMs = Date.now() - then;
-  const min = Math.floor(diffMs / 60_000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `${day}d ago`;
-  if (day < 30) return `${Math.floor(day / 7)}w ago`;
-  if (day < 365) return `${Math.floor(day / 30)}mo ago`;
-  return `${Math.floor(day / 365)}y ago`;
+  return sharedRelativeTime(iso, { fallback: "" });
 }
 
 export function formatDate(iso: string | null | undefined): string {

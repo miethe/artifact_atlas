@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SensitivityBadge } from "@/components/ui/SensitivityBadge";
 import { TagChip } from "@/components/ui/TagChip";
 import type { InboxItem } from "@/lib/types";
+import { relativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Source kind icon map
@@ -64,16 +65,6 @@ function suggestedTypeLabel(item: InboxItem): string | null {
     return humanizeArtifactTypeId(item.suggested_artifact_type_id);
   }
   return fallbackSuggestedType(item);
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(diff / 60_000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.floor(hr / 24)}d ago`;
 }
 
 // ============================================================

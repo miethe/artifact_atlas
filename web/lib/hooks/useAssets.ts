@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { assetsApi, searchApi } from "../api";
 import { fixtureAssetsPage, FIXTURE_ASSETS } from "../fixtures";
+import { liveOrDemo } from "../demoData";
 import type {
   Asset,
   AssetBrowseParams,
@@ -52,16 +53,14 @@ export function useAssets(
   return useQuery({
     queryKey: assetKeys.list(projectId ?? "", filters),
     queryFn: async () => {
-      if (!projectId) return fixtureAssetsPage();
-      try {
-        return await assetsApi.list(projectId, filters);
-      } catch {
-        return fixtureAssetsPage(projectId);
-      }
+      if (!projectId) throw new Error("No projectId");
+      return liveOrDemo(
+        () => assetsApi.list(projectId, filters),
+        () => fixtureAssetsPage(projectId),
+      );
     },
     enabled: !!projectId,
     staleTime: 15_000,
-    placeholderData: () => fixtureAssetsPage(projectId ?? undefined),
   });
 }
 
@@ -95,13 +94,11 @@ export const assetBrowseKeys = {
 export function useAssetBrowse(params?: AssetBrowseParams) {
   return useQuery({
     queryKey: assetBrowseKeys.list(params),
-    queryFn: async () => {
-      try {
-        return await searchApi.browse(params);
-      } catch {
-        return { results: fixtureBrowseResults(), total: FIXTURE_ASSETS.length };
-      }
-    },
+    queryFn: () =>
+      liveOrDemo(
+        () => searchApi.browse(params),
+        () => ({ results: fixtureBrowseResults(), total: FIXTURE_ASSETS.length }),
+      ),
     staleTime: 15_000,
   });
 }
@@ -115,13 +112,14 @@ export function useAsset(assetId: string | null | undefined) {
     queryKey: assetKeys.detail(assetId ?? ""),
     queryFn: async () => {
       if (!assetId) throw new Error("No assetId");
-      try {
-        return await assetsApi.get(assetId);
-      } catch {
-        const fixture = FIXTURE_ASSETS.find((a) => a.id === assetId);
-        if (fixture) return fixture;
-        throw new Error(`Asset ${assetId} not found in fixtures`);
-      }
+      return liveOrDemo(
+        () => assetsApi.get(assetId),
+        () => {
+          const fixture = FIXTURE_ASSETS.find((a) => a.id === assetId);
+          if (fixture) return fixture;
+          throw new Error(`Asset ${assetId} not found in demo fixtures`);
+        },
+      );
     },
     enabled: !!assetId,
     staleTime: 15_000,

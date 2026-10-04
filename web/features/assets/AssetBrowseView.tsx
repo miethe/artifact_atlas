@@ -11,11 +11,35 @@ import * as React from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TagChip } from "@/components/ui/TagChip";
 import { useAssetBrowse } from "@/lib/hooks/useAssets";
 import { useProjects } from "@/lib/hooks/useProjects";
 import type { AssetBrowseParams } from "@/lib/types";
+
+const plural = (n: number, word: string) =>
+  `${n.toLocaleString("en-US")} ${word}${n !== 1 ? "s" : ""}`;
+
+/**
+ * Header count for the browse page (estate-coherence M0 / T2).
+ *
+ * `total` is the API's filtered population size, computed before the
+ * 200-row cap. When the page is a subset, say "N of TOTAL" — never present
+ * the page length as the catalog size, and never infer a project count from
+ * a partial page.
+ */
+export function browseCountLabel(
+  results: { project_id?: string | null }[],
+  total: number,
+): string {
+  const shown = results.length;
+  if (shown < total) {
+    return `Showing ${shown.toLocaleString("en-US")} of ${plural(total, "asset")}`;
+  }
+  const projects = new Set(results.map((r) => r.project_id).filter(Boolean)).size;
+  return `${plural(total, "asset")} across ${plural(projects, "project")}`;
+}
 
 export function AssetBrowseView() {
   const [q, setQ] = React.useState("");
@@ -32,7 +56,7 @@ export function AssetBrowseView() {
     return p;
   }, [q, tag, artifactType, projectId]);
 
-  const { data, isLoading, isError } = useAssetBrowse(params);
+  const { data, isLoading, isError, error, refetch } = useAssetBrowse(params);
   const { data: projectsData } = useProjects({ limit: 100 });
 
   const projectsById = React.useMemo(() => {
@@ -42,7 +66,7 @@ export function AssetBrowseView() {
   }, [projectsData?.items]);
 
   const results = data?.results ?? [];
-  const distinctProjects = new Set(results.map((r) => r.project_id).filter(Boolean));
+  const countLabel = data ? browseCountLabel(results, data.total) : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -89,18 +113,21 @@ export function AssetBrowseView() {
         <span className="ml-auto text-xs text-[var(--ink-muted)] tabular-nums whitespace-nowrap">
           {isLoading
             ? "Loading…"
-            : `${results.length} asset${results.length !== 1 ? "s" : ""} across ${distinctProjects.size} project${distinctProjects.size !== 1 ? "s" : ""}`}
+            : isError && !data
+              ? "Asset count unavailable"
+              : countLabel}
         </span>
       </div>
 
       {/* Results */}
       <div className="flex-1 overflow-y-auto">
-        {isError && (
+        {isError && !data && (
           <div className="p-8 text-center">
-            <EmptyState
-              icon={<Search className="w-10 h-10" aria-hidden />}
+            <QueryErrorState
+              size="md"
               title="Failed to load assets"
-              description="The API may be unavailable. Demo data shown below."
+              error={error}
+              onRetry={() => refetch()}
             />
           </div>
         )}

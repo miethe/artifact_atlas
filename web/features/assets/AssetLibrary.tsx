@@ -324,7 +324,7 @@ export function AssetLibrary({ projectId }: AssetLibraryProps) {
               <EmptyState
                 icon={<AlertCircle className="w-10 h-10" aria-hidden />}
                 title="Failed to load assets"
-                description="The API may be unavailable. Demo data shown below."
+                description="The API may be unavailable. No fallback data is being shown."
               />
             </div>
           )}

@@ -12,8 +12,9 @@
  * NEXT_PUBLIC_FLAGS — see playwright.config.ts) so this is deterministic
  * regardless of future FLAG_DEFAULTS changes (F-002).
  *
- * Uses the app's built-in fixture-fallback data (lib/fixtures.ts,
- * features/templates/fixtures.ts) exactly like e2e/happy-path.spec.ts — no
+ * Uses the app's fixture-fallback data (lib/fixtures.ts,
+ * features/templates/fixtures.ts), which the flags-on build opts into with
+ * NEXT_PUBLIC_ATLAS_DEMO_DATA=1, exactly like e2e/happy-path.spec.ts — no
  * network mocking needed here since these tests only exercise modal
  * chrome/URL-state, not per-format content rendering (see
  * asset-viewer-formats.spec.ts for that).

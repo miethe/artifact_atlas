@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { Package } from "lucide-react";
-import { EmptyState, SkeletonRow } from "@/components/ui";
+import { EmptyState, QueryErrorState, SkeletonRow } from "@/components/ui";
 import { PanelShell } from "./PanelShell";
 import type { ContextPack, ContextPackStatus } from "@/lib/types";
 
@@ -99,6 +99,10 @@ interface ContextPacksPanelProps {
   projectId: string;
   packs: ContextPack[] | undefined;
   isLoading: boolean;
+  /** Source query failed — render an error with retry, not an empty state. */
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   viewAllHref?: string;
 }
 
@@ -106,6 +110,9 @@ export function ContextPacksPanel({
   projectId: _projectId,
   packs,
   isLoading,
+  isError = false,
+  error,
+  onRetry,
   viewAllHref,
 }: ContextPacksPanelProps) {
   const nonArchived = React.useMemo(
@@ -146,6 +153,12 @@ export function ContextPacksPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !packs ? (
+        <QueryErrorState
+          title="Couldn't load context packs"
+          error={error}
+          onRetry={onRetry}
+        />
       ) : preview.length === 0 ? (
         <EmptyState
           size="sm"

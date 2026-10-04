@@ -254,7 +254,7 @@ export function InboxTriage({ projectId }: InboxTriageProps) {
                   size="sm"
                   icon={<Inbox className="w-8 h-8" aria-hidden />}
                   title="Failed to load inbox"
-                  description="Check backend connection or use demo fixtures."
+                  description="Check the backend connection. No fallback data is being shown."
                   action={
                     <Button size="xs" variant="secondary" onClick={() => refetch()}>
                       Retry

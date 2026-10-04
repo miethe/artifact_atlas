@@ -1265,3 +1265,30 @@ IntentTree: `node_01M226VANCGSVK605A4VYNZBVT`.
 
 Deferred refactor; the authored layer remains file-canonical and outside Atlas editing.
 IntentTree: `node_01M226VB254G3QGVV950E79SVC`.
+
+## D-023 — Honest states: fixtures are opt-in demo data; search `total` is the pre-cap population
+
+**Status**: Accepted
+**Date**: 2026-09-30
+**Phase**: estate-coherence M0 (`node_01M3S83FAX8H5529EVXD0KA4RB`; T1 `node_01M3QYTMSR2DYGWBB3T9Q424P9`, T2 `node_01M3R0FSV30836Y4819H81D9VS`, T3 `node_01M3R0HN9XWBCEVAN1FVNTYBEZ`)
+
+### Decision
+
+1. **No silent fixture substitution.** Live reader hooks no longer fall back to fixtures on a
+   failure, a 404, or before the first response. Fixtures are returned only when the build sets
+   `NEXT_PUBLIC_ATLAS_DEMO_DATA=1` (`web/lib/demoData.ts`, `liveOrDemo`). A visible "DEMO DATA"
+   banner then labels the build. In a live build, failures render `QueryErrorState` ("No fallback
+   data is being shown", Retry), and unknown counts render "—" or "unavailable" instead of 0.
+   Surfaces with no live source (IntentTree nodes) say "not connected". The Playwright e2e servers
+   are demo builds (`.next-demo`) because those specs assert fixture content.
+2. **`total` on `GET /api/search` and `POST /api/search/semantic`** is the number of assets matching
+   the filters, counted before the `limit` cap (`AssetService.search_assets_page`). Browse Assets
+   renders "Showing N of TOTAL" whenever the page is a subset. Both routes share this meaning.
+3. **One relative-time helper.** `web/lib/relativeTime.ts` turns a missing or invalid date into "—"
+   (or a caller fallback), never NaN. Audit events are read via the API's `timestamp` field.
+
+### Consequences
+
+A dead API is now visible as an error instead of plausible fake data. Demo and screenshot builds
+must opt in explicitly. Other page-vs-population counts (such as the dashboard Recent Assets
+subtitle) are tracked as separate follow-ups rather than widened into M0.

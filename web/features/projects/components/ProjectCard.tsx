@@ -12,24 +12,11 @@ import { FileText, FolderOpen, Star } from "lucide-react";
 import { TagChip } from "@/components/ui";
 import type { Project, ProjectStatus } from "@/lib/types";
 import { projectMeta } from "../types";
+import { relativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Helpers
 // ============================================================
-
-function relativeTime(isoDate: string | null | undefined): string {
-  if (!isoDate) return "—";
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
 
 const STATUS_CHIP_CLASSES: Record<ProjectStatus, string> = {
   active: "bg-green-100 text-green-700 border border-green-200",

@@ -9,6 +9,7 @@
 import * as React from "react";
 import { clsx } from "clsx";
 import { Plus } from "lucide-react";
+import { parseDate, relativeTime as sharedRelativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Formatting helpers
@@ -50,23 +51,7 @@ export function formatBytes(bytes: number | null | undefined): string | null {
 }
 
 export function relativeTime(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  try {
-    const then = new Date(iso).getTime();
-    const diffMs = Date.now() - then;
-    const mins = Math.round(diffMs / 60_000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.round(hours / 24);
-    if (days < 30) return `${days}d ago`;
-    const months = Math.round(days / 30);
-    if (months < 12) return `${months}mo ago`;
-    return `${Math.round(months / 12)}y ago`;
-  } catch {
-    return null;
-  }
+  return parseDate(iso) === null ? null : sharedRelativeTime(iso);
 }
 
 // ============================================================

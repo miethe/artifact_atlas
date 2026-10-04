@@ -19,6 +19,7 @@ import { SidebarNav, DEFAULT_PROJECT_ID } from "./SidebarNav";
 import { TopBar } from "./TopBar";
 import { CollaborationFooter } from "./CollaborationFooter";
 import { CommandPalette } from "./CommandPalette";
+import { DemoDataBanner } from "./DemoDataBanner";
 import { useGlobalShortcuts } from "@/features/ui/hooks/useGlobalShortcuts";
 
 interface AppShellProps {
@@ -57,6 +58,9 @@ export function AppShell({
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* TopBar */}
         <TopBar projectId={projectId} />
+
+        {/* Visible label whenever the build permits fixture fallbacks */}
+        <DemoDataBanner />
 
         {/* Content row: workspace + optional right rail */}
         <div className="flex flex-1 min-h-0 overflow-hidden">

@@ -46,17 +46,24 @@ export default defineConfig({
   ],
   webServer: [
     {
-      // Legacy project — default build (flags already default-on per ADR-8,
-      // but not pinned; see FLAGS_ON note above for why "flags-on" exists).
-      command: 'npm run start',
+      // Legacy project — default flags (already default-on per ADR-8, but not
+      // pinned; see FLAGS_ON note above for why "flags-on" exists).
+      //
+      // Estate-coherence M0: fixture fallbacks are opt-in only
+      // (NEXT_PUBLIC_ATLAS_DEMO_DATA=1, baked in at build time), so the
+      // backend-free smoke runs against an explicit demo build in its own
+      // dist dir. Production builds never substitute fixtures.
+      command: `bash -c "export NEXT_PUBLIC_ATLAS_DEMO_DATA=1 NEXT_DIST_DIR='.next-demo'; npm run build && npm run start"`,
       url: 'http://localhost:3000',
       reuseExistingServer: true,
-      timeout: 120 * 1000,
+      timeout: 300 * 1000,
     },
     {
       // Flags-on project — separate build output (NEXT_DIST_DIR) + port so it
       // can run alongside the legacy build without clobbering `.next`.
-      command: `bash -c "export NEXT_PUBLIC_FLAGS='${FLAGS_ON}' NEXT_DIST_DIR='.next-flags-on' PORT=3100; npm run build && npm run start"`,
+      // Also a demo build (see note above) because entity-modal.spec.ts
+      // relies on fixture data with no backend.
+      command: `bash -c "export NEXT_PUBLIC_FLAGS='${FLAGS_ON}' NEXT_PUBLIC_ATLAS_DEMO_DATA=1 NEXT_DIST_DIR='.next-flags-on' PORT=3100; npm run build && npm run start"`,
       url: 'http://localhost:3100',
       reuseExistingServer: true,
       timeout: 300 * 1000,

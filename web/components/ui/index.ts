@@ -22,6 +22,9 @@ export type { MetricCardProps } from "./MetricCard";
 export { EmptyState } from "./EmptyState";
 export type { EmptyStateProps } from "./EmptyState";
 
+export { QueryErrorState, describeQueryError } from "./QueryErrorState";
+export type { QueryErrorStateProps } from "./QueryErrorState";
+
 export { Skeleton, SkeletonCard, SkeletonRow } from "./Skeleton";
 
 export { Tooltip } from "./Tooltip";

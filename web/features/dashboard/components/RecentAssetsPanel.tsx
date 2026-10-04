@@ -9,26 +9,16 @@
 import * as React from "react";
 import { clsx } from "clsx";
 import { Clock, FileText } from "lucide-react";
-import { StatusBadge, EmptyState, SkeletonRow } from "@/components/ui";
+import { StatusBadge, EmptyState, QueryErrorState, SkeletonRow } from "@/components/ui";
 import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
 import type { Asset } from "@/lib/types";
+import { relativeTime } from "@/lib/relativeTime";
 
 // ============================================================
 // Helper — relative time label
 // ============================================================
-
-function relativeTime(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 // ============================================================
 // Thumbnail card + grid
@@ -111,6 +101,10 @@ interface RecentAssetsPanelProps {
   projectId: string;
   assets: Asset[] | undefined;
   isLoading: boolean;
+  /** Source query failed — render an error with retry, not an empty state. */
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   viewAllHref?: string;
   onOpenAsset?: (id: string) => void;
 }
@@ -119,6 +113,9 @@ export function RecentAssetsPanel({
   projectId: _projectId,
   assets,
   isLoading,
+  isError = false,
+  error,
+  onRetry,
   viewAllHref,
   onOpenAsset,
 }: RecentAssetsPanelProps) {
@@ -159,6 +156,12 @@ export function RecentAssetsPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !assets ? (
+        <QueryErrorState
+          title="Couldn't load recent assets"
+          error={error}
+          onRetry={onRetry}
+        />
       ) : preview.length === 0 ? (
         <EmptyState
           size="sm"

@@ -9,7 +9,7 @@
 import * as React from "react";
 import { clsx } from "clsx";
 import { Sparkles } from "lucide-react";
-import { StatusBadge, EmptyState, SkeletonRow } from "@/components/ui";
+import { StatusBadge, EmptyState, QueryErrorState, SkeletonRow } from "@/components/ui";
 import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
@@ -95,6 +95,10 @@ interface CandidateAssetsPanelProps {
   projectId: string;
   assets: Asset[] | undefined;
   isLoading: boolean;
+  /** Source query failed — render an error with retry, not an empty state. */
+  isError?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   viewAllHref?: string;
   onOpenAsset?: (id: string) => void;
 }
@@ -103,6 +107,9 @@ export function CandidateAssetsPanel({
   projectId: _projectId,
   assets,
   isLoading,
+  isError = false,
+  error,
+  onRetry,
   viewAllHref,
   onOpenAsset,
 }: CandidateAssetsPanelProps) {
@@ -119,7 +126,13 @@ export function CandidateAssetsPanel({
   return (
     <PanelShell
       title="Candidate Assets"
-      subtitle={`${candidates.length} in pipeline`}
+      subtitle={
+        assets
+          ? `${candidates.length} in pipeline`
+          : isError
+            ? "count unavailable"
+            : "loading…"
+      }
       icon={<Sparkles className="w-3.5 h-3.5" />}
       ariaLabel="Candidate assets in promotion pipeline"
       viewAllHref={viewAllHref}
@@ -138,6 +151,12 @@ export function CandidateAssetsPanel({
             <SkeletonRow key={i} />
           ))}
         </div>
+      ) : isError && !assets ? (
+        <QueryErrorState
+          title="Couldn't load candidate assets"
+          error={error}
+          onRetry={onRetry}
+        />
       ) : preview.length === 0 ? (
         <EmptyState
           size="sm"
