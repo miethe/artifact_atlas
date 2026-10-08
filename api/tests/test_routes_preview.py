@@ -689,8 +689,10 @@ class TestGetAssetContentRange:
         )
         assert resp.status_code == 416, resp.text
         # Content-Range on a 416 identifies the resource's total size so the
-        # client can retry with a satisfiable range (RFC 7233 §4.4).
-        assert resp.headers.get("content-range") == f"*/{len(data)}"
+        # client can retry with a satisfiable range. The unsatisfied-range form
+        # still carries the range unit: "bytes */<complete-length>"
+        # (RFC 9110 §14.4, §15.5.17; formerly RFC 7233 §4.2/§4.4).
+        assert resp.headers.get("content-range") == f"bytes */{len(data)}"
 
     def test_range_on_non_video_mime_still_works(
         self, tmp_registry: Path, tmp_path: Path
