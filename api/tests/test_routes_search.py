@@ -130,6 +130,41 @@ def test_semantic_search_total_semantics_match_get(tmp_registry) -> None:
     assert get_body["total"] == sem_body["total"]
 
 
+def test_semantic_search_applies_tag_filter(tmp_registry) -> None:
+    """POST /api/search/semantic honors filters.tags like GET honors tag."""
+    pid = _create_project("SemanticTagFilter")
+    tagged = _create_asset(pid, title="Sem Tagged", tags=["sem-needle"])
+    _create_asset(pid, title="Sem Untagged")
+    _create_asset(pid, title="Sem Other", tags=["sem-hay"])
+
+    resp = client.post(
+        "/api/search/semantic",
+        json={"query": "", "filters": {"tags": ["sem-needle"]}},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert {r["asset_id"] for r in body["results"]} == {tagged["id"]}
+    assert body["total"] == 1
+
+    get_body = client.get("/api/search", params={"tag": "sem-needle"}).json()
+    assert {r["asset_id"] for r in get_body["results"]} == {
+        r["asset_id"] for r in body["results"]
+    }
+    assert get_body["total"] == body["total"]
+
+
+def test_semantic_search_unknown_tag_is_empty(tmp_registry) -> None:
+    """Deny side: a tag no asset carries yields zero, not the whole catalog."""
+    pid = _create_project("SemanticTagEmpty")
+    _create_asset(pid, title="Sem Any", tags=["x"])
+    body = client.post(
+        "/api/search/semantic",
+        json={"query": "", "filters": {"tags": ["no-such-sem-tag"]}},
+    ).json()
+    assert body["results"] == []
+    assert body["total"] == 0
+
+
 def test_search_result_includes_tags(tmp_registry) -> None:
     pid = _create_project("SearchTagsField")
     asset = _create_asset(pid, title="Carries Tags", tags=["one", "two"])
