@@ -94,6 +94,7 @@ def semantic_search(data: SearchRequest) -> dict:
     sensitivity_filter = [s.value for s in filters.sensitivity] if filters and filters.sensitivity else None
     source_kind_filter = [sk.value for sk in filters.source_kind] if filters and filters.source_kind else None
     artifact_type_filter = list(filters.artifact_type) if filters and filters.artifact_type else None
+    tag_filter = list(filters.tags) if filters and filters.tags else None
 
     assets, total = svc.search_assets_page(
         project_id=data.project_id,
@@ -102,6 +103,7 @@ def semantic_search(data: SearchRequest) -> dict:
         sensitivity_filter=sensitivity_filter,
         source_kind_filter=source_kind_filter,
         artifact_type_filter=artifact_type_filter,
+        tag_filter=tag_filter,
         limit=data.limit,
     )
 
