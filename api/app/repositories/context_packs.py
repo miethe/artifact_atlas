@@ -165,6 +165,7 @@ class ContextPackRepository:
             "include_mode": data.include_mode,
             "display_order": display_order,
             "required": data.required,
+            **data.model_dump(mode="json", exclude={"item_type", "item_id", "include_mode", "display_order", "required"}),
         }
         _jl.append_record(self._items_path, record)
         return ContextPackItem.model_validate(record)
