@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AppShell } from "@/components/shell/AppShell";
+import { PageHeader } from "@/components/shell/PageHeader";
+import { MetricCard } from "@/components/ui/MetricCard";
 
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
@@ -34,15 +36,18 @@ describe("mobile app shell", () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     render(
       <AppShell projectId="proj_artifact_atlas">
-        <h1>Artifact Atlas project overview</h1>
-        <section aria-label="Key metrics"><div>All Assets</div></section>
+        <PageHeader title="Artifact Atlas project overview" />
+        <section aria-label="Key metrics">
+          <MetricCard label="All Assets" value={12} />
+        </section>
       </AppShell>,
     );
 
     const main = screen.getByRole("main");
     expect(main.className).toContain("min-w-0");
-    expect(screen.getByRole("heading", { name: "Artifact Atlas project overview" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Artifact Atlas project overview" }).className).toContain("truncate");
     expect(screen.getByRole("region", { name: "Key metrics" })).toBeInTheDocument();
+    expect(screen.getByText("All Assets").className).toContain("truncate");
 
     const nav = screen.getByRole("navigation", { name: "Project navigation" });
     expect(nav.className).toContain("hidden md:flex");
