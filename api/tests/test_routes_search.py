@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.repositories.bom import BomRepository
+from app.settings import get_settings
 
 client = TestClient(app)
 
@@ -67,6 +69,60 @@ def test_search_tag_filter(tmp_registry) -> None:
     assert resp.status_code == 200
     ids = {r["asset_id"] for r in resp.json()["results"]}
     assert ids == {tagged["id"]}
+
+
+def test_search_unknown_node_or_slot_returns_no_hits(tmp_registry) -> None:
+    pid = _create_project("Unknown Search Constraints")
+    _create_asset(pid, title="Otherwise matching")
+
+    for key, value in (
+        ("intenttree_node_id", "node_that_does_not_exist"),
+        ("bom_slot_id", "slot_that_does_not_exist"),
+    ):
+        body = client.get("/api/search", params={key: value}).json()
+        assert body["results"] == []
+        assert body["total"] == 0
+
+
+def test_search_node_and_slot_constraints_intersect_other_filters(tmp_registry) -> None:
+    pid = _create_project("Linked Search Project")
+    other_pid = _create_project("Other Linked Search Project")
+    matching = _create_asset(pid, title="Linked candidate", status="candidate")
+    wrong_status = _create_asset(pid, title="Linked inbox", status="inbox")
+    other_project = _create_asset(other_pid, title="Linked other project", status="candidate")
+    unrelated = _create_asset(pid, title="Unlinked candidate", status="candidate")
+
+    repo = BomRepository(get_settings().registry_dir)
+    bom = repo.create("bom_search_constraint", pid, "Search constraints")
+    slot = repo.create_slot(
+        "slot_search_constraint", bom.id, "spec", "engineering",
+        linked_intenttree_node_id="node_search_constraint",
+    )
+    for aid in (matching["id"], wrong_status["id"], other_project["id"]):
+        resp = client.post(
+            f"/api/bom/slots/{slot.id}/assign",
+            json={"asset_id": aid, "slot_id": slot.id, "assignment_status": "accepted"},
+        )
+        assert resp.status_code == 201, resp.text
+
+    # Both relations constrain results, and regular filters still intersect them.
+    for constraint in (
+        {"intenttree_node_id": "node_search_constraint"},
+        {"bom_slot_id": slot.id},
+    ):
+        body = client.get(
+            "/api/search",
+            params={**constraint, "project_id": pid, "status": "candidate", "limit": 1},
+        ).json()
+        assert [row["asset_id"] for row in body["results"]] == [matching["id"]]
+        assert body["total"] == 1
+
+    assert unrelated["id"] not in {
+        row["asset_id"]
+        for row in client.get(
+            "/api/search", params={"bom_slot_id": slot.id, "limit": 200}
+        ).json()["results"]
+    }
 
 
 # ---------------------------------------------------------------------------
