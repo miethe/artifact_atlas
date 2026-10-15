@@ -382,7 +382,7 @@ export const searchApi = {
   search(data: SearchRequest) {
     return apiFetch<{ results: SearchResult[]; total: number }>(
       "/api/search",
-      { method: "POST", body: data },
+      { method: "GET", params: data },
     );
   },
 
