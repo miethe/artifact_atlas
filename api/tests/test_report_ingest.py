@@ -29,6 +29,12 @@ from app.services.import_index import ImportService
 client = TestClient(app)
 
 
+@pytest.fixture()
+def tmp_registry(empty_report_registry: Path) -> Path:
+    """Ingest assertions use an empty report baseline with other seeds intact."""
+    return empty_report_registry
+
+
 def _set_workspace_default_sensitivity(
     monkeypatch: pytest.MonkeyPatch, value: str
 ) -> None:
