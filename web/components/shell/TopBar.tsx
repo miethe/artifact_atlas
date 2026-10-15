@@ -8,7 +8,7 @@
  */
 
 import * as React from "react";
-import { Bell, Settings } from "lucide-react";
+import { Bell, Settings, Menu } from "lucide-react";
 import { clsx } from "clsx";
 import { GlobalSearch } from "./GlobalSearch";
 import { ThemeToggle } from "./ThemeToggle";
@@ -18,9 +18,10 @@ import { isFlagEnabled } from "@/lib/flags";
 interface TopBarProps {
   projectId?: string;
   className?: string;
+  onMenuClick?: () => void;
 }
 
-export function TopBar({ projectId, className }: TopBarProps) {
+export function TopBar({ projectId, className, onMenuClick }: TopBarProps) {
   // Emit a custom event that CommandPalette listens for
   function openCommandPalette() {
     document.dispatchEvent(new CustomEvent("artifact-atlas:open-palette"));
@@ -47,6 +48,15 @@ export function TopBar({ projectId, className }: TopBarProps) {
         className,
       )}
     >
+      <button
+        type="button"
+        aria-label="Open navigation"
+        onClick={onMenuClick}
+        className="md:hidden inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-[var(--ink-muted)] hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      >
+        <Menu className="h-5 w-5" aria-hidden />
+      </button>
+
       {/* Search */}
       <GlobalSearch projectId={projectId} className="flex-1 max-w-sm" />
 
