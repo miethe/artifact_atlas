@@ -100,6 +100,7 @@ function AssetGrid({
 interface RecentAssetsPanelProps {
   projectId: string;
   assets: Asset[] | undefined;
+  totalAssets?: number;
   isLoading: boolean;
   /** Source query failed — render an error with retry, not an empty state. */
   isError?: boolean;
@@ -112,6 +113,7 @@ interface RecentAssetsPanelProps {
 export function RecentAssetsPanel({
   projectId: _projectId,
   assets,
+  totalAssets,
   isLoading,
   isError = false,
   error,
@@ -134,8 +136,8 @@ export function RecentAssetsPanel({
     <PanelShell
       title="Recent Assets"
       subtitle={
-        sorted.length > 0
-          ? `Showing ${preview.length} of ${sorted.length}`
+        sorted.length > 0 && totalAssets != null
+          ? `Showing ${preview.length} of ${totalAssets}`
           : undefined
       }
       icon={<Clock className="w-3.5 h-3.5" />}

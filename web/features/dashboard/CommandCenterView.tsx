@@ -287,6 +287,7 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
           <RecentAssetsPanel
             projectId={projectId}
             assets={assets}
+            totalAssets={dashboardQuery.data?.total_assets}
             isLoading={assetsQuery.isLoading}
             isError={assetsQuery.isError}
             error={assetsQuery.error}
