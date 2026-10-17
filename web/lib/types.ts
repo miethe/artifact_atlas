@@ -501,7 +501,6 @@ export interface IntegrationStatus {
 export interface SearchRequest {
   q: string;
   project_id?: string;
-  kinds?: string[];
   limit?: number;
 }
 
