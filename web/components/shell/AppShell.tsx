@@ -37,6 +37,7 @@ export function AppShell({
   rightRailOpen = false,
 }: AppShellProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
 
   // Global single-key navigation shortcuts (P2-13, spec §7.4)
   useGlobalShortcuts(projectId ?? DEFAULT_PROJECT_ID);
@@ -48,16 +49,26 @@ export function AppShell({
      */
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg)]">
       {/* Sidebar */}
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
       <SidebarNav
         projectId={projectId}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        onNavigate={() => setMobileSidebarOpen(false)}
       />
 
       {/* Main column: topbar + content + footer */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* TopBar */}
-        <TopBar projectId={projectId} />
+        <TopBar projectId={projectId} onMenuClick={() => setMobileSidebarOpen(true)} />
 
         {/* Visible label whenever the build permits fixture fallbacks */}
         <DemoDataBanner />
