@@ -19,6 +19,29 @@ def test_list_projects_empty(tmp_registry) -> None:
     assert "has_more" in body
 
 
+@pytest.mark.parametrize("cursor", ["nope", "-1", "", "999", "9" * 5000])
+def test_list_projects_rejects_invalid_cursor(tmp_registry, cursor: str) -> None:
+    resp = client.get("/api/projects", params={"cursor": cursor})
+    assert resp.status_code == 400
+    assert resp.json()["detail"] in {"Invalid cursor", "Cursor is out of range"}
+
+
+def test_list_projects_accepts_server_issued_cursor(tmp_registry) -> None:
+    for index in range(3):
+        response = client.post(
+            "/api/projects",
+            json={"name": f"Project {index}", "slug": f"project-{index}", "status": "active"},
+        )
+        assert response.status_code == 201
+
+    first_page = client.get("/api/projects", params={"limit": 1})
+    assert first_page.status_code == 200
+    cursor = first_page.json()["next_cursor"]
+    next_page = client.get("/api/projects", params={"limit": 1, "cursor": cursor})
+    assert next_page.status_code == 200
+    assert len(next_page.json()["items"]) == 1
+
+
 def test_create_and_get_project(tmp_registry) -> None:
     """POST then GET a project."""
     payload = {
