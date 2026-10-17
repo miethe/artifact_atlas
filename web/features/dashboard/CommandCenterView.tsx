@@ -250,6 +250,7 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
       {/* === KPI Metric Row === */}
       <KPIRow
         stats={dashboardQuery.data}
+        assets={assets}
         isLoading={dashboardQuery.isLoading}
         isError={dashboardQuery.isError}
         projectId={projectId}
