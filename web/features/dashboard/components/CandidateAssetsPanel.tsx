@@ -14,6 +14,7 @@ import { AssetThumbnail } from "@/features/assets/components/AssetThumbnail";
 import { AssetLink } from "@/features/assets/components/AssetLink";
 import { PanelShell } from "./PanelShell";
 import type { Asset } from "@/lib/types";
+import { candidateAssets } from "../candidateAssets";
 
 // ============================================================
 // Thumbnail tile + grid
@@ -115,9 +116,7 @@ export function CandidateAssetsPanel({
 }: CandidateAssetsPanelProps) {
   const candidates = React.useMemo(
     () =>
-      (assets ?? []).filter((a) =>
-        ["candidate", "selected", "in_review", "in_progress"].includes(a.status),
-      ),
+      candidateAssets(assets),
     [assets],
   );
 
