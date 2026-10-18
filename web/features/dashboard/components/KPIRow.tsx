@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import { MetricCard, SkeletonCard } from "@/components/ui";
 import type { DashboardStats } from "@/lib/types";
+import type { Asset } from "@/lib/types";
 import { linkedIntentNodeCount } from "../intentNodes";
+import { candidateAssets } from "../candidateAssets";
 
 // ============================================================
 // KPIRow
@@ -28,6 +30,7 @@ import { linkedIntentNodeCount } from "../intentNodes";
 
 interface KPIRowProps {
   stats: DashboardStats | undefined;
+  assets: Asset[] | undefined;
   isLoading: boolean;
   /** Dashboard stats query failed — asset cards render "—" / "unavailable". */
   isError?: boolean;
@@ -43,6 +46,7 @@ const UNKNOWN = "—";
 
 export function KPIRow({
   stats,
+  assets,
   isLoading,
   isError = false,
   projectId: _projectId,
@@ -64,13 +68,8 @@ export function KPIRow({
   const totalAssets = stats?.total_assets;
   const canonicalCount = stats?.canonical_count;
 
-  // Candidate pipeline — matches CandidateAssetsPanel's filter
-  const candidateCount = stats
-    ? (stats.assets_by_status?.candidate ?? 0) +
-      (stats.assets_by_status?.selected ?? 0) +
-      (stats.assets_by_status?.in_review ?? 0) +
-      (stats.assets_by_status?.in_progress ?? 0)
-    : null;
+  // Both the KPI and CandidateAssetsPanel count the same asset query.
+  const candidateCount = assets ? candidateAssets(assets).length : null;
 
   const intentNodeCount = linkedIntentNodeCount();
 
