@@ -15,6 +15,8 @@ from fastapi import APIRouter, Query
 from app.api._deps import get_asset_service, not_found
 from app.models.search import SearchRequest, SearchResult
 from app.models.vocabulary import AssetStatus, Sensitivity, SourceKind
+from app.repositories.bom import BomRepository
+from app.settings import get_settings
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -65,6 +67,40 @@ def search_assets(
     artifact_type_filter = list(artifact_type) if artifact_type else None
     tag_filter = list(tag) if tag else None
 
+    constrained_asset_ids: set[str] | None = None
+    if intenttree_node_id is not None or bom_slot_id is not None:
+        repo = BomRepository(get_settings().registry_dir)
+        slot_ids: set[str] = set()
+        if bom_slot_id is not None:
+            if repo.get_slot(bom_slot_id) is not None:
+                slot_ids.add(bom_slot_id)
+        else:
+            for bom in repo.list():
+                slot_ids.update(
+                    slot.id
+                    for slot in repo.list_slots(bom.id)
+                    if slot.linked_intenttree_node_id == intenttree_node_id
+                )
+
+        constrained_asset_ids = set()
+        for slot_id in slot_ids:
+            constrained_asset_ids.update(
+                assignment.asset_id
+                for assignment in repo.list_assignments(slot_id)
+                if assignment.assignment_status.value != "rejected"
+            )
+
+        if intenttree_node_id is not None:
+            constrained_asset_ids.update(
+                asset.id
+                for asset in svc.list_assets()
+                if any(
+                    link.target_type.value == "intenttree_node"
+                    and link.target_id == intenttree_node_id
+                    for link in svc.list_asset_links(asset.id)
+                )
+            )
+
     assets, total = svc.search_assets_page(
         project_id=project_id,
         query=q,
@@ -73,6 +109,7 @@ def search_assets(
         source_kind_filter=source_kind_filter,
         artifact_type_filter=artifact_type_filter,
         tag_filter=tag_filter,
+        asset_id_filter=constrained_asset_ids,
         limit=limit,
     )
 

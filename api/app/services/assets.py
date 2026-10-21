@@ -121,6 +121,10 @@ class AssetService:
         """Return a single asset by ID, or None."""
         return self._assets.get(asset_id)
 
+    def list_asset_links(self, asset_id: str):
+        """Return active links for an asset."""
+        return self._assets.list_links(asset_id)
+
     def create_asset(
         self,
         data: AssetCreate,
@@ -332,6 +336,7 @@ class AssetService:
         source_kind_filter: list[str] | None = None,
         artifact_type_filter: list[str] | None = None,
         tag_filter: list[str] | None = None,
+        asset_id_filter: set[str] | None = None,
         limit: int = 50,
     ) -> list[Asset]:
         """In-memory keyword + filter search over assets (first ``limit`` hits).
@@ -347,6 +352,7 @@ class AssetService:
             source_kind_filter=source_kind_filter,
             artifact_type_filter=artifact_type_filter,
             tag_filter=tag_filter,
+            asset_id_filter=asset_id_filter,
             limit=limit,
         )
         return page
@@ -361,6 +367,7 @@ class AssetService:
         source_kind_filter: list[str] | None = None,
         artifact_type_filter: list[str] | None = None,
         tag_filter: list[str] | None = None,
+        asset_id_filter: set[str] | None = None,
         limit: int = 50,
     ) -> tuple[list[Asset], int]:
         """In-memory keyword + filter search returning ``(page, total)``.
@@ -388,6 +395,9 @@ class AssetService:
             ``(first limit matches, total matches before the cap)``.
         """
         assets = self._assets.list(project_id=project_id)
+
+        if asset_id_filter is not None:
+            assets = [a for a in assets if a.id in asset_id_filter]
 
         if query:
             q = query.lower()
