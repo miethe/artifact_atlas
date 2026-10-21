@@ -250,6 +250,7 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
       {/* === KPI Metric Row === */}
       <KPIRow
         stats={dashboardQuery.data}
+        assets={assets}
         isLoading={dashboardQuery.isLoading}
         isError={dashboardQuery.isError}
         projectId={projectId}
@@ -287,6 +288,7 @@ export function CommandCenterView({ projectId }: CommandCenterViewProps) {
           <RecentAssetsPanel
             projectId={projectId}
             assets={assets}
+            totalAssets={dashboardQuery.data?.total_assets}
             isLoading={assetsQuery.isLoading}
             isError={assetsQuery.isError}
             error={assetsQuery.error}

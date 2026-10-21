@@ -11,7 +11,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderHook, screen, waitFor } from "@testing-library/react";
 import { renderWithQuery, Wrapper } from "./test-utils";
-import { FIXTURE_BOM, FIXTURE_PROJECTS, FIXTURE_AUDIT_EVENTS } from "@/lib/fixtures";
+import { FIXTURE_BOM, FIXTURE_PROJECTS, FIXTURE_AUDIT_EVENTS, FIXTURE_ASSETS } from "@/lib/fixtures";
 import { FIXTURE_INTENT_NODES } from "@/features/dashboard/intentNodes";
 import { liveOrDemo, isDemoDataEnabled } from "@/lib/demoData";
 import { useBom } from "@/lib/hooks/useBom";
@@ -21,6 +21,7 @@ import { AgentActivityPanel } from "@/features/dashboard/components/AgentActivit
 import { ActiveNodesPanel } from "@/features/dashboard/components/ActiveNodesPanel";
 import { KPIRow } from "@/features/dashboard/components/KPIRow";
 import { CanonicalArtifactsPanel } from "@/features/dashboard/components/CanonicalArtifactsPanel";
+import { CandidateAssetsPanel } from "@/features/dashboard/components/CandidateAssetsPanel";
 import { DemoDataBanner } from "@/components/shell/DemoDataBanner";
 import { AssetBrowseView, browseCountLabel } from "@/features/assets/AssetBrowseView";
 import { relativeTime } from "@/lib/relativeTime";
@@ -210,7 +211,7 @@ describe("KPI row", () => {
 
   it("renders unknown (—) values, not zeros, when stats failed", () => {
     renderWithQuery(
-      <KPIRow stats={undefined} isLoading={false} isError projectId="proj_live" openTaskCount={null} />,
+      <KPIRow assets={undefined} stats={undefined} isLoading={false} isError projectId="proj_live" openTaskCount={null} />,
     );
     const region = screen.getByRole("region", { name: "Key metrics" });
     expect(region).not.toHaveTextContent(/\b0\b/);
@@ -222,12 +223,29 @@ describe("KPI row", () => {
 
   it("renders verified live values on success (KPI)", () => {
     renderWithQuery(
-      <KPIRow stats={STATS} isLoading={false} projectId="proj_live" openTaskCount={4} />,
+      <KPIRow assets={[]} stats={STATS} isLoading={false} projectId="proj_live" openTaskCount={4} />,
     );
     expect(screen.getByText("2559")).toBeInTheDocument();
     expect(screen.getByText("11")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.queryByText("unavailable")).not.toBeInTheDocument();
+  });
+
+  it("derives the KPI from the same asset list and statuses as the candidate panel", () => {
+    const assets = Array.from({ length: 15 }, (_, index) => ({
+      ...FIXTURE_ASSETS[0],
+      id: `candidate-${index}`,
+      status: (["candidate", "selected", "in_review", "in_progress"] as const)[index % 4],
+    }));
+    const stats = { ...STATS, assets_by_status: {} };
+    renderWithQuery(
+      <>
+        <KPIRow assets={assets} stats={stats} isLoading={false} projectId="proj_live" openTaskCount={0} />
+        <CandidateAssetsPanel projectId="proj_live" assets={assets} isLoading={false} />
+      </>,
+    );
+    expect(screen.getByText("15")).toBeInTheDocument();
+    expect(screen.getByText("15 in pipeline")).toBeInTheDocument();
   });
 });
 

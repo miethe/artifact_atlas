@@ -56,6 +56,12 @@ import pytest
 
 from app.repositories.assets import AssetRepository
 
+
+@pytest.fixture()
+def tmp_registry(empty_report_registry: Path) -> Path:
+    """Backfill tests assert against reports created in their isolated run."""
+    return empty_report_registry
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "backfill_reports.py"
 

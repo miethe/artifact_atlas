@@ -299,6 +299,26 @@ def _check_preview_access(asset: object) -> JSONResponse | None:
 _RANGE_HEADER_RE = re.compile(r"^bytes=(\d+-\d*|-\d+)$")
 
 
+class _RFCCompliantFileResponse(FileResponse):
+    """Keep Starlette's range behavior and normalize its 416 range unit."""
+
+    async def __call__(self, scope, receive, send) -> None:
+        async def normalize_unsatisfied_range(message):
+            if message["type"] == "http.response.start" and message["status"] == 416:
+                headers = []
+                for name, value in message["headers"]:
+                    if (
+                        name.lower() == b"content-range"
+                        and not value.startswith(b"bytes ")
+                    ):
+                        value = b"bytes " + value
+                    headers.append((name, value))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await super().__call__(scope, receive, normalize_unsatisfied_range)
+
+
 def _validate_range_header(value: str | None) -> JSONResponse | None:
     """Return a 400 JSONResponse for a syntactically malformed Range header.
 
@@ -533,9 +553,11 @@ def get_asset_content(assetId: str, request: Request) -> FileResponse:
     - No related/remote resources are auto-fetched (fetchRelated:false semantics).
 
     HTTP Range requests (RFC 7233) are supported transparently via
-    Starlette's ``FileResponse``: a request carrying a ``Range`` header
+    the response wrapper around Starlette's ``FileResponse``: a request
+    carrying a ``Range`` header
     gets back ``206 Partial Content`` with ``Content-Range``; an
-    out-of-bounds range gets ``416 Range Not Satisfiable``; a request with
+    out-of-bounds range gets ``416 Range Not Satisfiable`` with an RFC-compliant
+    ``Content-Range`` value; a request with
     no ``Range`` header gets the unchanged full-body ``200`` response.
     ``Accept-Ranges: bytes`` is emitted on every response. This lets the
     AssetViewer VideoRenderer stream large video blobs without buffering
@@ -614,7 +636,7 @@ def get_asset_content(assetId: str, request: Request) -> FileResponse:
         # instead of naive quote-escaping of source_path.name.
         headers["Content-Disposition"] = _content_disposition_header(source_path.name)
 
-    return FileResponse(
+    return _RFCCompliantFileResponse(
         path=str(source_path),
         media_type=mime,
         headers=headers,

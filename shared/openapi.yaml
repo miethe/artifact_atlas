@@ -2323,9 +2323,13 @@ components:
     cursor:
       name: cursor
       in: query
-      description: Opaque cursor for next page (from previous response next_cursor)
+      description: >-
+        Opaque pagination token returned as next_cursor. The current token format is a
+        non-negative decimal starting index; pass it unchanged. Malformed, negative, and
+        offsets beyond the current result set are rejected with HTTP 400.
       schema:
         type: string
+        pattern: '^[0-9]+$'
 
     limit:
       name: limit

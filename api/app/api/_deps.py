@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.services.assets import AssetService
@@ -75,16 +76,21 @@ def apply_cursor_page(
     """Apply cursor-based pagination to a list of dicts or Pydantic models.
 
     Items are assumed pre-filtered and pre-sorted by the caller.
-    The cursor encodes the starting index as a base-10 integer string.
+    The opaque cursor token is currently a non-negative decimal starting index.
+    Invalid tokens and offsets beyond the result set are rejected with HTTP 400.
 
     Returns a CursorPage-shaped dict ready to be JSON-serialised.
     """
     start = 0
-    if cursor:
+    if cursor is not None:
+        if re.fullmatch(r"[0-9]+", cursor) is None:
+            raise HTTPException(status_code=400, detail="Invalid cursor")
         try:
             start = int(cursor)
         except ValueError:
-            start = 0
+            raise HTTPException(status_code=400, detail="Invalid cursor") from None
+        if start > len(items):
+            raise HTTPException(status_code=400, detail="Cursor is out of range")
 
     page = items[start : start + limit]
     has_more = (start + limit) < len(items)

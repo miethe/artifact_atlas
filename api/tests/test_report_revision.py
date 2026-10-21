@@ -31,6 +31,12 @@ from app.main import app
 from app.services.import_index import ImportService
 from app.settings import get_settings
 
+
+@pytest.fixture()
+def tmp_registry(empty_report_registry: Path) -> Path:
+    """Revision assertions count only reports created by the test."""
+    return empty_report_registry
+
 client = TestClient(app)
 
 

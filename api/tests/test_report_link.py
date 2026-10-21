@@ -25,6 +25,12 @@ from app.services.import_index import ImportError as ReportIngestError
 from app.services.import_index import ImportService
 
 
+@pytest.fixture()
+def tmp_registry(empty_report_registry: Path) -> Path:
+    """Report-link assertions start with no canonical reports."""
+    return empty_report_registry
+
+
 def _envelope(**overrides: object) -> dict:
     base = {
         "envelope_version": "1.0",

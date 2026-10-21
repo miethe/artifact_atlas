@@ -30,32 +30,6 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for jsonl in REGISTRY_DIR.glob("*.jsonl"):
         shutil.copy(jsonl, reg / jsonl.name)
 
-    # Canonical registry data evolves, but report-ingest tests assert deltas
-    # from an empty report corpus. Keep those tests deterministic while still
-    # retaining the non-report seed data used throughout the suite.
-    asset_path = reg / "assets.jsonl"
-    assets = _jl.read_all(asset_path, include_deleted=True)
-    report_ids = {
-        record["id"]
-        for record in assets
-        if record.get("artifact_type_id") == "delivery_report"
-    }
-    if report_ids:
-        _jl._atomic_write_lines(
-            asset_path,
-            [record for record in assets if record.get("id") not in report_ids],
-        )
-        for name, id_field in (("asset_links.jsonl", "asset_id"), ("events.jsonl", "target_id")):
-            path = reg / name
-            _jl._atomic_write_lines(
-                path,
-                [
-                    record
-                    for record in _jl.read_all(path, include_deleted=True)
-                    if record.get(id_field) not in report_ids
-                ],
-            )
-
     # A canonical fleet snapshot is a runtime seed for the product surface,
     # but overview route tests own their snapshot chronology explicitly.
     # Start those isolated registries empty so newer/older and missing-state
@@ -108,3 +82,31 @@ def tmp_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     # Cleanup
     _settings_mod._reset_settings()
+
+
+@pytest.fixture()
+def empty_report_registry(tmp_registry: Path) -> Path:
+    """Seeded registry without canonical delivery reports for delta tests."""
+    asset_path = tmp_registry / "assets.jsonl"
+    assets = _jl.read_all(asset_path, include_deleted=True)
+    report_ids = {
+        record["id"]
+        for record in assets
+        if record.get("artifact_type_id") == "delivery_report"
+    }
+    if report_ids:
+        _jl._atomic_write_lines(
+            asset_path,
+            [record for record in assets if record.get("id") not in report_ids],
+        )
+        for name, id_field in (("asset_links.jsonl", "asset_id"), ("events.jsonl", "target_id")):
+            path = tmp_registry / name
+            _jl._atomic_write_lines(
+                path,
+                [
+                    record
+                    for record in _jl.read_all(path, include_deleted=True)
+                    if record.get(id_field) not in report_ids
+                ],
+            )
+    return tmp_registry
