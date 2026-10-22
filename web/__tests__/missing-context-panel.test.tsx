@@ -22,7 +22,7 @@ describe("MissingContextPanel", () => {
   it("renders a slot title and falls back to the slot id when it is absent", () => {
     vi.mocked(useBomGaps).mockReturnValue({
       data: [
-        { ...missingSlot, title: "Security Review" },
+        { ...missingSlot, id: "slot_security_review_title", title: "Security Review" },
         missingSlot,
       ],
       isLoading: false,
