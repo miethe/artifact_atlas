@@ -370,6 +370,8 @@ export interface BomSlot {
   id: string;
   bom_id: string;
   name: string;
+  /** Optional display title provided by some BOM data sources. */
+  title?: string | null;
   description?: string | null;
   artifact_type_id?: string | null;
   phase?: SlotPhase;
@@ -501,7 +503,6 @@ export interface IntegrationStatus {
 export interface SearchRequest {
   q: string;
   project_id?: string;
-  kinds?: string[];
   limit?: number;
 }
 

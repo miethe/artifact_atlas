@@ -295,8 +295,8 @@ class TestPackFromNode:
         assert len(node_items) >= 1
         assert node_items[0]["item_id"] == "node_items_test"
 
-    def test_from_node_marks_missing_meatywiki_integration(self, tmp_registry: Path) -> None:
-        """MeatyWiki integration is not live — should be marked as missing."""
+    def test_from_node_marks_absent_meatywiki_refs(self, tmp_registry: Path) -> None:
+        """An absent ref is explicit and never fabricated as a page ID."""
         pid = _create_project("From Node MW")
         resp = client.post(
             "/api/context-packs/from-node/node_mw_test",
@@ -309,12 +309,52 @@ class TestPackFromNode:
         )
         pack_id = resp.json()["id"]
         detail = client.get(f"/api/context-packs/{pack_id}").json()
-        # There should be a note item marking the missing MeatyWiki integration
+        # There should be a note item marking that no ref was supplied.
         note_items = [i for i in detail["items"] if i["item_type"] == "note"]
         assert len(note_items) >= 1
-        # The note ID signals the missing integration
-        note_id = note_items[0]["item_id"]
-        assert "meatywiki" in note_id or "missing" in note_id
+        assert any(i["item_id"] == "meatywiki_refs_absent" for i in note_items)
+        assert not any(i["item_type"] == "meatywiki_page" for i in detail["items"])
+
+    def test_from_node_includes_approved_meatywiki_ref_with_provenance(self, tmp_registry: Path) -> None:
+        pid = _create_project("From Node MW Approved")
+        node_id = "node_mw_approved"
+        links_path = tmp_registry / "asset_links.jsonl"
+        links_path.write_text(json.dumps({
+            "id": "ref-link-1", "asset_id": "asset-source-1",
+            "target_type": "intenttree_node", "target_id": node_id,
+            "source_type": "meatywiki_page", "source_pointer": "vault://decisions/page-42.md",
+            "approval_status": "approved", "provenance": "node-link-export:abc123",
+        }) + "\n", encoding="utf-8")
+
+        resp = client.post(
+            f"/api/context-packs/from-node/{node_id}",
+            json={"project_id": pid, "include_assets": False, "include_bom_slots": False},
+        )
+        assert resp.status_code == 201, resp.text
+        items = client.get(f"/api/context-packs/{resp.json()['id']}").json()["items"]
+        page_items = [i for i in items if i["item_type"] == "meatywiki_page"]
+        assert len(page_items) == 1
+        assert page_items[0]["item_id"] == "vault://decisions/page-42.md"
+        assert page_items[0]["provenance"] == {
+            "node_id": node_id, "ref_id": "ref-link-1", "source": "node-link-export:abc123"
+        }
+
+    def test_from_node_marks_unapproved_meatywiki_ref_unavailable(self, tmp_registry: Path) -> None:
+        pid = _create_project("From Node MW Unapproved")
+        node_id = "node_mw_unapproved"
+        (tmp_registry / "asset_links.jsonl").write_text(json.dumps({
+            "id": "ref-link-pending", "asset_id": "asset-source-2",
+            "target_type": "intenttree_node", "target_id": node_id,
+            "source_type": "meatywiki_page", "source_pointer": "vault://draft.md",
+            "approval_status": "pending",
+        }) + "\n", encoding="utf-8")
+        resp = client.post(
+            f"/api/context-packs/from-node/{node_id}",
+            json={"project_id": pid, "include_assets": False, "include_bom_slots": False},
+        )
+        items = client.get(f"/api/context-packs/{resp.json()['id']}").json()["items"]
+        assert any(i["item_id"] == "meatywiki_refs_unavailable" for i in items)
+        assert not any(i["item_type"] == "meatywiki_page" for i in items)
 
     def test_from_node_with_linked_assets(self, tmp_registry: Path) -> None:
         """When assets are linked to the node, they should appear in the pack."""

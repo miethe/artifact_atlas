@@ -218,8 +218,8 @@ class ContextPackService:
 
         - Collects all assets linked to the node via asset_links.
         - Optionally adds BOM slot refs linked to the node.
-        - Optionally adds MeatyWiki page refs (stub — integration not live).
-        - Uses refs only; marks missing integrations clearly in notes.
+        - Optionally adds approved MeatyWiki page refs from node link records.
+        - Uses source pointers only; marks absent or unavailable refs explicitly.
         - All items default to include_mode=metadata (safest default).
         """
         from app.models.vocabulary import ContextPackAudience, ContextPackTargetType
@@ -292,21 +292,40 @@ class ContextPackService:
                 )
             item_count += len(slot_ids)
 
-        # -- MeatyWiki page refs (stub — integration not live)
+        # -- Approved MeatyWiki page refs carried by node-centric link records.
         if include_meatywiki_pages:
-            mw_note_id = f"item_{uuid.uuid4().hex[:12]}"
-            self._repo.add_item(
-                mw_note_id,
-                pack_id,
-                ContextPackItemCreate(
-                    item_type=ContextPackItemType.note,
-                    item_id=f"meatywiki_node_{node_id}_missing_integration",
-                    include_mode=IncludeMode.metadata,
-                    display_order=item_count,
-                    required=False,
-                ),
-            )
-            item_count += 1
+            meatywiki_refs = self._get_approved_meatywiki_refs(node_id)
+            for ref in meatywiki_refs:
+                item_id = f"item_{uuid.uuid4().hex[:12]}"
+                self._repo.add_item(
+                    item_id,
+                    pack_id,
+                    ContextPackItemCreate(
+                        item_type=ContextPackItemType.meatywiki_page,
+                        item_id=ref["source_pointer"],
+                        include_mode=IncludeMode.metadata,
+                        display_order=item_count,
+                        required=False,
+                        provenance={"node_id": node_id, "ref_id": ref.get("id"), "source": ref.get("provenance")},
+                    ),
+                )
+                item_count += 1
+
+            if not meatywiki_refs:
+                status = "unavailable" if self._has_meatywiki_ref(node_id) else "absent"
+                self._repo.add_item(
+                    f"item_{uuid.uuid4().hex[:12]}",
+                    pack_id,
+                    ContextPackItemCreate(
+                        item_type=ContextPackItemType.note,
+                        item_id=f"meatywiki_refs_{status}",
+                        include_mode=IncludeMode.metadata,
+                        display_order=item_count,
+                        required=False,
+                        provenance={"node_id": node_id, "status": status},
+                    ),
+                )
+                item_count += 1
 
         self._audit.emit(
             AuditEventType.context_pack_created,
@@ -317,7 +336,11 @@ class ContextPackService:
             payload={
                 "from_node": node_id,
                 "items_added": item_count,
-                "missing_integrations": ["meatywiki"] if include_meatywiki_pages else [],
+                "meatywiki_refs": (
+                    "resolved" if include_meatywiki_pages and meatywiki_refs
+                    else status if include_meatywiki_pages
+                    else "not_requested"
+                ),
             },
         )
         return pack
@@ -727,6 +750,40 @@ class ContextPackService:
             return result
         except Exception:
             return []
+
+    def _get_approved_meatywiki_refs(self, node_id: str) -> list[dict[str, Any]]:
+        """Resolve approved MeatyWiki refs from node link-contract records.
+
+        Link records use ``target_type=intenttree_node`` and carry a typed
+        ``source_type=meatywiki_page``, the page's ``source_pointer``, and an
+        explicit ``approval_status=approved``. Unapproved or incomplete refs
+        are never exposed as page items.
+        """
+        from app.repositories.jsonl import read_where
+
+        links = read_where(
+            self._registry_dir / "asset_links.jsonl",
+            lambda record: record.get("target_type") == "intenttree_node"
+            and record.get("target_id") == node_id
+            and record.get("source_type") == "meatywiki_page",
+        )
+        return [
+            record for record in links
+            if record.get("approval_status") == "approved"
+            and isinstance(record.get("source_pointer"), str)
+            and record["source_pointer"].strip()
+        ]
+
+    def _has_meatywiki_ref(self, node_id: str) -> bool:
+        """Whether a node has a MeatyWiki ref that is not currently usable."""
+        from app.repositories.jsonl import read_where
+
+        return bool(read_where(
+            self._registry_dir / "asset_links.jsonl",
+            lambda record: record.get("target_type") == "intenttree_node"
+            and record.get("target_id") == node_id
+            and record.get("source_type") == "meatywiki_page",
+        ))
 
     def _get_bom_slots_for_node(self, node_id: str) -> list[str]:
         """Return BOM slot IDs linked to an IntentTree node."""

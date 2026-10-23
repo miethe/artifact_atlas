@@ -36,6 +36,7 @@ const GAP_STATUS_CLASSES: Partial<Record<BomSlotStatus, string>> = {
 function GapRow({ slot }: { slot: BomSlot }) {
   // High priority: a required slot with no coverage at all (P2-10 urgency treatment).
   const isHighPriority = slot.status === "missing" && !!slot.required;
+  const slotTitle = slot.title?.trim() || slot.name?.trim() || slot.id;
   return (
     <div
       className={clsx(
@@ -51,7 +52,7 @@ function GapRow({ slot }: { slot: BomSlot }) {
         />
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-[var(--ink)] truncate leading-tight">
-            {slot.name}
+            {slotTitle}
           </p>
           {slot.phase && (
             <p className="text-[10px] text-[var(--ink-faint)] truncate leading-tight mt-px capitalize">

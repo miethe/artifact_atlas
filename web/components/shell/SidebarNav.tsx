@@ -281,12 +281,16 @@ interface SidebarNavProps {
   projectId?: string;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  mobileOpen?: boolean;
+  onNavigate?: () => void;
 }
 
 export function SidebarNav({
   projectId = DEFAULT_PROJECT_ID,
   collapsed = false,
   onCollapsedChange,
+  mobileOpen = false,
+  onNavigate,
 }: SidebarNavProps) {
   const pathname = usePathname();
 
@@ -301,7 +305,11 @@ export function SidebarNav({
       aria-label="Project navigation"
       className={clsx(
         "flex flex-col h-full border-r border-[var(--border)] bg-[var(--surface)] transition-all duration-200",
-        collapsed ? "w-12" : "w-52",
+        "md:relative md:z-auto md:shadow-none",
+        mobileOpen
+          ? "fixed inset-y-0 left-0 z-50 w-52 shadow-xl md:static"
+          : "hidden md:flex",
+        collapsed ? "md:w-12" : "md:w-52",
       )}
     >
       {/* Brand */}
@@ -340,6 +348,7 @@ export function SidebarNav({
                   <li key={item.label}>
                     <Link
                       href={item.href(projectId)}
+                      onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       title={collapsed ? item.label : undefined}
                       className={clsx(
