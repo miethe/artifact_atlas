@@ -213,6 +213,7 @@ async def upload_to_inbox(
     files: list[UploadFile] = File(...),
     sensitivity: str | None = Form(None),
     agent_access: str | None = Form(None),
+    artifact_type_id: str | None = Form(None),
 ) -> dict:
     """Upload one or more files into the project inbox (multipart)."""
     settings = get_settings()
@@ -229,6 +230,7 @@ async def upload_to_inbox(
             sensitivity=sensitivity,
             agent_access=agent_access,
             mime_type=f.content_type,
+            artifact_type_id=artifact_type_id,
             actor_id="web",
         )
         asset_ids.append(result.asset.id)
