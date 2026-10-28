@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.models.asset import Asset
 from app.repositories import jsonl
-from app.services.revisions import RevisionService
+from app.services.revisions import OutsideWorkspaceError, RevisionService
 
 
 def migrate(registry_dir: Path, direction: str, *, apply: bool = False) -> dict:
@@ -55,11 +55,11 @@ def migrate(registry_dir: Path, direction: str, *, apply: bool = False) -> dict:
                 continue
             try:
                 path = service.resolve(uri)
-            except ValueError:
+            except OutsideWorkspaceError:
                 classify("pointer_only_outside_workspace", asset.id)
                 continue
             if not path.is_file():
-                if asset.storage_uri or asset.hash_sha256:
+                if not path.exists() and (asset.storage_uri or asset.hash_sha256):
                     classify("pointer_only_missing_blob", asset.id)
                     continue
                 skipped.append(asset.id)

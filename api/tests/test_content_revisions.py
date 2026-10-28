@@ -219,7 +219,7 @@ def _seed_pointer_batch(tmp_registry, tmp_path):
     return good
 
 
-def test_pointer_only_outside_workspace_untouched_and_batch_migrates(tmp_registry, tmp_path):
+def test_pointer_only_outside_workspace_parsed_equal_and_batch_migrates(tmp_registry, tmp_path):
     good = _seed_pointer_batch(tmp_registry, tmp_path)
     try:
         before = (tmp_registry / "assets.jsonl").read_bytes()
@@ -252,6 +252,36 @@ def test_pointer_only_missing_blob_with_hash_untouched(tmp_registry):
     result = migrate(tmp_registry, "up", apply=True)
     assert result["pointer_only"]["pointer_only_missing_blob"] == {"count": 1, "ids": ["gone"]}
     assert (tmp_registry / "assets.jsonl").read_bytes() == before
+
+
+def test_directory_with_hash_is_metadata_only(tmp_registry):
+    jsonl._atomic_write_lines(tmp_registry / "assets.jsonl", [])
+    folder = RevisionService(tmp_registry).workspace_root / "pointer_dir_case"
+    folder.mkdir(exist_ok=True)
+    try:
+        AssetRepository(tmp_registry).create("adir", AssetCreate(
+            title="D", source_kind="local", uri=f"file://{folder}", mime_type="text/plain",
+            sensitivity="personal", agent_access="preview_allowed"))
+        jsonl.update_record(tmp_registry / "assets.jsonl", "adir", {"hash_sha256": "ab" * 32})
+        result = migrate(tmp_registry, "up")
+        assert result["metadata_only"] == ["adir"]
+        assert result["pointer_only"]["pointer_only_missing_blob"]["count"] == 0
+    finally:
+        folder.rmdir()
+
+
+def test_non_outside_workspace_resolve_error_still_aborts(tmp_registry, monkeypatch):
+    good = _seed_pointer_batch(tmp_registry, None)
+    try:
+        def boom(self, uri):
+            raise ValueError("unexpected resolve failure")
+        monkeypatch.setattr(RevisionService, "resolve", boom)
+        before = (tmp_registry / "assets.jsonl").read_bytes()
+        with pytest.raises(ValueError, match="unexpected resolve failure"):
+            migrate(tmp_registry, "up", apply=True)
+        assert (tmp_registry / "assets.jsonl").read_bytes() == before
+    finally:
+        good.unlink(missing_ok=True)
 
 
 def test_worst_failure_hash_mismatch_still_aborts_batch(tmp_registry, tmp_path):

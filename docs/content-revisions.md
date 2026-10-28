@@ -59,7 +59,7 @@ Forward migration validates every legacy local source before modifying assets,
 copies its bytes into the managed store, and records one snapshot per asset.
 Known hashes must match: a hash mismatch on an existing file still blocks the
 migration (corruption, not absence). Assets that cannot be revisioned are
-classified, left unmodified, and given no revision: `pointer_only_outside_workspace`
+classified, left unchanged (parsed-equal; the registry file is reserialized on write), and given no revision: `pointer_only_outside_workspace`
 (path resolves outside the workspace) and `pointer_only_missing_blob` (file
 missing but a storage_uri or hash is recorded). They are reported under
 `pointer_only` (count and ids per class); `--apply` also writes
