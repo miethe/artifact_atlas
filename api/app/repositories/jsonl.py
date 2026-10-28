@@ -17,8 +17,12 @@ import logging
 import os
 import tempfile
 from datetime import datetime, timezone
+from functools import wraps
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable, Iterator
+
+from app.repositories.locking import registry_writer
 
 logger = logging.getLogger(__name__)
 
@@ -167,11 +171,22 @@ def _json_default(obj: Any) -> Any:
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _asset_writer(operation):
+    """Prevent an unrelated asset rewrite from losing a revision pointer publication."""
+    @wraps(operation)
+    def wrapped(path, *args, **kwargs):
+        lease = registry_writer(path.parent) if path.name == "assets.jsonl" else nullcontext()
+        with lease:
+            return operation(path, *args, **kwargs)
+    return wrapped
+
+
 # ---------------------------------------------------------------------------
 # Append (create)
 # ---------------------------------------------------------------------------
 
 
+@_asset_writer
 def append_record(path: Path, record: dict[str, Any]) -> dict[str, Any]:
     """Append a new record to the JSONL file (atomic).
 
@@ -181,8 +196,6 @@ def append_record(path: Path, record: dict[str, Any]) -> dict[str, Any]:
     """
     dir_path = path.parent
     dir_path.mkdir(parents=True, exist_ok=True)
-
-    line = json.dumps(record, ensure_ascii=False, default=_json_default) + "\n"
 
     # Append atomically: write to temp then append-rename isn't truly atomic on all FSes,
     # so we read + rewrite to keep it consistent with update path.
@@ -197,6 +210,7 @@ def append_record(path: Path, record: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+@_asset_writer
 def update_record(
     path: Path,
     record_id: str,
@@ -276,6 +290,7 @@ def tombstone_record(
 # ---------------------------------------------------------------------------
 
 
+@_asset_writer
 def hard_delete_record(
     path: Path,
     record_id: str,

@@ -1292,3 +1292,24 @@ IntentTree: `node_01M226VB254G3QGVV950E79SVC`.
 A dead API is now visible as an error instead of plausible fake data. Demo and screenshot builds
 must opt in explicitly. Other page-vs-population counts (such as the dashboard Recent Assets
 subtitle) are tracked as separate follow-ups rather than widened into M0.
+
+## D-024 — Append-only managed content revisions
+
+2026-10-28 · node_01M604SXKS5EVBTY2BN2423KRT · authority: migration
+
+Content attaches append immutable revision snapshots before advancing the asset's
+current pointer. Asset compatibility fields mirror current content; historical
+reads address revision IDs or SHA256 explicitly and never fall back to current.
+Restore appends a new revision. Managed blob publication uses POSIX no-replace
+hard links; a reentrant registry writer lease serializes asset writes. This
+narrowly extends D-007's original atomic-rewrite/no-lock approach: immutable
+revision JSONL uses durable append, while mutable asset records retain atomic
+replacement. See the standard-library contracts for
+[os.link](https://docs.python.org/3/library/os.html#os.link) and
+[flock](https://docs.python.org/3/library/fcntl.html#fcntl.flock).
+
+The reversible backfill journals before/after asset records and retains immutable
+history on downgrade. Missing source bytes or rollback conflicts block execution.
+Production migration is gated through Nick's HR-attest lane, not API startup.
+See [content revision operations](content-revisions.md) for API, migration, crash,
+and pilot retry boundaries.

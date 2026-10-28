@@ -282,7 +282,7 @@ def summarize_asset(assetId: str) -> dict:
 
 @router.put("/assets/{assetId}/content", response_model=Asset)
 async def put_asset_content(assetId: str, file: UploadFile = File(...)) -> Asset:
-    """Upload or replace the content blob for an existing asset."""
+    """Append an immutable revision and advance the asset current pointer."""
     settings = get_settings()
     svc = ImportService(settings.registry_dir)
     asset = svc.attach_content(

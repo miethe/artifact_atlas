@@ -18,6 +18,7 @@ from app.api import (
     preview,
     projects,
     reports,
+    revisions,
     search,
     templates,
 )
@@ -25,6 +26,7 @@ from app.api import (
 all_routers = [
     projects.router,
     assets.router,
+    revisions.router,
     inbox.router,
     templates.router,
     bom.router,

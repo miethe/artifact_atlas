@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.vocabulary import (
     AgentAccess,
@@ -39,6 +39,7 @@ class Asset(BaseModel):
     source_kind: SourceKind
     uri: str
     original_uri: str | None = None
+    current_revision_id: str | None = None
     storage_uri: str | None = None
     mime_type: str | None = None
     size_bytes: int | None = None
@@ -83,6 +84,15 @@ class AssetUpdate(BaseModel):
     """Request body for PATCH /api/assets/{assetId}."""
 
     model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_content_pointer_edits(cls, value: Any) -> Any:
+        if isinstance(value, dict) and {
+            "current_revision_id", "storage_uri", "hash_sha256", "size_bytes", "mime_type"
+        }.intersection(value):
+            raise ValueError("Content fields must be changed through attach or revision restore")
+        return value
 
     title: str | None = None
     description: str | None = None
