@@ -57,9 +57,14 @@ this migration does not authorize its application to production.
 
 Forward migration validates every legacy local source before modifying assets,
 copies its bytes into the managed store, and records one snapshot per asset.
-Known hashes must match. Missing content-bearing sources, out-of-workspace paths,
-and mismatches block the migration; fix the source/mount instead of dropping the
-asset or fabricating content. Metadata-only and remote pointers receive no fake
+Known hashes must match: a hash mismatch on an existing file still blocks the
+migration (corruption, not absence). Assets that cannot be revisioned are
+classified, left unchanged (parsed-equal; the registry file is reserialized on write), and given no revision: `pointer_only_outside_workspace`
+(path resolves outside the workspace) and `pointer_only_missing_blob` (file
+missing but a storage_uri or hash is recorded). They are reported under
+`pointer_only` (count and ids per class); `--apply` also writes
+`migrations/content_revisions_v1_report.json` in the registry dir, and a dry run
+only prints the JSON. Nothing is deleted or rewritten, and nothing is fabricated. Metadata-only and remote pointers receive no fake
 revision; their IDs are reported. Existing source files are never altered.
 
 Before/after asset images live in
