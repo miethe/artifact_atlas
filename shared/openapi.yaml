@@ -546,11 +546,12 @@ paths:
     put:
       operationId: putAssetContent
       tags: [assets]
-      summary: Upload or replace the content blob for an existing asset
+      summary: Append an immutable content revision for an existing asset
       description: >
         Accepts a single binary file via multipart/form-data and stores it in
         the managed content store using content-addressed storage. Updates the
-        asset's storage_uri so the preview proxy can serve the bytes.
+        asset's current_revision_id and compatibility content fields so the preview
+        proxy can serve the latest bytes. Prior revisions and bytes are retained.
       requestBody:
         required: true
         content:
@@ -574,6 +575,145 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
+
+  /api/assets/{assetId}/revisions:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+    get:
+      operationId: listContentRevisions
+      tags: [assets]
+      summary: List immutable content revisions in append order
+      responses:
+        "200":
+          description: Revision metadata, including historical content hashes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContentRevision"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/assets/{assetId}/revisions/{revisionId}:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+      - name: revisionId
+        in: path
+        required: true
+        description: Exact revision ID or lowercase SHA256, scoped to this asset; never falls back to current
+        schema:
+          type: string
+    get:
+      operationId: getContentRevision
+      tags: [assets]
+      summary: Get exact revision metadata
+      responses:
+        "200":
+          description: Exact selected revision (SHA256 selects earliest matching metadata)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentRevision"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/assets/{assetId}/revisions/{revisionId}/content:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+      - name: revisionId
+        in: path
+        required: true
+        description: Exact revision ID or lowercase SHA256, scoped to this asset; never falls back to current
+        schema:
+          type: string
+    get:
+      operationId: getRevisionContent
+      tags: [assets]
+      summary: Read exact revision bytes
+      responses:
+        "200":
+          description: Exact selected revision (SHA256 selects earliest matching metadata)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            X-Content-SHA256:
+              schema:
+                type: string
+            X-Revision-ID:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          description: Asset content policy denied access
+        "409":
+          description: Content integrity failure (no bytes served or restored)
+
+  /api/assets/{assetId}/revisions/{revisionId}/export:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+      - name: revisionId
+        in: path
+        required: true
+        description: Exact revision ID or lowercase SHA256, scoped to this asset; never falls back to current
+        schema:
+          type: string
+    get:
+      operationId: exportContentRevision
+      tags: [assets]
+      summary: Export exact revision bytes
+      responses:
+        "200":
+          description: Exact selected revision (SHA256 selects earliest matching metadata)
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          headers:
+            X-Content-SHA256:
+              schema:
+                type: string
+            X-Revision-ID:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          description: Asset content policy denied access
+        "409":
+          description: Content integrity failure (no bytes served or restored)
+
+  /api/assets/{assetId}/revisions/{revisionId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/assetId"
+      - name: revisionId
+        in: path
+        required: true
+        description: Exact revision ID or lowercase SHA256, scoped to this asset; never falls back to current
+        schema:
+          type: string
+    post:
+      operationId: restoreContentRevision
+      tags: [assets]
+      summary: Restore historical bytes as a new latest revision
+      responses:
+        "200":
+          description: Exact selected revision (SHA256 selects earliest matching metadata)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          description: Asset content policy denied access
+        "409":
+          description: Content integrity failure (no bytes served or restored)
 
   # ---------------------------------------------------------------------------
   # Inbox
@@ -2719,6 +2859,36 @@ components:
 
     # ---- Assets ----
 
+    ContentRevision:
+      type: object
+      description: Immutable append-only snapshot; no update or delete API
+      required: [id, asset_id, sha256, size_bytes, storage_uri, created_at, filename]
+      properties:
+        id:
+          type: string
+        asset_id:
+          type: string
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        size_bytes:
+          type: integer
+          minimum: 0
+        storage_uri:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        mime_type:
+          type: string
+          nullable: true
+        filename:
+          type: string
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+
     Asset:
       type: object
       required: [id, title, source_kind, uri, status, sensitivity, agent_access, captured_at]
@@ -2753,6 +2923,10 @@ components:
         original_uri:
           type: string
           nullable: true
+        current_revision_id:
+          type: string
+          nullable: true
+          description: Latest appended content revision; null for unbackfilled or metadata-only assets
         storage_uri:
           type: string
           nullable: true

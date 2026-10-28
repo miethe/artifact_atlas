@@ -37,6 +37,7 @@ from app.repositories.assets import AssetRepository
 from app.repositories.projects import ProjectRepository
 from app.repositories import jsonl as _jl
 from app.services.audit import AuditService
+from app.services.revisions import RevisionService, commit_blob
 from app.settings import get_settings
 
 # Sentinel distinguishing "argument not supplied" from an explicit ``None``
@@ -465,18 +466,12 @@ class ImportService:
         )
 
         asset_id = f"asset_{uuid.uuid4().hex[:16]}"
-        asset = self._assets.create(asset_id, create_data, project_id=project_id)
-
-        # storage_uri / hash_sha256 are not first-class AssetCreate columns in
-        # the repository write path — patch them in explicitly.
-        _jl.update_record(
-            self._assets._assets_path,
-            asset_id,
-            {"storage_uri": storage_uri, "hash_sha256": hash_sha256},
-        )
-        refreshed = self._assets.get(asset_id)
-        if refreshed:
-            asset = refreshed
+        revisions = RevisionService(self._assets._assets_path.parent)
+        with revisions.revisions.writer():
+            asset = self._assets.create(asset_id, create_data, project_id=project_id)
+            revisions.capture(asset, sha256=hash_sha256, size_bytes=size_bytes,
+                              storage_uri=storage_uri, mime_type=eff_mime, filename=display_name)
+            asset = self._assets.get(asset_id) or asset
 
         self._audit.emit_asset_added(
             asset.id,
@@ -504,6 +499,7 @@ class ImportService:
         mime_type: str | None = None,
         project_id: str | None = None,
         actor_id: str = "system",
+        revision_metadata: dict[str, Any] | None = None,
     ) -> Asset | None:
         """Attach uploaded *content* bytes to an already-registered asset.
 
@@ -515,51 +511,51 @@ class ImportService:
 
         Returns the refreshed asset, or ``None`` if *asset_id* does not exist.
         """
-        existing = self._assets.get(asset_id)
-        if existing is None:
-            return None
+        revisions = RevisionService(self._assets._assets_path.parent)
+        with revisions.revisions.writer():
+            existing = self._assets.get(asset_id)
+            if existing is None:
+                return None
 
-        display_name = Path(filename).name or "upload"
-        tmp_path, hash_sha256, size_bytes = self._spool_to_temp(content)
-        try:
-            blob_path = self._commit_blob(tmp_path, hash_sha256)
-            tmp_path = None
-        finally:
-            if tmp_path is not None and tmp_path.exists():
-                tmp_path.unlink()
+            revisions.preserve_current(existing)
 
-        eff_mime = mime_type or existing.mime_type
-        if eff_mime is None:
-            eff_mime, _ = mimetypes.guess_type(display_name)
+            display_name = Path(filename).name or "upload"
+            tmp_path, hash_sha256, size_bytes = self._spool_to_temp(content)
+            try:
+                blob_path = self._commit_blob(tmp_path, hash_sha256)
+                tmp_path = None
+            finally:
+                if tmp_path is not None and tmp_path.exists():
+                    tmp_path.unlink()
+
+            eff_mime = mime_type or existing.mime_type
             if eff_mime is None:
-                eff_mime = "application/octet-stream"
+                eff_mime, _ = mimetypes.guess_type(display_name)
+                if eff_mime is None:
+                    eff_mime = "application/octet-stream"
 
-        storage_uri = self._managed_storage_uri(blob_path)
-        _jl.update_record(
-            self._assets._assets_path,
-            asset_id,
-            {
-                "storage_uri": storage_uri,
-                "hash_sha256": hash_sha256,
-                "size_bytes": size_bytes,
-                "mime_type": eff_mime,
-            },
-        )
+            storage_uri = self._managed_storage_uri(blob_path)
+            snapshot = (
+                existing.model_copy(update={"metadata": revision_metadata})
+                if revision_metadata is not None else existing
+            )
+            revisions.capture(snapshot, sha256=hash_sha256, size_bytes=size_bytes,
+                              storage_uri=storage_uri, mime_type=eff_mime, filename=display_name)
 
-        self._audit.emit_asset_added(
-            asset_id,
-            project_id=project_id or existing.project_id,
-            actor_id=actor_id,
-            payload={
-                "action": "content_attached",
-                "filename": display_name,
-                "storage_uri": storage_uri,
-                "hash_sha256": hash_sha256,
-                "size_bytes": size_bytes,
-                "mime_type": eff_mime,
-            },
-        )
-        return self._assets.get(asset_id)
+            self._audit.emit_asset_added(
+                asset_id,
+                project_id=project_id or existing.project_id,
+                actor_id=actor_id,
+                payload={
+                    "action": "content_attached",
+                    "filename": display_name,
+                    "storage_uri": storage_uri,
+                    "hash_sha256": hash_sha256,
+                    "size_bytes": size_bytes,
+                    "mime_type": eff_mime,
+                },
+            )
+            return self._assets.get(asset_id)
 
     # ------------------------------------------------------------------
     # Report ingest (PF-1 M1): host a shipped /delivery-report as an Asset
@@ -1129,6 +1125,7 @@ class ImportService:
                 mime_type="text/html",
                 project_id=project_id,
                 actor_id=actor_id,
+                revision_metadata=metadata,
             )
         if updated is None:
             # existing.id was just read from the repository above; this
@@ -1484,6 +1481,8 @@ class ImportService:
                     out.write(chunk)
                     h.update(chunk)
                     size += len(chunk)
+            out.flush()
+            os.fsync(out.fileno())
         return tmp_path, h.hexdigest(), size
 
     def _commit_blob(self, tmp_path: Path, hash_sha256: str) -> Path:
@@ -1496,12 +1495,7 @@ class ImportService:
         shard = self._content_store_dir / hash_sha256[:2]
         shard.mkdir(parents=True, exist_ok=True)
         blob_path = shard / hash_sha256
-        if blob_path.exists():
-            tmp_path.unlink(missing_ok=True)
-            return blob_path
-        # os.replace is atomic within the same filesystem (store + temp share a dir).
-        os.replace(tmp_path, blob_path)
-        return blob_path
+        return commit_blob(tmp_path, blob_path, hash_sha256)
 
 
 def _sha256_file(path: Path) -> str:
