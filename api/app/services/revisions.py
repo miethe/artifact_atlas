@@ -27,6 +27,10 @@ def commit_blob(tmp_path: Path, blob_path: Path, sha256: str) -> Path:
     return blob_path
 
 
+class OutsideWorkspaceError(ValueError):
+    """Local content path resolves outside the workspace root."""
+
+
 class RevisionService:
     def __init__(self, registry_dir: Path) -> None:
         self.revisions = RevisionRepository(registry_dir)
@@ -43,7 +47,7 @@ class RevisionService:
         root = self.workspace_root
         path = (path if path.is_absolute() else root / path).resolve()
         if not path.is_relative_to(root):
-            raise ValueError("Content path is outside workspace")
+            raise OutsideWorkspaceError("Content path is outside workspace")
         return path
 
     def read(self, revision: ContentRevision) -> bytes:
