@@ -1,6 +1,7 @@
 """One boundary per requested item, plus the original pilot's worst failure."""
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -132,8 +133,9 @@ def test_ac4_backfill_forward_backward_and_conflicting_rollback(tmp_registry, tm
         migrate(tmp_registry, "up", apply=True)
     assert jsonl.read_all(tmp_registry / "assets.jsonl") == before
     source.unlink()
-    with pytest.raises(FileNotFoundError, match="unavailable"):
-        migrate(tmp_registry, "up", apply=True)
+    missing = migrate(tmp_registry, "up", apply=True)
+    assert missing["pointer_only"]["pointer_only_missing_blob"]["ids"] == ["legacy"]
+    assert jsonl.read_all(tmp_registry / "assets.jsonl") == before
     assert not (tmp_registry / "content_revisions.jsonl").exists()
     source.write_bytes(b"legacy content")
     assert migrate(tmp_registry, "up")["assets"] == 1
@@ -200,3 +202,66 @@ def test_worst_failure_report_reupload_never_changes_old_revision_bytes(tmp_regi
     assert revisions.revisions.get(first.id, second.current_revision_id).metadata["revision"] == 2
     current = client.get(f"/api/preview/asset/{first.id}/content")
     assert current.content == html.read_bytes()
+
+
+def _seed_pointer_batch(tmp_registry, tmp_path):
+    jsonl._atomic_write_lines(tmp_registry / "assets.jsonl", [])
+    repo = AssetRepository(tmp_registry)
+    good = RevisionService(tmp_registry).workspace_root / "pointer_good.txt"
+    good.write_bytes(b"in workspace")
+    repo.create("good", AssetCreate(title="G", source_kind="local", uri=f"file://{good}",
+                                    mime_type="text/plain", sensitivity="personal",
+                                    agent_access="preview_allowed"))
+    outside = Path("/Users/laptop-nobody/outside.txt")  # laptop path, outside any workspace
+    repo.create("outside", AssetCreate(title="O", source_kind="local", uri=f"file://{outside}",
+                                       mime_type="text/plain", sensitivity="personal",
+                                       agent_access="preview_allowed"))
+    return good
+
+
+def test_pointer_only_outside_workspace_untouched_and_batch_migrates(tmp_registry, tmp_path):
+    good = _seed_pointer_batch(tmp_registry, tmp_path)
+    try:
+        before = (tmp_registry / "assets.jsonl").read_bytes()
+        outside_before = jsonl.read_by_id(tmp_registry / "assets.jsonl", "outside")
+        dry = migrate(tmp_registry, "up")
+        report = tmp_registry / "migrations" / "content_revisions_v1_report.json"
+        assert not report.exists()
+        assert (tmp_registry / "assets.jsonl").read_bytes() == before
+        assert dry["pointer_only"]["pointer_only_outside_workspace"] == {"count": 1, "ids": ["outside"]}
+        result = migrate(tmp_registry, "up", apply=True)
+        assert result["assets"] == 1
+        assert jsonl.read_by_id(tmp_registry / "assets.jsonl", "outside") == outside_before
+        assert jsonl.read_by_id(tmp_registry / "assets.jsonl", "good")["current_revision_id"]
+        data = json.loads(report.read_text())
+        assert data["candidates"] == 1 and data["generated_at"]
+        assert data["pointer_only"]["pointer_only_outside_workspace"]["ids"] == ["outside"]
+        assert data["pointer_only"]["pointer_only_missing_blob"]["count"] == 0
+    finally:
+        good.unlink(missing_ok=True)
+
+
+def test_pointer_only_missing_blob_with_hash_untouched(tmp_registry):
+    jsonl._atomic_write_lines(tmp_registry / "assets.jsonl", [])
+    gone = RevisionService(tmp_registry).workspace_root / "pointer_gone.txt"
+    AssetRepository(tmp_registry).create("gone", AssetCreate(
+        title="X", source_kind="local", uri=f"file://{gone}", mime_type="text/plain",
+        sensitivity="personal", agent_access="preview_allowed"))
+    jsonl.update_record(tmp_registry / "assets.jsonl", "gone", {"hash_sha256": "ab" * 32})
+    before = (tmp_registry / "assets.jsonl").read_bytes()
+    result = migrate(tmp_registry, "up", apply=True)
+    assert result["pointer_only"]["pointer_only_missing_blob"] == {"count": 1, "ids": ["gone"]}
+    assert (tmp_registry / "assets.jsonl").read_bytes() == before
+
+
+def test_worst_failure_hash_mismatch_still_aborts_batch(tmp_registry, tmp_path):
+    good = _seed_pointer_batch(tmp_registry, tmp_path)
+    try:
+        jsonl.update_record(tmp_registry / "assets.jsonl", "good", {"hash_sha256": "cd" * 32})
+        before = (tmp_registry / "assets.jsonl").read_bytes()
+        with pytest.raises(ValueError, match="hash mismatch"):
+            migrate(tmp_registry, "up", apply=True)
+        assert (tmp_registry / "assets.jsonl").read_bytes() == before
+        assert not (tmp_registry / "migrations" / "content_revisions_v1_report.json").exists()
+    finally:
+        good.unlink(missing_ok=True)

@@ -1,5 +1,7 @@
 """authority: migration — reversible v1 backfill; immutable history is retained on down."""
 import hashlib
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.models.asset import Asset
@@ -36,6 +38,12 @@ def migrate(registry_dir: Path, direction: str, *, apply: bool = False) -> dict:
 
         candidates = []
         skipped = []
+        pointer_only = {"pointer_only_outside_workspace": {"count": 0, "ids": []},
+                        "pointer_only_missing_blob": {"count": 0, "ids": []}}
+
+        def classify(kind: str, asset_id: str) -> None:
+            pointer_only[kind]["ids"].append(asset_id)
+            pointer_only[kind]["count"] += 1
         # Validate all legacy sources before changing any asset pointers.
         for record in assets:
             asset = Asset.model_validate(record)
@@ -45,10 +53,15 @@ def migrate(registry_dir: Path, direction: str, *, apply: bool = False) -> dict:
             if not uri.startswith("file://"):
                 skipped.append(asset.id)
                 continue
-            path = service.resolve(uri)
+            try:
+                path = service.resolve(uri)
+            except ValueError:
+                classify("pointer_only_outside_workspace", asset.id)
+                continue
             if not path.is_file():
                 if asset.storage_uri or asset.hash_sha256:
-                    raise FileNotFoundError(f"Legacy content unavailable: {asset.id}")
+                    classify("pointer_only_missing_blob", asset.id)
+                    continue
                 skipped.append(asset.id)
                 continue
             if asset.hash_sha256 and hashlib.sha256(path.read_bytes()).hexdigest() != asset.hash_sha256:
@@ -87,5 +100,14 @@ def migrate(registry_dir: Path, direction: str, *, apply: bool = False) -> dict:
                         raise ValueError(f"Interrupted upgrade conflict: {entry['id']}")
                     entry["after"] = current
             jsonl._atomic_write_lines(journal, entries)
-        return {"direction": direction, "apply": apply, "assets": len(candidates),
-                "metadata_only": skipped}
+        result = {"direction": direction, "apply": apply, "assets": len(candidates),
+                  "metadata_only": skipped, "pointer_only": pointer_only}
+        if apply:
+            report = dict(result, candidates=len(candidates),
+                          generated_at=datetime.now(timezone.utc).isoformat())
+            target = registry_dir / "migrations" / "content_revisions_v1_report.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+            tmp.replace(target)
+        return result
