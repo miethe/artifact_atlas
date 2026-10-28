@@ -37,6 +37,22 @@ def test_upload_creates_asset_with_servable_content(tmp_registry: Path) -> None:
     assert content.content == b"hello bytes"
 
 
+def test_upload_preserves_artifact_type_id(tmp_registry: Path) -> None:
+    resp = client.post(
+        "/api/projects/proj1/inbox/upload",
+        files=[("files", ("report.html", b"<p>report</p>", "text/html"))],
+        data={"artifact_type_id": "delivery_report"},
+    )
+    assert resp.status_code == 202, resp.text
+    asset_id = resp.json()["asset_ids"][0]
+
+    listed = client.get(
+        "/api/projects/proj1/assets", params={"artifact_type_id": "delivery_report"}
+    )
+    assert listed.status_code == 200, listed.text
+    assert asset_id in {item["id"] for item in listed.json()["items"]}
+
+
 def test_upload_dedup_reports_duplicate(tmp_registry: Path) -> None:
     files = [("files", ("a.txt", b"dup payload", "text/plain"))]
     first = client.post("/api/projects/p/inbox/upload", files=files, data={"sensitivity": "personal"})
